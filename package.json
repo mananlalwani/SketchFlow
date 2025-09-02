@@ -1,0 +1,27 @@
+{
+  "name": "live-draw-sync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live drawing canvas that syncs between iPad drawer and PC viewer using Socket.IO",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "keywords": [
+    "drawing",
+    "socket.io",
+    "express",
+    "live",
+    "sync"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
+
+
+

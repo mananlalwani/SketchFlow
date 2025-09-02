@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Draw (iPad)</title>
+    <style>
+      :root {
+        --glass-bg: rgba(16,16,28,0.55);
+        --glass-border: rgba(255,255,255,0.12);
+        --btn-bg: rgba(255,255,255,0.08);
+        --btn-bg-hover: rgba(255,255,255,0.14);
+        --btn-border: rgba(255,255,255,0.15);
+      }
+      html, body { margin: 0; height: 100%; background: #0f0f23; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      #toolbar {
+        position: fixed; top: 10px; left: 12px; right: 12px; height: 68px; display: flex; gap: 10px; align-items: center; padding: 12px 16px;
+        background: var(--glass-bg); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 14px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      }
+      /* Notability-like groups */
+      .toolstrip { display: flex; gap: 12px; align-items: center; }
+      .segmented { display: inline-flex; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden; }
+      .seg-btn { appearance: none; background: transparent; color: #fff; border: 0; padding: 8px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+      .seg-btn:hover { background: rgba(255,255,255,0.08); }
+      .seg-btn.active { background: rgba(59,130,246,0.25); }
+      .seg-btn .icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; opacity: .95; }
+      .swatches { display: inline-flex; gap: 8px; margin-left: 8px; }
+      .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); cursor: pointer; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.25); }
+      .swatch.active { outline: 2px solid rgba(255,255,255,0.9); outline-offset: 2px; }
+      .thin { display: inline-flex; align-items: center; gap: 6px; }
+      .thin .val { font-size: 12px; opacity: .85; min-width: 24px; text-align: right; }
+      /* Keep original controls accessible but visually compact */
+      .chip { display: none; }
+      #canvas { touch-action: none; display: block; width: 100vw; height: 100vh; }
+      .btn { background: var(--btn-bg); color: #fff; border: 1px solid var(--btn-border); padding: 10px 14px; border-radius: 10px; cursor: pointer; transition: transform .08s ease, background .15s ease, border-color .15s ease; }
+      .btn:hover { background: var(--btn-bg-hover); }
+      .btn:active { transform: translateY(1px) scale(0.98); }
+      .btn:focus-visible { outline: 2px solid rgba(59,130,246,0.6); outline-offset: 2px; }
+      select.btn { min-width: 150px; }
+      input[type="color"], input[type="range"] { height: 36px; }
+      input[type="range"] { accent-color: #3b82f6; }
+      #status { margin-left: auto; font-size: 12px; opacity: 0.95; padding: 6px 10px; border-radius: 999px; background: rgba(34,197,94,0.18); border: 1px solid rgba(34,197,94,0.35); }
+      .chip { font-size: 11px; color: #aab4d6; }
+      .spacer { width: 1px; height: 28px; background: rgba(255,255,255,0.12); margin: 0 6px; }
+      /* Presets popover */
+      #toolbar { position: fixed; }
+      .popover { position: absolute; top: calc(100% + 8px); left: 0; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px; padding: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.35); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+      .preset-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; min-width: 300px; max-width: 520px; }
+      .preset-btn { width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); border-radius: 10px; padding: 8px; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
+      .preset-btn:hover { background: rgba(255,255,255,0.1); }
+      .preset-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.25); flex: 0 0 auto; }
+      .preset-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+      .preset-actions .btn { padding: 8px 10px; }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <div class="toolstrip">
+        <div class="segmented" id="toolSegmented">
+          <button class="seg-btn" data-tool="pen" title="Pen"><span class="icon">✏️</span><span>Pen</span></button>
+          <button class="seg-btn" data-tool="highlighter" title="Highlighter"><span class="icon">🖍️</span><span>Highlighter</span></button>
+          <button class="seg-btn" data-tool="eraser" title="Eraser"><span class="icon">🧼</span><span>Eraser</span></button>
+          <button class="seg-btn" data-tool="line" title="Line"><span class="icon">／</span><span>Line</span></button>
+          <button class="seg-btn" data-tool="rect" title="Rectangle"><span class="icon">▭</span><span>Rect</span></button>
+          <button class="seg-btn" data-tool="ellipse" title="Ellipse"><span class="icon">◯</span><span>Ellipse</span></button>
+          <button class="seg-btn" data-tool="text" title="Text"><span class="icon">✒️</span><span>Text</span></button>
+          <button class="seg-btn" data-tool="eyedropper" title="Eyedropper"><span class="icon">🎯</span><span>Pick</span></button>
+          <button class="seg-btn" data-tool="image" title="Image"><span class="icon">🖼️</span><span>Image</span></button>
+        </div>
+        <div style="position:relative">
+          <button id="penPresetsBtn" class="btn" title="Pen presets">Presets ▾</button>
+          <div id="penPresets" class="popover" style="display:none">
+            <div class="preset-list" id="presetList"></div>
+          </div>
+        </div>
+        <div class="swatches" id="swatches"></div>
+        <div class="thin">
+          <input id="size" type="range" min="1" max="40" value="4" aria-label="Brush size" />
+          <span class="val" id="sizeVal">4px</span>
+        </div>
+        <div class="thin">
+          <input id="opacity" type="range" min="0.05" max="1" step="0.01" value="1" aria-label="Brush opacity" />
+          <span class="val" id="opacityVal">100%</span>
+        </div>
+      </div>
+      <select id="tool" class="btn" aria-label="Tool" style="display:none">
+        <option value="pen">Pen</option>
+        <option value="eraser">Eraser</option>
+        <option value="line">Line</option>
+        <option value="rect">Rectangle</option>
+        <option value="ellipse">Ellipse</option>
+        <option value="text">Text</option>
+        <option value="eyedropper">Eyedropper</option>
+        <option value="image">Image</option>
+      </select>
+      <input id="color" type="color" value="#ffffff" aria-label="Color" style="display:none" />
+      <span class="spacer"></span>
+      <div class="segmented" id="fillToggle">
+        <button class="seg-btn active" data-fill="outline" title="Outline only">Outline</button>
+        <button class="seg-btn" data-fill="fill" title="Fill + outline">Fill</button>
+      </div>
+      <span class="chip">Rotation</span>
+      <input id="rotation" type="range" min="-180" max="180" value="0" aria-label="Rotation (deg)" />
+      <span class="spacer"></span>
+      <button id="undo" class="btn">↺ Undo</button>
+      <button id="redo" class="btn">↻ Redo</button>
+      <button id="clear" class="btn" style="background: rgba(239,68,68,.8); border-color: rgba(239,68,68,.3)">🗑️ Clear</button>
+      <button id="snapshot" class="btn" style="background: rgba(34,197,94,.8); border-color: rgba(34,197,94,.3)">📤 Update</button>
+      <span id="status">Connecting…</span>
+    </div>
+    <canvas id="canvas"></canvas>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: false, alpha: false, desynchronized: true });
+      ctx.imageSmoothingEnabled = false;
+      const toolInput = document.getElementById('tool');
+      const colorInput = document.getElementById('color');
+      const sizeInput = document.getElementById('size');
+      const opacityInput = document.getElementById('opacity');
+      const fillToggle = document.getElementById('fillToggle');
+      const rotationInput = document.getElementById('rotation');
+      const undoBtn = document.getElementById('undo');
+      const redoBtn = document.getElementById('redo');
+      const clearBtn = document.getElementById('clear');
+      const snapshotBtn = document.getElementById('snapshot');
+      const statusEl = document.getElementById('status');
+      // Notability-like toolbar behavior
+      const segmented = document.getElementById('toolSegmented');
+      const sizeVal = document.getElementById('sizeVal');
+      const swatches = document.getElementById('swatches');
+      // Build quick color swatches
+      const defaultColors = ['#ffffff','#fca5a5','#fde047','#86efac','#93c5fd','#c4b5fd','#f9a8d4','#a3a3a3','#000000'];
+      defaultColors.forEach((c) => {
+        const b = document.createElement('button');
+        b.className = 'swatch';
+        b.style.background = c;
+        b.title = c;
+        b.addEventListener('click', () => { colorInput.value = c; updateActiveSwatch(); });
+        swatches.appendChild(b);
+      });
+      function updateActiveSwatch() {
+        const nodes = swatches.querySelectorAll('.swatch');
+        nodes.forEach((n) => n.classList.toggle('active', n.title.toLowerCase() === colorInput.value.toLowerCase()));
+      }
+      colorInput.addEventListener('input', updateActiveSwatch);
+      updateActiveSwatch();
+
+      // Segmented tool selection sync
+      function updateSegmentedActive(tool) {
+        segmented.querySelectorAll('.seg-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.tool === tool);
+        });
+      }
+      segmented.addEventListener('click', (e) => {
+        const btn = e.target.closest('.seg-btn');
+        if (!btn) return;
+        const t = btn.dataset.tool;
+        if (!t) return;
+        toolInput.value = t;
+        updateSegmentedActive(t);
+      });
+      updateSegmentedActive(toolInput.value);
+
+      // Live size display
+      function updateSizeVal() { sizeVal.textContent = `${sizeInput.value}px`; }
+      sizeInput.addEventListener('input', updateSizeVal);
+      updateSizeVal();
+      const opacityVal = document.getElementById('opacityVal');
+      function updateOpacityVal() { opacityVal.textContent = `${Math.round(opacityInput.value * 100)}%`; }
+      opacityInput.addEventListener('input', updateOpacityVal);
+      updateOpacityVal();
+
+      // Fill toggle behavior -> sync to a virtual fill state
+      let fillState = 'outline';
+      function updateFillState(next) {
+        fillState = next;
+        fillToggle.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.fill === fillState));
+      }
+      fillToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('.seg-btn');
+        if (!btn) return;
+        updateFillState(btn.dataset.fill);
+      });
+      updateFillState('outline');
+
+      // Pen presets
+      const penPresetsBtn = document.getElementById('penPresetsBtn');
+      const penPresets = document.getElementById('penPresets');
+      const presetList = document.getElementById('presetList');
+      const presets = [
+        { name: 'Fine', size: 2, color: '#ffffff' },
+        { name: 'Sketch', size: 4, color: '#93c5fd' },
+        { name: 'Highlight', size: 12, color: '#fde047' },
+        { name: 'Marker', size: 8, color: '#fca5a5' },
+        { name: 'Forest', size: 5, color: '#86efac' },
+        { name: 'Violet', size: 5, color: '#c4b5fd' },
+        { name: 'Rose', size: 5, color: '#f9a8d4' },
+        { name: 'Shadow', size: 3, color: '#a3a3a3' }
+      ];
+      function buildPresets() {
+        presetList.innerHTML = '';
+        presets.forEach((p) => {
+          const b = document.createElement('button');
+          b.className = 'preset-btn';
+          const dot = document.createElement('span');
+          dot.className = 'preset-dot';
+          dot.style.background = p.color;
+          dot.style.width = `${Math.max(10, Math.min(26, 10 + p.size))}px`;
+          dot.style.height = dot.style.width;
+          const label = document.createElement('span');
+          label.textContent = `${p.name} · ${p.size}px`;
+          b.appendChild(dot); b.appendChild(label);
+          b.addEventListener('click', () => {
+            colorInput.value = p.color;
+            sizeInput.value = String(p.size);
+            updateActiveSwatch();
+            updateSizeVal();
+            penPresets.style.display = 'none';
+          });
+          presetList.appendChild(b);
+        });
+        // Actions row
+        const actions = document.createElement('div');
+        actions.className = 'preset-actions';
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'btn'; clearBtn.textContent = 'Clear'; clearBtn.title = 'Reset to defaults';
+        clearBtn.addEventListener('click', () => {
+          colorInput.value = '#ffffff';
+          sizeInput.value = '4';
+          updateActiveSwatch();
+          updateSizeVal();
+          penPresets.style.display = 'none';
+        });
+        actions.appendChild(clearBtn);
+        presetList.parentElement.appendChild(actions);
+      }
+      penPresetsBtn.addEventListener('click', () => {
+        if (penPresets.style.display === 'none') { buildPresets(); penPresets.style.display = 'block'; }
+        else penPresets.style.display = 'none';
+      });
+      document.addEventListener('click', (e) => {
+        if (!penPresets.contains(e.target) && e.target !== penPresetsBtn) penPresets.style.display = 'none';
+      });
+
+      const DPR = Math.max(1, window.devicePixelRatio || 1);
+      let zoom = 1;
+      const MIN_ZOOM = 0.25;
+      const MAX_ZOOM = 4;
+      // World canvas (bigger than viewport) for panning
+      const WORLD_W = 4096;
+      const WORLD_H = 4096;
+      const worldCanvas = document.createElement('canvas');
+      worldCanvas.width = Math.floor(WORLD_W * DPR);
+      worldCanvas.height = Math.floor(WORLD_H * DPR);
+      const wctx = worldCanvas.getContext('2d', { willReadFrequently: false });
+      wctx.imageSmoothingEnabled = false;
+      // Draw in world units by scaling once
+      wctx.setTransform(1, 0, 0, 1, 0, 0);
+      wctx.scale(DPR, DPR);
+      wctx.fillStyle = '#111';
+      wctx.fillRect(0, 0, WORLD_W, WORLD_H);
+      let viewX = 0, viewY = 0; // top-left of viewport in world coords (CSS px)
+
+      function clampView() {
+        const vw = canvas.clientWidth;
+        const vh = canvas.clientHeight;
+        const srcW = Math.max(1, Math.round(vw / zoom));
+        const srcH = Math.max(1, Math.round(vh / zoom));
+        const maxX = Math.max(0, WORLD_W - srcW);
+        const maxY = Math.max(0, WORLD_H - srcH);
+        viewX = Math.max(0, Math.min(viewX, maxX));
+        viewY = Math.max(0, Math.min(viewY, maxY));
+      }
+      function resizeCanvas() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        canvas.width = Math.floor(w * DPR);
+        canvas.height = Math.floor(h * DPR);
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(DPR, DPR);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        render();
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      let renderScheduled = false;
+      function renderVectorScene() {
+        // High-quality vector render from objects at any zoom
+        const vw = canvas.clientWidth;
+        const vh = canvas.clientHeight;
+        // Reset and apply DPR
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(DPR, DPR);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, vw, vh);
+        // World-to-screen transform
+        ctx.save();
+        ctx.scale(zoom, zoom);
+        ctx.translate(-viewX, -viewY);
+        // Draw all objects
+        for (const obj of objects) {
+          switch (obj.type) {
+            case 'stroke': {
+              if (!obj.points || obj.points.length < 2) break;
+              ctx.strokeStyle = obj.color;
+              ctx.lineWidth = obj.size;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.beginPath();
+              ctx.moveTo(obj.points[0].x, obj.points[0].y);
+              for (let i = 1; i < obj.points.length; i++) {
+                const p = obj.points[i];
+                ctx.lineTo(p.x, p.y);
+              }
+              ctx.stroke();
+              break;
+            }
+            case 'line': {
+              ctx.strokeStyle = obj.color;
+              ctx.lineWidth = obj.size;
+              ctx.beginPath();
+              ctx.moveTo(obj.x0, obj.y0);
+              ctx.lineTo(obj.x1, obj.y1);
+              ctx.stroke();
+              break;
+            }
+            case 'rect': {
+              if (obj.fill) {
+                ctx.fillStyle = obj.color;
+                ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+              }
+              ctx.strokeStyle = obj.color;
+              ctx.lineWidth = obj.size;
+              ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+              break;
+            }
+            case 'ellipse': {
+              ctx.beginPath();
+              ctx.ellipse(obj.cx, obj.cy, obj.rx, obj.ry, 0, 0, Math.PI * 2);
+              if (obj.fill) {
+                ctx.fillStyle = obj.color;
+                ctx.fill();
+              }
+              ctx.strokeStyle = obj.color;
+              ctx.lineWidth = obj.size;
+              ctx.stroke();
+              break;
+            }
+            case 'text': {
+              ctx.save();
+              ctx.translate(obj.x, obj.y);
+              if (obj.rotation) ctx.rotate(obj.rotation);
+              ctx.fillStyle = obj.color;
+              ctx.font = `${obj.fontSize}px sans-serif`;
+              ctx.textBaseline = 'top';
+              ctx.fillText(obj.text, 0, 0);
+              ctx.restore();
+              break;
+            }
+            case 'image': {
+              ctx.save();
+              ctx.translate(obj.cx, obj.cy);
+              if (obj.rotation) ctx.rotate(obj.rotation);
+              const img = obj.img;
+              ctx.imageSmoothingEnabled = true;
+              if (img && img.complete) {
+                ctx.drawImage(img, -obj.w / 2, -obj.h / 2, obj.w, obj.h);
+              }
+              ctx.restore();
+              break;
+            }
+          }
+        }
+        // Also render in-progress currentStroke for immediate feedback
+        if (currentStroke && currentStroke.points && currentStroke.points.length > 1) {
+          ctx.strokeStyle = currentStroke.color || colorInput.value;
+          ctx.lineWidth = currentStroke.size || Number(sizeInput.value);
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(currentStroke.points[0].x, currentStroke.points[0].y);
+          for (let i = 1; i < currentStroke.points.length; i++) {
+            const p = currentStroke.points[i];
+            ctx.lineTo(p.x, p.y);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function render() {
+        // For best quality when zoomed, render vectors; use blit only at 1:1 (unless highlighter active)
+        if (zoom !== 1 || (activeTool === 'highlighter' || toolInput.value === 'highlighter')) {
+          renderVectorScene();
+          return;
+        }
+        // Reset transform, apply DPR
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(DPR, DPR);
+        // Draw current world slice into viewport
+        const vw = canvas.clientWidth;
+        const vh = canvas.clientHeight;
+        clampView();
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, vw, vh);
+        const sx = viewX | 0;
+        const sy = viewY | 0;
+        const srcW = Math.max(1, Math.round(vw / zoom));
+        const srcH = Math.max(1, Math.round(vh / zoom));
+        ctx.imageSmoothingEnabled = false;
+        const dprSrcW = Math.max(1, Math.round(srcW * DPR));
+        const dprSrcH = Math.max(1, Math.round(srcH * DPR));
+        const dprSx = Math.max(0, Math.round(sx * DPR));
+        const dprSy = Math.max(0, Math.round(sy * DPR));
+        ctx.drawImage(worldCanvas, dprSx, dprSy, dprSrcW, dprSrcH, 0, 0, vw, vh);
+      }
+      function requestRender() {
+        if (renderScheduled) return;
+        renderScheduled = true;
+        requestAnimationFrame(() => { renderScheduled = false; render(); });
+      }
+
+      const socket = io();
+      socket.on('connect', () => { statusEl.textContent = 'Connected'; });
+      socket.on('disconnect', () => { statusEl.textContent = 'Disconnected'; });
+
+      socket.on('draw:stroke', (stroke) => {
+        drawStrokeWorld(stroke);
+        requestRender();
+      });
+      socket.on('draw:strokes', (strokes) => {
+        if (!Array.isArray(strokes)) return;
+        wctx.save();
+        for (const s of strokes) {
+          wctx.strokeStyle = s.color;
+          wctx.lineWidth = s.size;
+          wctx.lineCap = 'round';
+          wctx.lineJoin = 'round';
+          wctx.beginPath();
+          wctx.moveTo(s.x0, s.y0);
+          wctx.lineTo(s.x1, s.y1);
+          wctx.stroke();
+        }
+        wctx.restore();
+        requestRender();
+      });
+      socket.on('canvas:snapshot', (payload) => {
+        let dataUrl = payload;
+        let worldW = WORLD_W;
+        let worldH = WORLD_H;
+        if (payload && typeof payload === 'object') {
+          dataUrl = payload.dataUrl;
+          worldW = payload.worldW || WORLD_W;
+          worldH = payload.worldH || WORLD_H;
+        }
+        const img = new Image();
+        img.onload = () => {
+          if (worldCanvas.width !== worldW || worldCanvas.height !== worldH) {
+            worldCanvas.width = worldW; worldCanvas.height = worldH;
+          }
+          wctx.fillStyle = '#111';
+          wctx.fillRect(0, 0, worldCanvas.width, worldCanvas.height);
+          wctx.drawImage(img, 0, 0, worldCanvas.width, worldCanvas.height);
+          requestRender();
+        };
+        img.src = dataUrl;
+      });
+
+      let drawing = false;
+      let lastX = 0, lastY = 0;
+      let shapeStartX = 0, shapeStartY = 0;
+      let baseImageData = null; // unused with world rendering, kept for compat guards
+      let placingImage = null;
+      let placingText = null;
+      let activeTool = null;
+
+      // Object model for full-object erasing
+      const objects = [];
+      let currentStroke = null;
+
+      function generateId() {
+        return Math.random().toString(36).slice(2) + Date.now().toString(36);
+      }
+
+      function distancePointToSegment(px, py, x0, y0, x1, y1) {
+        const dx = x1 - x0, dy = y1 - y0;
+        if (dx === 0 && dy === 0) return Math.hypot(px - x0, py - y0);
+        const t = Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / (dx * dx + dy * dy)));
+        const sx = x0 + t * dx, sy = y0 + t * dy;
+        return Math.hypot(px - sx, py - sy);
+      }
+
+      function hitTest(wx, wy, obj) {
+        switch (obj.type) {
+          case 'stroke': {
+            const tol = Math.max(6, obj.size * 0.6);
+            const pts = obj.points || [];
+            for (let i = 1; i < pts.length; i++) {
+              const a = pts[i - 1], b = pts[i];
+              if (distancePointToSegment(wx, wy, a.x, a.y, b.x, b.y) <= tol) return true;
+            }
+            return false;
+          }
+          case 'line': {
+            const tol = Math.max(6, obj.size * 0.6);
+            return distancePointToSegment(wx, wy, obj.x0, obj.y0, obj.x1, obj.y1) <= tol;
+          }
+          case 'rect': {
+            const x0 = Math.min(obj.x, obj.x + obj.w), y0 = Math.min(obj.y, obj.y + obj.h);
+            const x1 = Math.max(obj.x, obj.x + obj.w), y1 = Math.max(obj.y, obj.y + obj.h);
+            const inside = wx >= x0 && wx <= x1 && wy >= y0 && wy <= y1;
+            if (obj.fill) return inside;
+            if (!inside) return false;
+            const edgeTol = Math.max(6, obj.size * 0.6);
+            const nearLeft = Math.abs(wx - x0) <= edgeTol;
+            const nearRight = Math.abs(wx - x1) <= edgeTol;
+            const nearTop = Math.abs(wy - y0) <= edgeTol;
+            const nearBottom = Math.abs(wy - y1) <= edgeTol;
+            return nearLeft || nearRight || nearTop || nearBottom;
+          }
+          case 'ellipse': {
+            const dx = (wx - obj.cx) / (obj.rx || 1);
+            const dy = (wy - obj.cy) / (obj.ry || 1);
+            const dist = dx * dx + dy * dy;
+            if (obj.fill) return dist <= 1;
+            const tol = Math.max(0.08, (obj.size || 1) / Math.max(1, Math.max(obj.rx, obj.ry)));
+            return Math.abs(Math.sqrt(dist) - 1) <= tol;
+          }
+          case 'text': {
+            const w = obj.text.length * (obj.fontSize * 0.6);
+            const h = obj.fontSize * 1.2;
+            return wx >= obj.x && wx <= obj.x + w && wy >= obj.y && wy <= obj.y + h;
+          }
+          case 'image': {
+            const x0 = obj.cx - obj.w / 2, y0 = obj.cy - obj.h / 2;
+            return wx >= x0 && wx <= x0 + obj.w && wy >= y0 && wy <= y0 + obj.h;
+          }
+        }
+        return false;
+      }
+
+      function rebuildWorld() {
+        wctx.fillStyle = '#111';
+        wctx.fillRect(0, 0, worldCanvas.width, worldCanvas.height);
+        for (const obj of objects) {
+          switch (obj.type) {
+            case 'stroke': {
+              if (!obj.points || obj.points.length < 2) break;
+              const prevA = wctx.globalAlpha; const prevOp = wctx.globalCompositeOperation;
+              wctx.globalAlpha = obj.alpha ?? 1;
+              wctx.globalCompositeOperation = obj.blend || 'source-over';
+              wctx.strokeStyle = obj.color;
+              wctx.lineWidth = obj.size;
+              wctx.lineCap = 'round';
+              wctx.lineJoin = 'round';
+              wctx.beginPath();
+              wctx.moveTo(obj.points[0].x, obj.points[0].y);
+              for (let i = 1; i < obj.points.length; i++) {
+                const p = obj.points[i];
+                wctx.lineTo(p.x, p.y);
+              }
+              wctx.stroke();
+              wctx.globalAlpha = prevA; wctx.globalCompositeOperation = prevOp;
+              break;
+            }
+            case 'line': {
+              wctx.strokeStyle = obj.color;
+              wctx.lineWidth = obj.size;
+              wctx.beginPath();
+              wctx.moveTo(obj.x0, obj.y0);
+              wctx.lineTo(obj.x1, obj.y1);
+              wctx.stroke();
+              break;
+            }
+            case 'rect': {
+              if (obj.fill) {
+                wctx.fillStyle = obj.color;
+                wctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+              }
+              wctx.strokeStyle = obj.color;
+              wctx.lineWidth = obj.size;
+              wctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+              break;
+            }
+            case 'ellipse': {
+              wctx.beginPath();
+              wctx.ellipse(obj.cx, obj.cy, obj.rx, obj.ry, 0, 0, Math.PI * 2);
+              if (obj.fill) {
+                wctx.fillStyle = obj.color;
+                wctx.fill();
+              }
+              wctx.strokeStyle = obj.color;
+              wctx.lineWidth = obj.size;
+              wctx.stroke();
+              break;
+            }
+            case 'text': {
+              wctx.save();
+              wctx.translate(obj.x, obj.y);
+              if (obj.rotation) wctx.rotate(obj.rotation);
+              wctx.fillStyle = obj.color;
+              wctx.font = `${obj.fontSize}px sans-serif`;
+              wctx.textBaseline = 'top';
+              wctx.fillText(obj.text, 0, 0);
+              wctx.restore();
+              break;
+            }
+            case 'image': {
+              wctx.save();
+              wctx.translate(obj.cx, obj.cy);
+              if (obj.rotation) wctx.rotate(obj.rotation);
+              if (obj.img && obj.img.complete) {
+                wctx.drawImage(obj.img, -obj.w / 2, -obj.h / 2, obj.w, obj.h);
+              } else if (obj.url) {
+                const im = new Image();
+                im.crossOrigin = 'anonymous';
+                im.onload = () => { obj.img = im; rebuildWorld(); requestRender(); };
+                im.src = obj.url;
+              }
+              wctx.restore();
+              break;
+            }
+          }
+        }
+      }
+
+      function eraseAtWorld(wx, wy) {
+        for (let i = objects.length - 1; i >= 0; i--) {
+          const obj = objects[i];
+          if (hitTest(wx, wy, obj)) {
+            saveHistory();
+            objects.splice(i, 1);
+            rebuildWorld();
+            requestRender();
+            emitSnapshotThrottled();
+            return true;
+          }
+        }
+        return false;
+      }
+
+      const undoStack = [];
+      const redoStack = [];
+
+      function snapshotObjects() {
+        // serialize objects (drop runtime-only img)
+        return JSON.parse(JSON.stringify(objects.map((o) => {
+          const copy = { ...o };
+          if (copy.img) delete copy.img;
+          return copy;
+        })));
+      }
+
+      function saveHistory() {
+        try {
+          undoStack.push(snapshotObjects());
+          if (undoStack.length > 30) undoStack.shift();
+          redoStack.length = 0;
+        } catch (e) {}
+      }
+
+      function doUndo() {
+        if (!undoStack.length) return;
+        try {
+          const prevState = undoStack.pop();
+          redoStack.push(snapshotObjects());
+          objects.length = 0;
+          for (const o of prevState) objects.push(o);
+          rebuildWorld();
+          requestRender();
+          emitSnapshotThrottled();
+        } catch (e) {}
+      }
+
+      function doRedo() {
+        if (!redoStack.length) return;
+        try {
+          const nextState = redoStack.pop();
+          undoStack.push(snapshotObjects());
+          objects.length = 0;
+          for (const o of nextState) objects.push(o);
+          rebuildWorld();
+          requestRender();
+          emitSnapshotThrottled();
+        } catch (e) {}
+      }
+
+      function worldFromScreen(x, y) {
+        return { x: Math.round(viewX + x / zoom), y: Math.round(viewY + y / zoom) };
+      }
+
+      let isPanning = false;
+      let panStartX = 0, panStartY = 0, panViewStartX = 0, panViewStartY = 0;
+      let spaceDown = false;
+
+      function start(x, y) {
+        if (isPanning) return;
+        const tool = toolInput.value;
+        activeTool = tool;
+        if (tool === 'eyedropper') {
+          const wp = worldFromScreen(x, y);
+          const sx = Math.max(0, Math.min(worldCanvas.width - 1, Math.floor(wp.x)));
+          const sy = Math.max(0, Math.min(worldCanvas.height - 1, Math.floor(wp.y)));
+          const data = wctx.getImageData(sx, sy, 1, 1).data;
+          const toHex = (n) => n.toString(16).padStart(2, '0');
+          colorInput.value = `#${toHex(data[0])}${toHex(data[1])}${toHex(data[2])}`;
+          toolInput.value = 'pen';
+          return;
+        }
+
+        if (tool === 'text') {
+          const text = prompt('Enter text');
+          if (text && text.length) {
+            placingText = { text, startX: x, startY: y };
+            baseImageData = null;
+            drawing = true;
+            return;
+          } else {
+            return;
+          }
+        }
+
+        if (tool === 'image') {
+          const url = prompt('Image URL');
+          if (url && url.length) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              placingImage = { img, startX: x, startY: y };
+              baseImageData = null;
+              drawing = true;
+            };
+            img.onerror = () => {};
+            img.src = url;
+          }
+          else {
+            return;
+          }
+        }
+
+        drawing = true;
+        lastX = x; lastY = y;
+        const wp = worldFromScreen(x, y);
+        shapeStartX = wp.x; shapeStartY = wp.y;
+        if (tool === 'pen' || tool === 'eraser') {
+          saveHistory();
+        } else {
+          baseImageData = null;
+        }
+        if (tool === 'pen' || tool === 'highlighter') {
+          currentStroke = { id: generateId(), type: 'stroke', color: colorInput.value, size: Number(sizeInput.value), alpha: Number(opacityInput.value), blend: (tool === 'highlighter' ? 'multiply' : 'source-over'), points: [{ x: shapeStartX, y: shapeStartY }] };
+        }
+      }
+      // Pointer events with coalesced points for max perf
+      function move(x, y, coalesced) {
+        if (isPanning) {
+          const dx = x - panStartX;
+          const dy = y - panStartY;
+          if (dx === 0 && dy === 0) return;
+          viewX = panViewStartX - dx / zoom;
+          viewY = panViewStartY - dy / zoom;
+          clampView();
+          requestRender();
+          return;
+        }
+        if (!drawing) return;
+        const tool = activeTool || toolInput.value;
+        const wp = worldFromScreen(x, y);
+        if (tool === 'pen' || tool === 'highlighter') {
+          const rect = canvas._cachedRect || (canvas._cachedRect = canvas.getBoundingClientRect());
+          const points = Array.isArray(coalesced) && coalesced.length ? coalesced : [{ clientX: x + rect.left, clientY: y + rect.top }];
+          wctx.strokeStyle = colorInput.value;
+          wctx.lineWidth = Number(sizeInput.value);
+          wctx.lineCap = 'round';
+          wctx.lineJoin = 'round';
+          const prevAlpha = wctx.globalAlpha;
+          const prevComp = wctx.globalCompositeOperation;
+          if (tool === 'highlighter') {
+            wctx.globalAlpha = Number(opacityInput.value);
+            wctx.globalCompositeOperation = 'multiply';
+          } else {
+            wctx.globalAlpha = Number(opacityInput.value);
+          }
+          wctx.beginPath();
+          wctx.moveTo(shapeStartX, shapeStartY);
+          const netSegs = [];
+          for (const p of points) {
+            const px = p.clientX - rect.left;
+            const py = p.clientY - rect.top;
+            const sp = worldFromScreen(px, py);
+            wctx.lineTo(sp.x, sp.y);
+            netSegs.push({ x0: shapeStartX, y0: shapeStartY, x1: sp.x, y1: sp.y, color: colorInput.value, size: Number(sizeInput.value), alpha: Number(opacityInput.value), blend: (tool === 'highlighter' ? 'multiply' : 'source-over') });
+            shapeStartX = sp.x; shapeStartY = sp.y;
+            lastX = p.clientX; lastY = p.clientY;
+            if (currentStroke) currentStroke.points.push({ x: sp.x, y: sp.y });
+          }
+          wctx.stroke();
+          wctx.globalAlpha = prevAlpha;
+          wctx.globalCompositeOperation = prevComp;
+          // Network emit throttled per RAF using queue
+          if (!window.__netQueue) window.__netQueue = [];
+          window.__netQueue.push(...netSegs);
+          if (!window.__netTicking) {
+            window.__netTicking = true;
+            requestAnimationFrame(() => {
+              const q = window.__netQueue || [];
+              window.__netQueue = [];
+              window.__netTicking = false;
+              if (q.length === 1) socket.emit('draw:stroke', q[0]);
+              else if (q.length > 1) socket.emit('draw:strokes', q);
+            });
+          }
+          requestRender();
+          return;
+        }
+        if (tool === 'eraser') {
+          eraseAtWorld(wp.x, wp.y);
+          return;
+        }
+
+        if (placingImage) {
+          const { img, startX, startY } = placingImage;
+          const dx = wp.x - startX; const dy = wp.y - startY;
+          const w = Math.max(1, Math.abs(dx));
+          const h = Math.max(1, Math.abs(dy));
+          const cx = Math.min(startX, wp.x) + w / 2;
+          const cy = Math.min(startY, wp.y) + h / 2;
+          const rad = (Number(rotationInput.value) * Math.PI) / 180;
+          render();
+          ctx.save();
+          ctx.scale(zoom, zoom);
+          ctx.translate(-viewX, -viewY);
+          ctx.translate(cx, cy);
+          ctx.rotate(rad);
+          ctx.drawImage(img, -w / 2, -h / 2, w, h);
+          ctx.restore();
+          return;
+        }
+
+        if (placingText) {
+          const { text } = placingText;
+          const fontSize = Math.max(8, Number(sizeInput.value) * 4);
+          const rad = (Number(rotationInput.value) * Math.PI) / 180;
+          render();
+          ctx.save();
+          ctx.scale(zoom, zoom);
+          ctx.translate(-viewX, -viewY);
+          ctx.translate(wp.x, wp.y);
+          ctx.rotate(rad);
+          ctx.fillStyle = colorInput.value;
+          ctx.font = `${fontSize}px sans-serif`;
+          ctx.textBaseline = 'top';
+          ctx.fillText(text, 0, 0);
+          ctx.restore();
+          lastX = x; lastY = y;
+          return;
+        }
+
+        // shape previews
+        render();
+        ctx.save();
+        ctx.scale(zoom, zoom);
+        ctx.translate(-viewX, -viewY);
+        ctx.strokeStyle = colorInput.value;
+        ctx.lineWidth = Number(sizeInput.value);
+        if (tool === 'line') {
+          ctx.beginPath();
+          ctx.moveTo(shapeStartX, shapeStartY);
+          ctx.lineTo(wp.x, wp.y);
+          ctx.stroke();
+        } else if (tool === 'rect') {
+          const w = wp.x - shapeStartX; const h = wp.y - shapeStartY;
+          if (fillInput.checked) {
+            ctx.fillStyle = colorInput.value;
+            ctx.fillRect(shapeStartX, shapeStartY, w, h);
+          }
+          ctx.strokeRect(shapeStartX, shapeStartY, w, h);
+        } else if (tool === 'ellipse') {
+          const cx = (shapeStartX + wp.x) / 2;
+          const cy = (shapeStartY + wp.y) / 2;
+          const rx = Math.abs(wp.x - shapeStartX) / 2;
+          const ry = Math.abs(wp.y - shapeStartY) / 2;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          if (fillInput.checked) {
+            ctx.fillStyle = colorInput.value;
+            ctx.fill();
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      function end(x, y) {
+        if (isPanning) { isPanning = false; return; }
+        if (!drawing) return;
+        const tool = activeTool || toolInput.value;
+        drawing = false;
+        if (tool === 'pen' || tool === 'highlighter') {
+          if (currentStroke && currentStroke.points && currentStroke.points.length > 1) {
+            currentStroke.alpha = Number(opacityInput.value);
+            currentStroke.blend = (tool === 'highlighter' ? 'multiply' : 'source-over');
+            objects.push(currentStroke);
+          }
+          currentStroke = null;
+          activeTool = null;
+          emitSnapshotThrottled();
+          return;
+        }
+
+        if (tool === 'eraser') {
+          emitSnapshotThrottled();
+          activeTool = null;
+          return;
+        }
+
+        if (placingImage) {
+          saveHistory();
+          const { img, startX, startY } = placingImage;
+          const sp = worldFromScreen(x ?? lastX, y ?? lastY);
+          const fx = sp.x; const fy = sp.y;
+          const w = Math.max(1, Math.abs(fx - startX));
+          const h = Math.max(1, Math.abs(fy - startY));
+          const cx = Math.min(startX, fx) + w / 2;
+          const cy = Math.min(startY, fy) + h / 2;
+          const rad = (Number(rotationInput.value) * Math.PI) / 180;
+          wctx.save();
+          wctx.translate(cx, cy);
+          wctx.rotate(rad);
+          wctx.drawImage(img, -w / 2, -h / 2, w, h);
+          wctx.restore();
+          placingImage = null;
+          baseImageData = null;
+          activeTool = null;
+          objects.push({ type: 'image', cx, cy, w, h, rotation: rad, url: img.src });
+          requestRender();
+          emitSnapshotThrottled();
+          return;
+        }
+
+        if (placingText) {
+          saveHistory();
+          const { text } = placingText;
+          const sp = worldFromScreen(x ?? lastX, y ?? lastY);
+          const fx = sp.x; const fy = sp.y;
+          const fontSize = Math.max(8, Number(sizeInput.value) * 4);
+          const rad = (Number(rotationInput.value) * Math.PI) / 180;
+          wctx.save();
+          wctx.translate(fx, fy);
+          wctx.rotate(rad);
+          wctx.fillStyle = colorInput.value;
+          wctx.font = `${fontSize}px sans-serif`;
+          wctx.textBaseline = 'top';
+          wctx.fillText(text, 0, 0);
+          wctx.restore();
+          placingText = null;
+          baseImageData = null;
+          activeTool = null;
+          objects.push({ type: 'text', text, x: fx, y: fy, rotation: rad, color: colorInput.value, fontSize });
+          requestRender();
+          emitSnapshotThrottled();
+          return;
+        }
+
+        // finalize shapes
+        // finalize shapes onto world
+        saveHistory();
+        wctx.save();
+        wctx.strokeStyle = colorInput.value;
+        wctx.lineWidth = Number(sizeInput.value);
+        if (tool === 'line') {
+          const sp = worldFromScreen(x ?? lastX, y ?? lastY);
+          wctx.beginPath();
+          wctx.moveTo(shapeStartX, shapeStartY);
+          wctx.lineTo(sp.x, sp.y);
+          const prevAlpha = wctx.globalAlpha; wctx.globalAlpha = Number(opacityInput.value); wctx.stroke(); wctx.globalAlpha = prevAlpha;
+          objects.push({ type: 'line', color: colorInput.value, size: Number(sizeInput.value), x0: shapeStartX, y0: shapeStartY, x1: sp.x, y1: sp.y });
+        } else if (tool === 'rect') {
+          const sp = worldFromScreen(x ?? lastX, y ?? lastY);
+          const fx = sp.x; const fy = sp.y;
+          const w = fx - shapeStartX; const h = fy - shapeStartY;
+          const prevAlpha = wctx.globalAlpha; const prevComp = wctx.globalCompositeOperation; wctx.globalAlpha = Number(opacityInput.value);
+          if (fillState === 'fill') {
+            wctx.fillStyle = colorInput.value;
+            wctx.fillRect(shapeStartX, shapeStartY, w, h);
+          }
+          wctx.strokeRect(shapeStartX, shapeStartY, w, h);
+          wctx.globalAlpha = prevAlpha; wctx.globalCompositeOperation = prevComp;
+          objects.push({ type: 'rect', color: colorInput.value, size: Number(sizeInput.value), x: shapeStartX, y: shapeStartY, w, h, fill: fillState === 'fill' });
+        } else if (tool === 'ellipse') {
+          const sp = worldFromScreen(x ?? lastX, y ?? lastY);
+          const fx = sp.x; const fy = sp.y;
+          const cx = (shapeStartX + fx) / 2;
+          const cy = (shapeStartY + fy) / 2;
+          const rx = Math.abs(fx - shapeStartX) / 2;
+          const ry = Math.abs(fy - shapeStartY) / 2;
+          wctx.beginPath();
+          wctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          const prevAlpha = wctx.globalAlpha; const prevComp = wctx.globalCompositeOperation; wctx.globalAlpha = Number(opacityInput.value);
+          if (fillState === 'fill') {
+            wctx.fillStyle = colorInput.value;
+            wctx.fill();
+          }
+          wctx.stroke();
+          wctx.globalAlpha = prevAlpha; wctx.globalCompositeOperation = prevComp;
+          objects.push({ type: 'ellipse', color: colorInput.value, size: Number(sizeInput.value), cx, cy, rx, ry, fill: fillState === 'fill' });
+        }
+        wctx.restore();
+        baseImageData = null;
+        activeTool = null;
+        requestRender();
+        emitSnapshotThrottled();
+      }
+
+      function drawStrokeWorld({ x0, y0, x1, y1, color, size }) {
+        wctx.strokeStyle = color;
+        wctx.lineWidth = size;
+        wctx.lineCap = 'round';
+        wctx.lineJoin = 'round';
+        wctx.beginPath();
+        wctx.moveTo(x0, y0);
+        wctx.lineTo(x1, y1);
+        wctx.stroke();
+      }
+
+      function posFromTouch(touch) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+      }
+
+      canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (e.touches.length >= 2) {
+          isPanning = true;
+          panStartX = e.touches[0].clientX; panStartY = e.touches[0].clientY;
+          panViewStartX = viewX; panViewStartY = viewY;
+          return;
+        }
+        const p = posFromTouch(e.touches[0]);
+        start(p.x, p.y);
+      }, { passive: false });
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (isPanning) {
+          const cx = e.touches[0].clientX, cy = e.touches[0].clientY;
+          move(cx, cy);
+          return;
+        }
+        const p = posFromTouch(e.touches[0]);
+        move(p.x, p.y);
+      }, { passive: false });
+      canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        if (isPanning && e.touches.length < 2) { isPanning = false; return; }
+        const t = e.changedTouches && e.changedTouches[0];
+        if (t) {
+          const p = posFromTouch(t);
+          end(p.x, p.y);
+        } else {
+          end();
+        }
+      }, { passive: false });
+      canvas.addEventListener('touchcancel', (e) => { e.preventDefault(); isPanning = false; end(); }, { passive: false });
+
+      // Also support mouse for testing on desktop
+      window.addEventListener('keydown', (e) => { if (e.code === 'Space') { spaceDown = true; e.preventDefault(); } });
+      window.addEventListener('keyup', (e) => { if (e.code === 'Space') { spaceDown = false; } });
+      canvas.addEventListener('mousedown', (e) => {
+        if (spaceDown || e.button === 1) {
+          isPanning = true;
+          panStartX = e.clientX; panStartY = e.clientY;
+          panViewStartX = viewX; panViewStartY = viewY;
+        } else {
+          start(e.offsetX, e.offsetY);
+        }
+      });
+      // Prefer pointer events with coalescing
+      canvas.addEventListener('pointerdown', (e) => {
+        if (spaceDown || e.button === 1) {
+          isPanning = true;
+          panStartX = e.clientX; panStartY = e.clientY;
+          panViewStartX = viewX; panViewStartY = viewY;
+        } else {
+          start(e.offsetX, e.offsetY);
+        }
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+      canvas.addEventListener('pointermove', (e) => {
+        if (isPanning) {
+          move(e.clientX, e.clientY);
+        } else {
+          const list = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
+          if (list && list.length) {
+            move(e.offsetX, e.offsetY, list);
+          } else {
+            move(e.offsetX, e.offsetY);
+          }
+        }
+      });
+      window.addEventListener('pointerup', (e) => {
+        if (isPanning) { isPanning = false; requestRender(); return; }
+        end(e.offsetX, e.offsetY);
+        try { if (canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (isPanning) { isPanning = false; requestRender(); return; }
+        end(e.offsetX, e.offsetY);
+      });
+
+      function zoomAt(factor, cx, cy) {
+        const prevZoom = zoom;
+        const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+        if (newZoom === prevZoom) return;
+        const wx = viewX + (cx / prevZoom);
+        const wy = viewY + (cy / prevZoom);
+        zoom = newZoom;
+        viewX = wx - (cx / zoom);
+        viewY = wy - (cy / zoom);
+        clampView();
+        requestRender();
+      }
+
+      // Wheel zoom around cursor
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        zoomAt(factor, cx, cy);
+      }, { passive: false });
+
+      // Zoom buttons in toolbar
+      (function addZoomButtons() {
+        const toolbar = document.getElementById('toolbar');
+        if (!toolbar) return;
+        const zoomOutBtn = document.createElement('button');
+        zoomOutBtn.id = 'zoomOut'; zoomOutBtn.className = 'btn'; zoomOutBtn.textContent = '−'; zoomOutBtn.title = 'Zoom out';
+        const zoomInBtn = document.createElement('button');
+        zoomInBtn.id = 'zoomIn'; zoomInBtn.className = 'btn'; zoomInBtn.textContent = '＋'; zoomInBtn.title = 'Zoom in';
+        const resetBtn = document.createElement('button');
+        resetBtn.id = 'resetZoom'; resetBtn.className = 'btn'; resetBtn.textContent = '100%'; resetBtn.title = 'Reset zoom';
+        toolbar.insertBefore(zoomOutBtn, document.getElementById('status'));
+        toolbar.insertBefore(zoomInBtn, document.getElementById('status'));
+        toolbar.insertBefore(resetBtn, document.getElementById('status'));
+        zoomOutBtn.addEventListener('click', () => zoomAt(1/1.2, canvas.clientWidth/2, canvas.clientHeight/2));
+        zoomInBtn.addEventListener('click', () => zoomAt(1.2, canvas.clientWidth/2, canvas.clientHeight/2));
+        resetBtn.addEventListener('click', () => { zoom = 1; clampView(); requestRender(); });
+      })();
+
+      clearBtn.addEventListener('click', () => {
+        saveHistory();
+        objects.length = 0;
+        wctx.fillStyle = '#111';
+        wctx.fillRect(0, 0, worldCanvas.width, worldCanvas.height);
+        requestRender();
+        emitSnapshotThrottled();
+      });
+
+      undoBtn.addEventListener('click', doUndo);
+      redoBtn.addEventListener('click', doRedo);
+
+      function emitSnapshot() {
+        const maxDim = 2048;
+        const scale = Math.min(1, Math.min(maxDim / worldCanvas.width, maxDim / worldCanvas.height));
+        const outW = Math.max(1, Math.round(worldCanvas.width * scale));
+        const outH = Math.max(1, Math.round(worldCanvas.height * scale));
+        const tmp = document.createElement('canvas');
+        tmp.width = outW;
+        tmp.height = outH;
+        const tctx = tmp.getContext('2d');
+        tctx.fillStyle = '#111';
+        tctx.fillRect(0, 0, outW, outH);
+        tctx.drawImage(worldCanvas, 0, 0, outW, outH);
+        const dataUrl = tmp.toDataURL('image/png');
+        socket.emit('canvas:snapshot', { dataUrl, worldW: worldCanvas.width, worldH: worldCanvas.height });
+      }
+
+      const emitSnapshotThrottled = (() => {
+        let ticking = false;
+        return () => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => { emitSnapshot(); ticking = false; });
+        };
+      })();
+
+      snapshotBtn.addEventListener('click', emitSnapshot);
+      setInterval(emitSnapshotThrottled, 5000);
+      // initial render
+      render();
+    </script>
+  </body>
+  </html>
+
+
+
