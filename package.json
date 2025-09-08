@@ -5,8 +5,9 @@
   "description": "Live drawing canvas that syncs between iPad drawer and PC viewer using Socket.IO",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "NODE_ENV=development node server.js"
+    "start": "node --max-old-space-size=512 server.js",
+    "dev": "NODE_ENV=development node --inspect --max-old-space-size=512 server.js",
+    "prod": "NODE_ENV=production node --max-old-space-size=1024 server.js"
   },
   "keywords": [
     "drawing",

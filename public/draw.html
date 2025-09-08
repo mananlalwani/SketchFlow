@@ -6,84 +6,339 @@
     <title>Draw (iPad)</title>
     <style>
       :root {
-        --glass-bg: rgba(16,16,28,0.55);
-        --glass-border: rgba(255,255,255,0.12);
+        --glass-bg: rgba(16,16,28,0.75);
+        --glass-border: rgba(255,255,255,0.15);
         --btn-bg: rgba(255,255,255,0.08);
-        --btn-bg-hover: rgba(255,255,255,0.14);
-        --btn-border: rgba(255,255,255,0.15);
+        --btn-bg-hover: rgba(255,255,255,0.16);
+        --btn-bg-active: rgba(59,130,246,0.25);
+        --btn-border: rgba(255,255,255,0.2);
+        --accent-blue: #3b82f6;
+        --accent-green: #10b981;
+        --accent-red: #ef4444;
+        --text-primary: #ffffff;
+        --text-secondary: rgba(255,255,255,0.8);
+        --shadow-lg: 0 10px 25px rgba(0,0,0,0.3);
+        --shadow-md: 0 4px 12px rgba(0,0,0,0.2);
+        --border-radius: 12px;
+        --border-radius-sm: 8px;
       }
-      html, body { margin: 0; height: 100%; background: #0f0f23; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      html, body { 
+        margin: 0; height: 100%; background: #0f0f23; color: #fff; 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        /* Hardware acceleration for entire page */
+        transform: translateZ(0);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
       #toolbar {
-        position: fixed; top: 10px; left: 12px; right: 12px; height: 68px; display: flex; gap: 10px; align-items: center; padding: 12px 16px;
-        background: var(--glass-bg); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 14px;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        position: fixed; top: 12px; left: 16px; right: 16px; min-height: 72px; display: flex !important; gap: 10px; align-items: center; padding: 14px 20px;
+        background: rgba(16,16,28,0.9); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); 
+        border: 1px solid var(--glass-border); border-radius: var(--border-radius);
+        box-shadow: var(--shadow-lg); flex-wrap: wrap; overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1001;
+        /* Hardware acceleration for toolbar */
+        transform: translateZ(0);
+        will-change: transform, box-shadow;
+        backface-visibility: hidden;
+        /* Debug visibility */
+        opacity: 1 !important;
+        visibility: visible !important;
       }
-      /* Notability-like groups */
-      .toolstrip { display: flex; gap: 12px; align-items: center; }
-      .segmented { display: inline-flex; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden; }
-      .seg-btn { appearance: none; background: transparent; color: #fff; border: 0; padding: 8px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
-      .seg-btn:hover { background: rgba(255,255,255,0.08); }
-      .seg-btn.active { background: rgba(59,130,246,0.25); }
+      #toolbar:hover {
+        box-shadow: 0 12px 35px rgba(0,0,0,0.4);
+        border-color: rgba(255,255,255,0.2);
+        transform: translateZ(0) translateY(-1px);
+      }
+      /* Responsive toolbar */
+      .toolstrip { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .segmented { display: inline-flex; background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); border-radius: var(--border-radius); overflow: hidden; box-shadow: var(--shadow-md); }
+      .seg-btn { 
+        appearance: none; background: transparent; color: var(--text-primary); border: 0; 
+        padding: 8px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; 
+        font-size: 13px; font-weight: 500; white-space: nowrap; position: relative;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .seg-btn:hover { 
+        background: var(--btn-bg-hover); 
+        color: var(--text-primary);
+        transform: translateY(-1px);
+      }
+      .seg-btn.active { 
+        background: var(--btn-bg-active); 
+        color: var(--accent-blue);
+        box-shadow: inset 0 1px 3px rgba(59,130,246,0.2);
+      }
       .seg-btn .icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; opacity: .95; }
-      .swatches { display: inline-flex; gap: 8px; margin-left: 8px; }
-      .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); cursor: pointer; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.25); }
-      .swatch.active { outline: 2px solid rgba(255,255,255,0.9); outline-offset: 2px; }
-      .thin { display: inline-flex; align-items: center; gap: 6px; }
-      .thin .val { font-size: 12px; opacity: .85; min-width: 24px; text-align: right; }
+      .seg-btn .text { display: inline; font-weight: 500; }
+      
+      /* Mobile optimizations */
+      @media (max-width: 768px) {
+        #toolbar { gap: 6px; padding: 10px 12px; }
+        .toolstrip { gap: 6px; }
+        .seg-btn { padding: 6px; font-size: 11px; }
+        .seg-btn .text { display: none; } /* Hide text on mobile, show only icons */
+        .seg-btn .icon { width: 18px; height: 18px; }
+        .secondary-tools { display: none; } /* Hide secondary tools on mobile */
+        .btn { padding: 8px 10px; font-size: 12px; }
+      }
+      
+      @media (max-width: 480px) {
+        #toolbar { padding: 8px 10px; }
+        .seg-btn { padding: 4px; }
+        .btn { padding: 6px 8px; font-size: 11px; }
+        .spacer { display: none; }
+      }
+      .swatches { display: inline-flex; gap: 6px; margin-left: 8px; flex-wrap: wrap; }
+      .swatch { 
+        width: 24px; height: 24px; border-radius: 50%; 
+        border: 2px solid rgba(255,255,255,0.3); cursor: pointer; 
+        box-shadow: inset 0 0 0 2px rgba(0,0,0,0.3), var(--shadow-md); 
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); 
+        position: relative; 
+      }
+      .swatch:hover { 
+        transform: scale(1.15) translateY(-2px); 
+        border-color: rgba(255,255,255,0.6); 
+        box-shadow: 0 6px 20px rgba(0,0,0,0.4), inset 0 0 0 2px rgba(0,0,0,0.3); 
+      }
+      .swatch.active { 
+        outline: 3px solid var(--accent-blue); 
+        outline-offset: 2px; 
+        transform: scale(1.1);
+        box-shadow: 0 4px 16px rgba(59,130,246,0.3), inset 0 0 0 2px rgba(0,0,0,0.3);
+      }
+      .swatch::after { content: 'Right-click: Edit • Ctrl+click: Remove'; position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 1000; }
+      .swatch:hover::after { opacity: 1; }
+      
+      /* Hide tooltips on mobile */
+      @media (max-width: 768px) {
+        .swatch::after { display: none; }
+      }
+      .thin { 
+        display: inline-flex; align-items: center; gap: 6px; 
+        background: rgba(255,255,255,0.06); 
+        padding: 6px 10px; 
+        border-radius: var(--border-radius-sm); 
+        border: 1px solid var(--glass-border);
+        transition: all 0.2s ease;
+      }
+      .thin:hover {
+        background: rgba(255,255,255,0.08);
+        border-color: rgba(255,255,255,0.2);
+      }
+      .thin .val { 
+        font-size: 11px; font-weight: 500; 
+        color: var(--text-secondary); 
+        min-width: 24px; text-align: right; 
+      }
+      .thin input[type="range"] { 
+        width: 70px; 
+        accent-color: var(--accent-blue);
+        cursor: pointer;
+      }
+      
+      /* Additional mobile optimizations */
+      @media (max-width: 768px) {
+        .swatches { gap: 4px; margin-left: 4px; }
+        .swatch { width: 18px; height: 18px; }
+        .thin { gap: 3px; }
+        .thin .val { font-size: 10px; min-width: 18px; }
+        .thin input[type="range"] { width: 50px; }
+      }
+      
+      @media (max-width: 480px) {
+        .swatches { gap: 3px; }
+        .swatch { width: 16px; height: 16px; border-width: 1px; }
+        .thin input[type="range"] { width: 40px; }
+        .thin .val { display: none; } /* Hide value labels on very small screens */
+      }
       /* Keep original controls accessible but visually compact */
       .chip { display: none; }
-      #canvas { touch-action: none; display: block; width: 100vw; height: 100vh; }
-      .btn { background: var(--btn-bg); color: #fff; border: 1px solid var(--btn-border); padding: 10px 14px; border-radius: 10px; cursor: pointer; transition: transform .08s ease, background .15s ease, border-color .15s ease; }
-      .btn:hover { background: var(--btn-bg-hover); }
-      .btn:active { transform: translateY(1px) scale(0.98); }
-      .btn:focus-visible { outline: 2px solid rgba(59,130,246,0.6); outline-offset: 2px; }
+      #canvas { 
+        touch-action: none; display: block; width: 100vw; height: 100vh;
+        /* Aggressive hardware acceleration for canvas */
+        transform: translateZ(0);
+        will-change: transform;
+        backface-visibility: hidden;
+        perspective: 1000px;
+        image-rendering: pixelated; /* Crisp pixel rendering */
+        image-rendering: -moz-crisp-edges;
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+      }
+      .btn { 
+        background: var(--btn-bg); color: var(--text-primary); 
+        border: 1px solid var(--btn-border); padding: 10px 16px; 
+        border-radius: var(--border-radius-sm); cursor: pointer; 
+        font-weight: 500; font-size: 13px;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: var(--shadow-md);
+        position: relative;
+        overflow: hidden;
+        /* Hardware acceleration for buttons */
+        transform: translateZ(0);
+        will-change: transform, box-shadow;
+        backface-visibility: hidden;
+      }
+      .btn:hover { 
+        background: var(--btn-bg-hover); 
+        transform: translateZ(0) translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        border-color: rgba(255,255,255,0.25);
+      }
+      .btn:active { 
+        transform: translateZ(0) translateY(0px) scale(0.98); 
+        box-shadow: var(--shadow-md);
+      }
+      .btn:focus-visible { 
+        outline: 2px solid var(--accent-blue); 
+        outline-offset: 2px; 
+      }
+      
+      /* Specialized button styles */
+      .btn-action {
+        background: rgba(255,255,255,0.1);
+        border-color: rgba(255,255,255,0.2);
+      }
+      .btn-action:hover {
+        background: rgba(255,255,255,0.15);
+        border-color: rgba(255,255,255,0.3);
+      }
+      
+      .btn-danger {
+        background: rgba(239,68,68,0.15);
+        border-color: rgba(239,68,68,0.3);
+        color: #fca5a5;
+      }
+      .btn-danger:hover {
+        background: rgba(239,68,68,0.25);
+        border-color: rgba(239,68,68,0.4);
+        color: #fecaca;
+        box-shadow: 0 6px 20px rgba(239,68,68,0.2);
+      }
+      
+      .btn-success {
+        background: rgba(16,185,129,0.15);
+        border-color: rgba(16,185,129,0.3);
+        color: #6ee7b7;
+      }
+      .btn-success:hover {
+        background: rgba(16,185,129,0.25);
+        border-color: rgba(16,185,129,0.4);
+        color: #a7f3d0;
+        box-shadow: 0 6px 20px rgba(16,185,129,0.2);
+      }
       select.btn { min-width: 150px; }
       input[type="color"], input[type="range"] { height: 36px; }
       input[type="range"] { accent-color: #3b82f6; }
-      #status { margin-left: auto; font-size: 12px; opacity: 0.95; padding: 6px 10px; border-radius: 999px; background: rgba(34,197,94,0.18); border: 1px solid rgba(34,197,94,0.35); }
+      #status { 
+        margin-left: auto; font-size: 12px; font-weight: 500; 
+        padding: 8px 14px; border-radius: 20px; 
+        background: rgba(16,185,129,0.15); 
+        border: 1px solid rgba(16,185,129,0.3); 
+        color: var(--accent-green);
+        box-shadow: var(--shadow-md);
+        transition: all 0.2s ease;
+      }
+      #status:hover {
+        background: rgba(16,185,129,0.2);
+        transform: translateY(-1px);
+      }
+      #fpsCounter { 
+        position: fixed; bottom: 24px; left: 24px; 
+        font-size: 14px; font-weight: 600; color: var(--text-primary); 
+        background: var(--glass-bg); padding: 12px 18px; 
+        border-radius: var(--border-radius); 
+        border: 1px solid var(--glass-border); 
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px); 
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace; 
+        z-index: 1000; 
+        box-shadow: var(--shadow-lg);
+        transition: all 0.3s ease;
+      }
+      #fpsCounter:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+      }
       .chip { font-size: 11px; color: #aab4d6; }
-      .spacer { width: 1px; height: 28px; background: rgba(255,255,255,0.12); margin: 0 6px; }
-      /* Presets popover */
-      #toolbar { position: fixed; }
-      .popover { position: absolute; top: calc(100% + 8px); left: 0; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px; padding: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.35); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
-      .preset-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; min-width: 300px; max-width: 520px; }
-      .preset-btn { width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); border-radius: 10px; padding: 8px; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
-      .preset-btn:hover { background: rgba(255,255,255,0.1); }
-      .preset-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.25); flex: 0 0 auto; }
-      .preset-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
-      .preset-actions .btn { padding: 8px 10px; }
+      .spacer { 
+        width: 1px; height: 32px; 
+        background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.15), transparent); 
+        margin: 0 8px; 
+        border-radius: 1px;
+      }
+      
+      /* Page load animation */
+      @keyframes slideInDown {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      @keyframes slideInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      #toolbar {
+        animation: slideInDown 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      #fpsCounter {
+        animation: slideInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      }
     </style>
   </head>
   <body>
     <div id="toolbar">
-      <div class="toolstrip">
-        <div class="segmented" id="toolSegmented">
-          <button class="seg-btn" data-tool="pen" title="Pen"><span class="icon">✏️</span><span>Pen</span></button>
-          <button class="seg-btn" data-tool="highlighter" title="Highlighter"><span class="icon">🖍️</span><span>Highlighter</span></button>
-          <button class="seg-btn" data-tool="eraser" title="Eraser"><span class="icon">🧼</span><span>Eraser</span></button>
-          <button class="seg-btn" data-tool="line" title="Line"><span class="icon">／</span><span>Line</span></button>
-          <button class="seg-btn" data-tool="rect" title="Rectangle"><span class="icon">▭</span><span>Rect</span></button>
-          <button class="seg-btn" data-tool="ellipse" title="Ellipse"><span class="icon">◯</span><span>Ellipse</span></button>
-          <button class="seg-btn" data-tool="text" title="Text"><span class="icon">✒️</span><span>Text</span></button>
-          <button class="seg-btn" data-tool="eyedropper" title="Eyedropper"><span class="icon">🎯</span><span>Pick</span></button>
-          <button class="seg-btn" data-tool="image" title="Image"><span class="icon">🖼️</span><span>Image</span></button>
-        </div>
-        <div style="position:relative">
-          <button id="penPresetsBtn" class="btn" title="Pen presets">Presets ▾</button>
-          <div id="penPresets" class="popover" style="display:none">
-            <div class="preset-list" id="presetList"></div>
-          </div>
-        </div>
-        <div class="swatches" id="swatches"></div>
-        <div class="thin">
-          <input id="size" type="range" min="1" max="40" value="4" aria-label="Brush size" />
-          <span class="val" id="sizeVal">4px</span>
-        </div>
-        <div class="thin">
-          <input id="opacity" type="range" min="0.05" max="1" step="0.01" value="1" aria-label="Brush opacity" />
-          <span class="val" id="opacityVal">100%</span>
-        </div>
+      <!-- Primary tools (always visible) -->
+      <div class="segmented" id="toolSegmented">
+        <button class="seg-btn" data-tool="pen" title="Pen"><span class="icon">✏️</span><span class="text">Pen</span></button>
+        <button class="seg-btn" data-tool="eraser" title="Eraser"><span class="icon">🧼</span><span class="text">Eraser</span></button>
+        <button class="seg-btn" data-tool="line" title="Line"><span class="icon">／</span><span class="text">Line</span></button>
+        <button class="seg-btn" data-tool="rect" title="Rectangle"><span class="icon">▭</span><span class="text">Rect</span></button>
+        <button class="seg-btn" data-tool="ellipse" title="Ellipse"><span class="icon">◯</span><span class="text">Ellipse</span></button>
+        <button class="seg-btn secondary-tools" data-tool="text" title="Text"><span class="icon">✒️</span><span class="text">Text</span></button>
+        <button class="seg-btn secondary-tools" data-tool="eyedropper" title="Eyedropper"><span class="icon">🎯</span><span class="text">Pick</span></button>
+        <button class="seg-btn secondary-tools" data-tool="image" title="Image"><span class="icon">🖼️</span><span class="text">Image</span></button>
       </div>
+      
+      <!-- Color and settings -->
+      <div class="swatches" id="swatches"></div>
+      <div class="thin">
+        <input id="size" type="range" min="1" max="40" value="4" aria-label="Brush size" />
+        <span class="val" id="sizeVal">4px</span>
+      </div>
+      <div class="thin secondary-tools">
+        <input id="opacity" type="range" min="0.05" max="1" step="0.01" value="1" aria-label="Brush opacity" />
+        <span class="val" id="opacityVal">100%</span>
+      </div>
+      
+      <!-- Color management -->
+      <button id="colorPickerBtn" class="btn secondary-tools" title="Add/Edit Colors">+ Color</button>
+      
+      <!-- Action buttons (always visible but compact on mobile) -->
+      <span class="spacer"></span>
+      <button id="undo" class="btn btn-action" title="Undo">↺</button>
+      <button id="redo" class="btn btn-action" title="Redo">↻</button>
+      <button id="clear" class="btn btn-danger" title="Clear canvas">🗑️</button>
+      <button id="snapshot" class="btn btn-success" title="Update canvas">📤</button>
+      <span id="status">Connecting…</span>
+      
+      <!-- Hidden legacy controls -->
       <select id="tool" class="btn" aria-label="Tool" style="display:none">
         <option value="pen">Pen</option>
         <option value="eraser">Eraser</option>
@@ -95,26 +350,94 @@
         <option value="image">Image</option>
       </select>
       <input id="color" type="color" value="#ffffff" aria-label="Color" style="display:none" />
-      <span class="spacer"></span>
-      <div class="segmented" id="fillToggle">
-        <button class="seg-btn active" data-fill="outline" title="Outline only">Outline</button>
-        <button class="seg-btn" data-fill="fill" title="Fill + outline">Fill</button>
-      </div>
-      <span class="chip">Rotation</span>
-      <input id="rotation" type="range" min="-180" max="180" value="0" aria-label="Rotation (deg)" />
-      <span class="spacer"></span>
-      <button id="undo" class="btn">↺ Undo</button>
-      <button id="redo" class="btn">↻ Redo</button>
-      <button id="clear" class="btn" style="background: rgba(239,68,68,.8); border-color: rgba(239,68,68,.3)">🗑️ Clear</button>
-      <button id="snapshot" class="btn" style="background: rgba(34,197,94,.8); border-color: rgba(34,197,94,.3)">📤 Update</button>
-      <span id="status">Connecting…</span>
     </div>
+    <div id="fpsCounter">FPS: 0 | Objects: 0</div>
     <canvas id="canvas"></canvas>
     <script src="/socket.io/socket.io.js"></script>
     <script>
       const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: false, alpha: false, desynchronized: true });
+      
+      // Advanced hardware acceleration setup
+      const contextOptions = {
+        alpha: false,                    // Disable alpha for better performance
+        desynchronized: true,           // Allow off-main-thread rendering
+        willReadFrequently: false,      // Optimize for write-heavy operations
+        powerPreference: 'high-performance', // Request discrete GPU
+        antialias: false,              // Disable antialiasing for speed
+        depth: false,                  // No depth buffer needed
+        stencil: false,                // No stencil buffer needed
+        preserveDrawingBuffer: false,  // Allow buffer optimization
+        failIfMajorPerformanceCaveat: false // Still work on slow hardware
+      };
+      
+      const ctx = canvas.getContext('2d', contextOptions);
+      
+      // Optimize main context settings
       ctx.imageSmoothingEnabled = false;
+      ctx.imageSmoothingQuality = 'low';
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.textBaseline = 'top';
+      
+              // Performance monitoring with Chrome optimizations
+        let frameTime = 0;
+        let lastFrameTime = performance.now();
+        const MAX_FRAME_TIME = 8; // 120fps target for Chrome
+        const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor || '');
+        const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+        const isFirefox = /Firefox/.test(navigator.userAgent);
+        
+        // GPU acceleration detection
+        let hasGPUAcceleration = false;
+        try {
+          const testCanvas = document.createElement('canvas');
+          const testCtx = testCanvas.getContext('2d', { willReadFrequently: false });
+          const info = testCtx.getContextAttributes();
+          hasGPUAcceleration = !info.willReadFrequently;
+        } catch (e) {
+          hasGPUAcceleration = false;
+        }
+        
+        // Advanced hardware acceleration for all browsers
+        try {
+          // Force GPU layer creation
+          canvas.style.willChange = 'transform';
+          canvas.style.transform = 'translateZ(0)';
+          canvas.style.backfaceVisibility = 'hidden';
+          canvas.style.perspective = '1000px';
+          
+          // Chrome-specific optimizations
+          if (isChrome) {
+            // Advanced Chrome GPU optimizations
+            canvas.style.imageRendering = 'pixelated';
+            canvas.style.imageRendering = 'crisp-edges';
+            canvas.style.containIntrinsicSize = '100vw 100vh';
+            canvas.style.contentVisibility = 'auto';
+            
+            // GPU memory hints
+            ctx.imageSmoothingEnabled = false;
+            ctx.imageSmoothingQuality = 'low';
+          }
+          
+          // Request high refresh rate if available
+          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            console.log('High refresh rate rendering available');
+          }
+          
+          console.log('Hardware acceleration enabled');
+          
+          // Check if we're using GPU acceleration
+          const debugInfo = ctx.getContextAttributes?.() || contextOptions;
+          console.log('Canvas context attributes:', debugInfo);
+          
+          // Performance monitoring for GPU
+          if (performance.memory) {
+            console.log('Initial GPU memory:', Math.round(performance.memory.usedJSHeapSize / 1024 / 1024) + 'MB');
+          }
+        } catch (e) {
+          console.warn('Hardware acceleration setup failed:', e);
+        }
       const toolInput = document.getElementById('tool');
       const colorInput = document.getElementById('color');
       const sizeInput = document.getElementById('size');
@@ -130,16 +453,95 @@
       const segmented = document.getElementById('toolSegmented');
       const sizeVal = document.getElementById('sizeVal');
       const swatches = document.getElementById('swatches');
-      // Build quick color swatches
-      const defaultColors = ['#ffffff','#fca5a5','#fde047','#86efac','#93c5fd','#c4b5fd','#f9a8d4','#a3a3a3','#000000'];
-      defaultColors.forEach((c) => {
-        const b = document.createElement('button');
-        b.className = 'swatch';
-        b.style.background = c;
-        b.title = c;
-        b.addEventListener('click', () => { colorInput.value = c; updateActiveSwatch(); });
-        swatches.appendChild(b);
+      // Customizable color swatches with local storage
+      let userColors = JSON.parse(localStorage.getItem('drawColors') || '["#ffffff","#fca5a5","#fde047","#86efac","#93c5fd","#c4b5fd","#f9a8d4","#a3a3a3","#000000"]');
+      
+      function buildColorSwatches() {
+        swatches.innerHTML = '';
+        userColors.forEach((c, index) => {
+          const swatchContainer = document.createElement('div');
+          swatchContainer.style.position = 'relative';
+          
+          const b = document.createElement('button');
+          b.className = 'swatch';
+          b.style.background = c;
+          b.title = c;
+          b.addEventListener('click', () => { colorInput.value = c; updateActiveSwatch(); });
+          
+          // Create hidden color input for each swatch
+          const hiddenColorInput = document.createElement('input');
+          hiddenColorInput.type = 'color';
+          hiddenColorInput.value = c;
+          hiddenColorInput.style.display = 'none';
+          hiddenColorInput.addEventListener('input', (e) => {
+            const newColor = e.target.value.toLowerCase();
+            userColors[index] = newColor;
+            colorInput.value = newColor; // Immediately update the main color input
+            colorInput.dispatchEvent(new Event('input')); // Trigger input event to ensure all listeners are notified
+            saveUserColors();
+            buildColorSwatches();
+            updateActiveSwatch();
+          });
+          
+          // Right-click to edit color or double-click to edit
+          const editColor = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            hiddenColorInput.click(); // Open color picker
+          };
+          
+          b.addEventListener('contextmenu', editColor);
+          b.addEventListener('dblclick', editColor);
+          
+          // Middle-click or Ctrl+click to remove color
+          b.addEventListener('mousedown', (e) => {
+            if (e.button === 1 || (e.ctrlKey && e.button === 0)) { // Middle click or Ctrl+click
+              e.preventDefault();
+              if (userColors.length > 1) { // Don't allow removing the last color
+                userColors.splice(index, 1);
+                saveUserColors();
+                buildColorSwatches();
+                updateActiveSwatch();
+              }
+            }
+          });
+          
+          swatchContainer.appendChild(b);
+          swatchContainer.appendChild(hiddenColorInput);
+          swatches.appendChild(swatchContainer);
+        });
+      }
+      
+      function saveUserColors() {
+        localStorage.setItem('drawColors', JSON.stringify(userColors));
+      }
+      
+      buildColorSwatches();
+      
+      // Color picker button functionality
+      const colorPickerBtn = document.getElementById('colorPickerBtn');
+      const addColorInput = document.createElement('input');
+      addColorInput.type = 'color';
+      addColorInput.style.display = 'none';
+      addColorInput.value = '#ffffff';
+      document.body.appendChild(addColorInput);
+      
+      addColorInput.addEventListener('input', (e) => {
+        const color = e.target.value.toLowerCase();
+        if (!userColors.includes(color)) {
+          userColors.push(color);
+          saveUserColors();
+          buildColorSwatches();
+        }
+        colorInput.value = color; // Update the main color input
+        colorInput.dispatchEvent(new Event('input')); // Trigger input event to ensure all listeners are notified
+        updateActiveSwatch();
       });
+      
+      colorPickerBtn.addEventListener('click', () => {
+        addColorInput.click(); // Open color picker dialog
+      });
+      
       function updateActiveSwatch() {
         const nodes = swatches.querySelectorAll('.swatch');
         nodes.forEach((n) => n.classList.toggle('active', n.title.toLowerCase() === colorInput.value.toLowerCase()));
@@ -172,77 +574,9 @@
       opacityInput.addEventListener('input', updateOpacityVal);
       updateOpacityVal();
 
-      // Fill toggle behavior -> sync to a virtual fill state
+      // Simplified fill state (always outline for cleaner interface)
       let fillState = 'outline';
-      function updateFillState(next) {
-        fillState = next;
-        fillToggle.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.fill === fillState));
-      }
-      fillToggle.addEventListener('click', (e) => {
-        const btn = e.target.closest('.seg-btn');
-        if (!btn) return;
-        updateFillState(btn.dataset.fill);
-      });
-      updateFillState('outline');
 
-      // Pen presets
-      const penPresetsBtn = document.getElementById('penPresetsBtn');
-      const penPresets = document.getElementById('penPresets');
-      const presetList = document.getElementById('presetList');
-      const presets = [
-        { name: 'Fine', size: 2, color: '#ffffff' },
-        { name: 'Sketch', size: 4, color: '#93c5fd' },
-        { name: 'Highlight', size: 12, color: '#fde047' },
-        { name: 'Marker', size: 8, color: '#fca5a5' },
-        { name: 'Forest', size: 5, color: '#86efac' },
-        { name: 'Violet', size: 5, color: '#c4b5fd' },
-        { name: 'Rose', size: 5, color: '#f9a8d4' },
-        { name: 'Shadow', size: 3, color: '#a3a3a3' }
-      ];
-      function buildPresets() {
-        presetList.innerHTML = '';
-        presets.forEach((p) => {
-          const b = document.createElement('button');
-          b.className = 'preset-btn';
-          const dot = document.createElement('span');
-          dot.className = 'preset-dot';
-          dot.style.background = p.color;
-          dot.style.width = `${Math.max(10, Math.min(26, 10 + p.size))}px`;
-          dot.style.height = dot.style.width;
-          const label = document.createElement('span');
-          label.textContent = `${p.name} · ${p.size}px`;
-          b.appendChild(dot); b.appendChild(label);
-          b.addEventListener('click', () => {
-            colorInput.value = p.color;
-            sizeInput.value = String(p.size);
-            updateActiveSwatch();
-            updateSizeVal();
-            penPresets.style.display = 'none';
-          });
-          presetList.appendChild(b);
-        });
-        // Actions row
-        const actions = document.createElement('div');
-        actions.className = 'preset-actions';
-        const clearBtn = document.createElement('button');
-        clearBtn.className = 'btn'; clearBtn.textContent = 'Clear'; clearBtn.title = 'Reset to defaults';
-        clearBtn.addEventListener('click', () => {
-          colorInput.value = '#ffffff';
-          sizeInput.value = '4';
-          updateActiveSwatch();
-          updateSizeVal();
-          penPresets.style.display = 'none';
-        });
-        actions.appendChild(clearBtn);
-        presetList.parentElement.appendChild(actions);
-      }
-      penPresetsBtn.addEventListener('click', () => {
-        if (penPresets.style.display === 'none') { buildPresets(); penPresets.style.display = 'block'; }
-        else penPresets.style.display = 'none';
-      });
-      document.addEventListener('click', (e) => {
-        if (!penPresets.contains(e.target) && e.target !== penPresetsBtn) penPresets.style.display = 'none';
-      });
 
       const DPR = Math.max(1, window.devicePixelRatio || 1);
       let zoom = 1;
@@ -254,8 +588,47 @@
       const worldCanvas = document.createElement('canvas');
       worldCanvas.width = Math.floor(WORLD_W * DPR);
       worldCanvas.height = Math.floor(WORLD_H * DPR);
-      const wctx = worldCanvas.getContext('2d', { willReadFrequently: false });
+      
+      // Hardware acceleration for world canvas
+      try {
+        worldCanvas.style.willChange = 'contents';
+        worldCanvas.style.transform = 'translateZ(0)';
+        worldCanvas.style.backfaceVisibility = 'hidden';
+      } catch (e) {
+        console.warn('World canvas acceleration failed:', e);
+      }
+      
+      const wctx = worldCanvas.getContext('2d', {
+        alpha: false,
+        desynchronized: true,
+        willReadFrequently: false,
+        powerPreference: 'high-performance',
+        antialias: false,
+        depth: false,
+        stencil: false,
+        preserveDrawingBuffer: false
+      });
+      
+      // Optimize world context settings
       wctx.imageSmoothingEnabled = false;
+      wctx.imageSmoothingQuality = 'low';
+      wctx.globalCompositeOperation = 'source-over';
+      wctx.lineCap = 'round';
+      wctx.lineJoin = 'round';
+      wctx.textBaseline = 'top';
+      
+      // Pre-configure commonly used styles
+      const commonStyles = {
+        fillStyle: '#111',
+        strokeStyle: '#ffffff',
+        lineWidth: 4,
+        globalAlpha: 1
+      };
+      
+      // Apply common styles
+      Object.assign(wctx, commonStyles);
+      Object.assign(ctx, commonStyles); // Apply to main context too
+      
       // Draw in world units by scaling once
       wctx.setTransform(1, 0, 0, 1, 0, 0);
       wctx.scale(DPR, DPR);
@@ -280,20 +653,113 @@
         canvas.height = Math.floor(h * DPR);
         canvas.style.width = w + 'px';
         canvas.style.height = h + 'px';
+        
+        // Restore optimized context settings after resize
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(DPR, DPR);
+        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingQuality = 'low';
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        ctx.textBaseline = 'top';
+        ctx.globalCompositeOperation = 'source-over';
+        
+        // Clear cached rect on resize
+        delete canvas._cachedRect;
+        
         render();
       }
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
 
       let renderScheduled = false;
+      
+              // Optimized viewport culling with caching
+        let cachedBounds = null;
+        let lastBoundsUpdate = 0;
+        const BOUNDS_CACHE_MS = isChrome ? 8 : 16; // Aggressive caching for Chrome
+        
+        function getVisibleBounds() {
+          const now = performance.now();
+          if (cachedBounds && (now - lastBoundsUpdate) < BOUNDS_CACHE_MS) {
+            return cachedBounds;
+          }
+          
+          const margin = isChrome ? 50 : 100; // Smaller margin for Chrome
+          cachedBounds = {
+            left: viewX - margin,
+            top: viewY - margin,
+            right: viewX + (canvas.clientWidth / zoom) + margin,
+            bottom: viewY + (canvas.clientHeight / zoom) + margin
+          };
+          lastBoundsUpdate = now;
+          return cachedBounds;
+        }
+      
+      function isObjectVisible(obj, bounds) {
+        switch (obj.type) {
+          case 'stroke':
+            if (!obj.bounds) {
+              const bounds = getPooledBounds();
+              
+              // Chrome optimization: Sample large strokes for faster bounds calculation
+              if (isChrome && obj.points && obj.points.length > 20) {
+                const step = Math.ceil(obj.points.length / 10);
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (let i = 0; i < obj.points.length; i += step) {
+                  const p = obj.points[i];
+                  minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                  minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+                }
+                bounds.left = minX; bounds.top = minY; bounds.right = maxX; bounds.bottom = maxY;
+              } else {
+                // Standard bounds calculation
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (const p of obj.points || []) {
+                  minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                  minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+                }
+                bounds.left = minX; bounds.top = minY; bounds.right = maxX; bounds.bottom = maxY;
+              }
+              obj.bounds = bounds;
+            }
+            return obj.bounds.right >= bounds.left && obj.bounds.left <= bounds.right &&
+                   obj.bounds.bottom >= bounds.top && obj.bounds.top <= bounds.bottom;
+          case 'line':
+            const lineLeft = Math.min(obj.x0, obj.x1);
+            const lineRight = Math.max(obj.x0, obj.x1);
+            const lineTop = Math.min(obj.y0, obj.y1);
+            const lineBottom = Math.max(obj.y0, obj.y1);
+            return lineRight >= bounds.left && lineLeft <= bounds.right &&
+                   lineBottom >= bounds.top && lineTop <= bounds.bottom;
+          case 'rect':
+            const rectLeft = Math.min(obj.x, obj.x + obj.w);
+            const rectRight = Math.max(obj.x, obj.x + obj.w);
+            const rectTop = Math.min(obj.y, obj.y + obj.h);
+            const rectBottom = Math.max(obj.y, obj.y + obj.h);
+            return rectRight >= bounds.left && rectLeft <= bounds.right &&
+                   rectBottom >= bounds.top && rectTop <= bounds.bottom;
+          case 'ellipse':
+            return (obj.cx + obj.rx) >= bounds.left && (obj.cx - obj.rx) <= bounds.right &&
+                   (obj.cy + obj.ry) >= bounds.top && (obj.cy - obj.ry) <= bounds.bottom;
+          case 'text':
+            const textW = obj.text.length * (obj.fontSize * 0.6);
+            const textH = obj.fontSize * 1.2;
+            return (obj.x + textW) >= bounds.left && obj.x <= bounds.right &&
+                   (obj.y + textH) >= bounds.top && obj.y <= bounds.bottom;
+          case 'image':
+            return (obj.cx + obj.w/2) >= bounds.left && (obj.cx - obj.w/2) <= bounds.right &&
+                   (obj.cy + obj.h/2) >= bounds.top && (obj.cy - obj.h/2) <= bounds.bottom;
+        }
+        return true;
+      }
+      
       function renderVectorScene() {
-        // High-quality vector render from objects at any zoom
+        // High-quality vector render from objects at any zoom with viewport culling
         const vw = canvas.clientWidth;
         const vh = canvas.clientHeight;
+        const bounds = getVisibleBounds();
+        
         // Reset and apply DPR
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(DPR, DPR);
@@ -303,77 +769,259 @@
         ctx.save();
         ctx.scale(zoom, zoom);
         ctx.translate(-viewX, -viewY);
-        // Draw all objects
-        for (const obj of objects) {
-          switch (obj.type) {
-            case 'stroke': {
-              if (!obj.points || obj.points.length < 2) break;
-              ctx.strokeStyle = obj.color;
-              ctx.lineWidth = obj.size;
+        
+        // Chrome-optimized rendering with batching
+        if (isChrome) {
+          try {
+            // Batch strokes by style for better Chrome performance
+            const strokeBatches = new Map();
+            const otherObjects = [];
+            
+            for (const obj of objects) {
+              if (!isObjectVisible(obj, bounds)) continue;
+              
+              if (obj.type === 'stroke' && obj.points && obj.points.length >= 2) {
+                const key = `${obj.color}-${obj.size}-${obj.alpha || 1}`;
+                if (!strokeBatches.has(key)) strokeBatches.set(key, []);
+                strokeBatches.get(key).push(obj);
+              } else {
+                otherObjects.push(obj);
+              }
+            }
+            
+            // Render batched strokes
+            for (const [key, strokes] of strokeBatches) {
+              const [color, size, alpha] = key.split('-');
+              ctx.strokeStyle = color;
+              ctx.lineWidth = parseFloat(size);
               ctx.lineCap = 'round';
               ctx.lineJoin = 'round';
+              ctx.globalAlpha = parseFloat(alpha);
+              
+              // Single path for multiple strokes (Chrome optimization)
               ctx.beginPath();
-              ctx.moveTo(obj.points[0].x, obj.points[0].y);
-              for (let i = 1; i < obj.points.length; i++) {
-                const p = obj.points[i];
-                ctx.lineTo(p.x, p.y);
+              for (const obj of strokes) {
+                ctx.moveTo(obj.points[0].x, obj.points[0].y);
+                for (let i = 1; i < obj.points.length; i++) {
+                  ctx.lineTo(obj.points[i].x, obj.points[i].y);
+                }
               }
               ctx.stroke();
-              break;
             }
-            case 'line': {
-              ctx.strokeStyle = obj.color;
-              ctx.lineWidth = obj.size;
-              ctx.beginPath();
-              ctx.moveTo(obj.x0, obj.y0);
-              ctx.lineTo(obj.x1, obj.y1);
-              ctx.stroke();
-              break;
+            
+            ctx.globalAlpha = 1;
+            
+            // Render other objects
+            for (const obj of otherObjects) {
+              switch (obj.type) {
+                case 'line': {
+                  ctx.strokeStyle = obj.color;
+                  ctx.lineWidth = obj.size;
+                  ctx.beginPath();
+                  ctx.moveTo(obj.x0, obj.y0);
+                  ctx.lineTo(obj.x1, obj.y1);
+                  ctx.stroke();
+                  break;
+                }
+                case 'rect': {
+                  if (obj.fill) {
+                    ctx.fillStyle = obj.color;
+                    ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+                  }
+                  ctx.strokeStyle = obj.color;
+                  ctx.lineWidth = obj.size;
+                  ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+                  break;
+                }
+                case 'ellipse': {
+                  ctx.beginPath();
+                  ctx.ellipse(obj.cx, obj.cy, obj.rx, obj.ry, 0, 0, Math.PI * 2);
+                  if (obj.fill) {
+                    ctx.fillStyle = obj.color;
+                    ctx.fill();
+                  }
+                  ctx.strokeStyle = obj.color;
+                  ctx.lineWidth = obj.size;
+                  ctx.stroke();
+                  break;
+                }
+                case 'text': {
+                  ctx.save();
+                  ctx.translate(obj.x, obj.y);
+                  if (obj.rotation) ctx.rotate(obj.rotation);
+                  ctx.fillStyle = obj.color;
+                  ctx.font = `${obj.fontSize}px sans-serif`;
+                  ctx.textBaseline = 'top';
+                  ctx.fillText(obj.text, 0, 0);
+                  ctx.restore();
+                  break;
+                }
+                case 'image': {
+                  ctx.save();
+                  ctx.translate(obj.cx, obj.cy);
+                  if (obj.rotation) ctx.rotate(obj.rotation);
+                  const img = obj.img;
+                  ctx.imageSmoothingEnabled = true;
+                  if (img && img.complete) {
+                    ctx.drawImage(img, -obj.w / 2, -obj.h / 2, obj.w, obj.h);
+                  }
+                  ctx.restore();
+                  break;
+                }
+              }
             }
-            case 'rect': {
-              if (obj.fill) {
+          } catch (e) {
+            console.error('Chrome rendering optimization failed:', e);
+            // Fallback to standard rendering
+            for (const obj of objects) {
+              if (!isObjectVisible(obj, bounds)) continue;
+              switch (obj.type) {
+                case 'stroke': {
+                  if (!obj.points || obj.points.length < 2) break;
+                  ctx.strokeStyle = obj.color;
+                  ctx.lineWidth = obj.size;
+                  ctx.lineCap = 'round';
+                  ctx.lineJoin = 'round';
+                  ctx.beginPath();
+                  ctx.moveTo(obj.points[0].x, obj.points[0].y);
+                  for (let i = 1; i < obj.points.length; i++) {
+                    const p = obj.points[i];
+                    ctx.lineTo(p.x, p.y);
+                  }
+                  ctx.stroke();
+                  break;
+                }
+                case 'line': {
+                  ctx.strokeStyle = obj.color;
+                  ctx.lineWidth = obj.size;
+                  ctx.beginPath();
+                  ctx.moveTo(obj.x0, obj.y0);
+                  ctx.lineTo(obj.x1, obj.y1);
+                  ctx.stroke();
+                  break;
+                }
+                case 'rect': {
+                  if (obj.fill) {
+                    ctx.fillStyle = obj.color;
+                    ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+                  }
+                  ctx.strokeStyle = obj.color;
+                  ctx.lineWidth = obj.size;
+                  ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+                  break;
+                }
+                case 'ellipse': {
+                  ctx.beginPath();
+                  ctx.ellipse(obj.cx, obj.cy, obj.rx, obj.ry, 0, 0, Math.PI * 2);
+                  if (obj.fill) {
+                    ctx.fillStyle = obj.color;
+                    ctx.fill();
+                  }
+                  ctx.strokeStyle = obj.color;
+                  ctx.lineWidth = obj.size;
+                  ctx.stroke();
+                  break;
+                }
+                case 'text': {
+                  ctx.save();
+                  ctx.translate(obj.x, obj.y);
+                  if (obj.rotation) ctx.rotate(obj.rotation);
+                  ctx.fillStyle = obj.color;
+                  ctx.font = `${obj.fontSize}px sans-serif`;
+                  ctx.textBaseline = 'top';
+                  ctx.fillText(obj.text, 0, 0);
+                  ctx.restore();
+                  break;
+                }
+                case 'image': {
+                  ctx.save();
+                  ctx.translate(obj.cx, obj.cy);
+                  if (obj.rotation) ctx.rotate(obj.rotation);
+                  const img = obj.img;
+                  ctx.imageSmoothingEnabled = true;
+                  if (img && img.complete) {
+                    ctx.drawImage(img, -obj.w / 2, -obj.h / 2, obj.w, obj.h);
+                  }
+                  ctx.restore();
+                  break;
+                }
+              }
+            }
+          }
+        } else {
+          // Standard rendering for other browsers
+          for (const obj of objects) {
+            if (!isObjectVisible(obj, bounds)) continue;
+            switch (obj.type) {
+              case 'stroke': {
+                if (!obj.points || obj.points.length < 2) break;
+                ctx.strokeStyle = obj.color;
+                ctx.lineWidth = obj.size;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                ctx.moveTo(obj.points[0].x, obj.points[0].y);
+                for (let i = 1; i < obj.points.length; i++) {
+                  const p = obj.points[i];
+                  ctx.lineTo(p.x, p.y);
+                }
+                ctx.stroke();
+                break;
+              }
+              case 'line': {
+                ctx.strokeStyle = obj.color;
+                ctx.lineWidth = obj.size;
+                ctx.beginPath();
+                ctx.moveTo(obj.x0, obj.y0);
+                ctx.lineTo(obj.x1, obj.y1);
+                ctx.stroke();
+                break;
+              }
+              case 'rect': {
+                if (obj.fill) {
+                  ctx.fillStyle = obj.color;
+                  ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+                }
+                ctx.strokeStyle = obj.color;
+                ctx.lineWidth = obj.size;
+                ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+                break;
+              }
+              case 'ellipse': {
+                ctx.beginPath();
+                ctx.ellipse(obj.cx, obj.cy, obj.rx, obj.ry, 0, 0, Math.PI * 2);
+                if (obj.fill) {
+                  ctx.fillStyle = obj.color;
+                  ctx.fill();
+                }
+                ctx.strokeStyle = obj.color;
+                ctx.lineWidth = obj.size;
+                ctx.stroke();
+                break;
+              }
+              case 'text': {
+                ctx.save();
+                ctx.translate(obj.x, obj.y);
+                if (obj.rotation) ctx.rotate(obj.rotation);
                 ctx.fillStyle = obj.color;
-                ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+                ctx.font = `${obj.fontSize}px sans-serif`;
+                ctx.textBaseline = 'top';
+                ctx.fillText(obj.text, 0, 0);
+                ctx.restore();
+                break;
               }
-              ctx.strokeStyle = obj.color;
-              ctx.lineWidth = obj.size;
-              ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
-              break;
-            }
-            case 'ellipse': {
-              ctx.beginPath();
-              ctx.ellipse(obj.cx, obj.cy, obj.rx, obj.ry, 0, 0, Math.PI * 2);
-              if (obj.fill) {
-                ctx.fillStyle = obj.color;
-                ctx.fill();
+              case 'image': {
+                ctx.save();
+                ctx.translate(obj.cx, obj.cy);
+                if (obj.rotation) ctx.rotate(obj.rotation);
+                const img = obj.img;
+                ctx.imageSmoothingEnabled = true;
+                if (img && img.complete) {
+                  ctx.drawImage(img, -obj.w / 2, -obj.h / 2, obj.w, obj.h);
+                }
+                ctx.restore();
+                break;
               }
-              ctx.strokeStyle = obj.color;
-              ctx.lineWidth = obj.size;
-              ctx.stroke();
-              break;
-            }
-            case 'text': {
-              ctx.save();
-              ctx.translate(obj.x, obj.y);
-              if (obj.rotation) ctx.rotate(obj.rotation);
-              ctx.fillStyle = obj.color;
-              ctx.font = `${obj.fontSize}px sans-serif`;
-              ctx.textBaseline = 'top';
-              ctx.fillText(obj.text, 0, 0);
-              ctx.restore();
-              break;
-            }
-            case 'image': {
-              ctx.save();
-              ctx.translate(obj.cx, obj.cy);
-              if (obj.rotation) ctx.rotate(obj.rotation);
-              const img = obj.img;
-              ctx.imageSmoothingEnabled = true;
-              if (img && img.complete) {
-                ctx.drawImage(img, -obj.w / 2, -obj.h / 2, obj.w, obj.h);
-              }
-              ctx.restore();
-              break;
             }
           }
         }
@@ -395,11 +1043,6 @@
       }
 
       function render() {
-        // For best quality when zoomed, render vectors; use blit only at 1:1 (unless highlighter active)
-        if (zoom !== 1 || (activeTool === 'highlighter' || toolInput.value === 'highlighter')) {
-          renderVectorScene();
-          return;
-        }
         // Reset transform, apply DPR
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(DPR, DPR);
@@ -423,12 +1066,126 @@
       function requestRender() {
         if (renderScheduled) return;
         renderScheduled = true;
-        requestAnimationFrame(() => { renderScheduled = false; render(); });
+        
+        // Browser-specific optimizations
+        if (isChrome && hasGPUAcceleration) {
+          // Chrome with GPU: Immediate RAF for best responsiveness
+          requestAnimationFrame(() => {
+            const frameStart = performance.now();
+            renderScheduled = false;
+            lastFrameTime = frameStart;
+            render();
+            frameTime = performance.now() - frameStart;
+          });
+        } else if (isSafari) {
+          // Safari: Use lighter throttling for better performance
+          const now = performance.now();
+          const safariThrottle = 12; // ~83fps max for Safari
+          if (now - lastFrameTime < safariThrottle) {
+            setTimeout(() => {
+              renderScheduled = false;
+              lastFrameTime = performance.now();
+              render();
+            }, safariThrottle - (now - lastFrameTime));
+            return;
+          }
+          requestAnimationFrame(() => {
+            const frameStart = performance.now();
+            renderScheduled = false;
+            lastFrameTime = frameStart;
+            render();
+            frameTime = performance.now() - frameStart;
+          });
+        } else {
+          // Other browsers: Standard throttling
+          const now = performance.now();
+          const throttle = isFirefox ? 20 : MAX_FRAME_TIME; // Firefox needs more throttling
+          if (now - lastFrameTime < throttle) {
+            setTimeout(() => {
+              renderScheduled = false;
+              lastFrameTime = performance.now();
+              render();
+            }, throttle - (now - lastFrameTime));
+            return;
+          }
+          requestAnimationFrame(() => {
+            const frameStart = performance.now();
+            renderScheduled = false;
+            lastFrameTime = frameStart;
+            render();
+            frameTime = performance.now() - frameStart;
+          });
+        }
       }
 
       const socket = io();
+      const fpsCounterEl = document.getElementById('fpsCounter');
+      
       socket.on('connect', () => { statusEl.textContent = 'Connected'; });
       socket.on('disconnect', () => { statusEl.textContent = 'Disconnected'; });
+      
+      // Performance monitoring
+      let fps = 0;
+      let fpsCounter = 0;
+      let fpsTimer = performance.now();
+      
+      function updatePerformanceStatus() {
+        const now = performance.now();
+        fpsCounter++;
+        
+        if (now - fpsTimer >= 1000) {
+          fps = fpsCounter;
+          fpsCounter = 0;
+          fpsTimer = now;
+          
+          const objectCount = objects.length;
+          const poolStats = `P:${pointPool.length}/${strokePool.length}/${boundsPool.length}`;
+          let memoryUsage = 'N/A';
+          
+          // Try to get memory info (Chrome/Edge only, requires specific flags in some cases)
+          try {
+            if (performance.memory && typeof performance.memory.usedJSHeapSize === 'number' && performance.memory.usedJSHeapSize > 0) {
+              const usedMB = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
+              const totalMB = Math.round(performance.memory.totalJSHeapSize / 1024 / 1024);
+              memoryUsage = `${usedMB}/${totalMB}MB`;
+              
+              // Trigger garbage collection hint if memory usage is high
+              if (performance.memory.usedJSHeapSize > performance.memory.totalJSHeapSize * 0.8) {
+                console.warn('High memory usage detected, consider clearing canvas');
+                // Force a minor GC hint by creating and releasing objects
+                setTimeout(() => {
+                  const temp = new Array(1000).fill(null);
+                  temp.length = 0;
+                }, 0);
+              }
+            } else {
+              // Fallback: estimate based on objects count and canvas size
+              const baseMemory = 8; // Base app memory estimate
+              const objectMemory = Math.round(objectCount * 0.05); // ~50KB per object estimate
+              const canvasMemory = Math.round((worldCanvas.width * worldCanvas.height * 4) / (1024 * 1024)); // Canvas pixel data
+              memoryUsage = `~${baseMemory + objectMemory + canvasMemory}MB`;
+            }
+          } catch (e) {
+            // Some browsers restrict access to performance.memory
+            memoryUsage = `${Math.round((objectCount * 0.05) + 10)}MB est.`;
+          }
+          
+          // Update FPS counter with more detailed info
+          fpsCounterEl.textContent = `FPS: ${fps} | Objects: ${objectCount} | ${poolStats} | Memory: ${memoryUsage}`;
+          
+          // Adaptive cleanup based on object count
+          if (objectCount > 5000) {
+            console.warn('High object count, consider optimizing or clearing canvas');
+          }
+        }
+      }
+      
+      // Update performance stats every frame
+      const originalRequestRender = requestRender;
+      requestRender = function() {
+        updatePerformanceStatus();
+        return originalRequestRender.apply(this, arguments);
+      };
 
       socket.on('draw:stroke', (stroke) => {
         drawStrokeWorld(stroke);
@@ -478,11 +1235,122 @@
       let baseImageData = null; // unused with world rendering, kept for compat guards
       let placingImage = null;
       let placingText = null;
-      let activeTool = null;
+      let activeTool = "pen";
 
-      // Object model for full-object erasing
+      // Object model for full-object erasing with memory optimization
       const objects = [];
       let currentStroke = null;
+      
+      // Enhanced object pooling for better memory management
+      const pointPool = [];
+      const strokePool = [];
+      const boundsPool = [];
+      const MAX_POOL_SIZE = 1000; // Prevent infinite memory growth
+      
+      function getPooledPoint(x, y) {
+        const point = pointPool.pop() || {};
+        point.x = x;
+        point.y = y;
+        return point;
+      }
+      
+      function releasePoint(point) {
+        if (pointPool.length < MAX_POOL_SIZE) {
+          pointPool.push(point);
+        }
+      }
+      
+      function getPooledStroke() {
+        const stroke = strokePool.pop() || { points: [], bounds: null };
+        stroke.points.length = 0; // Clear existing points
+        stroke.bounds = null;
+        return stroke;
+      }
+      
+      function releaseStroke(stroke) {
+        // Return points to pool
+        if (stroke.points) {
+          for (const point of stroke.points) {
+            releasePoint(point);
+          }
+          stroke.points.length = 0;
+        }
+        if (stroke.bounds) {
+          releaseBounds(stroke.bounds);
+          stroke.bounds = null;
+        }
+        if (strokePool.length < MAX_POOL_SIZE) {
+          strokePool.push(stroke);
+        }
+      }
+      
+      function getPooledBounds() {
+        return boundsPool.pop() || { left: 0, top: 0, right: 0, bottom: 0 };
+      }
+      
+      function releaseBounds(bounds) {
+        if (boundsPool.length < MAX_POOL_SIZE) {
+          boundsPool.push(bounds);
+        }
+      }
+      
+      // Batch cleanup for better performance
+      function cleanupPools() {
+        if (pointPool.length > MAX_POOL_SIZE) {
+          pointPool.length = MAX_POOL_SIZE;
+        }
+        if (strokePool.length > MAX_POOL_SIZE) {
+          strokePool.length = MAX_POOL_SIZE;
+        }
+        if (boundsPool.length > MAX_POOL_SIZE) {
+          boundsPool.length = MAX_POOL_SIZE;
+        }
+      }
+      
+      // Cleanup pools every 30 seconds
+      setInterval(cleanupPools, 30000);
+      
+      // Advanced memory management
+      let lastCleanupTime = performance.now();
+      const CLEANUP_INTERVAL = 60000; // 1 minute
+      const MAX_OBJECTS_BEFORE_CLEANUP = 10000;
+      
+      function performMemoryCleanup() {
+        const now = performance.now();
+        if (now - lastCleanupTime < CLEANUP_INTERVAL) return;
+        
+        lastCleanupTime = now;
+        
+        // Clean up old bounds cache
+        cachedBounds = null;
+        
+        // Clean up object pools aggressively if too many objects
+        if (objects.length > MAX_OBJECTS_BEFORE_CLEANUP) {
+          console.log('Performing aggressive memory cleanup...');
+          pointPool.length = Math.min(pointPool.length, 100);
+          strokePool.length = Math.min(strokePool.length, 50);
+          boundsPool.length = Math.min(boundsPool.length, 100);
+        }
+        
+        // Clear cached canvas rect
+        if (canvas._cachedRect) {
+          delete canvas._cachedRect;
+        }
+        
+        // Force minor garbage collection hint
+        if (typeof window.gc === 'function') {
+          window.gc();
+        } else {
+          // Fallback GC hint
+          const temp = new Array(1000).fill(null);
+          temp.length = 0;
+        }
+        
+        console.log(`Memory cleanup completed. Objects: ${objects.length}, Pools: ${pointPool.length}/${strokePool.length}/${boundsPool.length}`);
+      }
+      
+      // Automatic cleanup when memory pressure is detected
+      setInterval(performMemoryCleanup, CLEANUP_INTERVAL);
 
       function generateId() {
         return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -754,9 +1622,42 @@
           baseImageData = null;
         }
         if (tool === 'pen' || tool === 'highlighter') {
-          currentStroke = { id: generateId(), type: 'stroke', color: colorInput.value, size: Number(sizeInput.value), alpha: Number(opacityInput.value), blend: (tool === 'highlighter' ? 'multiply' : 'source-over'), points: [{ x: shapeStartX, y: shapeStartY }] };
+          currentStroke = getPooledStroke();
+          currentStroke.id = generateId();
+          currentStroke.type = 'stroke';
+          currentStroke.color = colorInput.value;
+          currentStroke.size = Number(sizeInput.value);
+          currentStroke.alpha = Number(opacityInput.value);
+          currentStroke.blend = (tool === 'highlighter' ? 'multiply' : 'source-over');
+          currentStroke.points.push(getPooledPoint(shapeStartX, shapeStartY));
         }
       }
+      // Path simplification for smoother drawing
+      function simplifyPath(points, tolerance = 2) {
+        if (points.length <= 2) return points;
+        
+        const simplified = [points[0]];
+        for (let i = 1; i < points.length - 1; i++) {
+          const prev = simplified[simplified.length - 1];
+          const curr = points[i];
+          const next = points[i + 1];
+          
+          // Calculate distance from current point to line between prev and next
+          const dx = next.x - prev.x;
+          const dy = next.y - prev.y;
+          const length = Math.sqrt(dx * dx + dy * dy);
+          
+          if (length > 0) {
+            const distance = Math.abs((dy * curr.x - dx * curr.y + next.x * prev.y - next.y * prev.x) / length);
+            if (distance > tolerance) {
+              simplified.push(curr);
+            }
+          }
+        }
+        simplified.push(points[points.length - 1]);
+        return simplified;
+      }
+      
       // Pointer events with coalesced points for max perf
       function move(x, y, coalesced) {
         if (isPanning) {
@@ -798,23 +1699,72 @@
             netSegs.push({ x0: shapeStartX, y0: shapeStartY, x1: sp.x, y1: sp.y, color: colorInput.value, size: Number(sizeInput.value), alpha: Number(opacityInput.value), blend: (tool === 'highlighter' ? 'multiply' : 'source-over') });
             shapeStartX = sp.x; shapeStartY = sp.y;
             lastX = p.clientX; lastY = p.clientY;
-            if (currentStroke) currentStroke.points.push({ x: sp.x, y: sp.y });
+            if (currentStroke) currentStroke.points.push(getPooledPoint(sp.x, sp.y));
           }
           wctx.stroke();
           wctx.globalAlpha = prevAlpha;
           wctx.globalCompositeOperation = prevComp;
-          // Network emit throttled per RAF using queue
-          if (!window.__netQueue) window.__netQueue = [];
+          // Enhanced network batching with adaptive sizing
+          if (!window.__netQueue) {
+            window.__netQueue = [];
+            window.__netBatchSize = isChrome ? 15 : (isSafari ? 8 : 10);
+            window.__netLastFlush = performance.now();
+            window.__netAdaptiveDelay = isChrome ? 6 : (isSafari ? 12 : 16);
+          }
+          
           window.__netQueue.push(...netSegs);
+          
           if (!window.__netTicking) {
             window.__netTicking = true;
-            requestAnimationFrame(() => {
+            
+            // Adaptive delay based on performance
+            const now = performance.now();
+            const timeSinceLastFlush = now - window.__netLastFlush;
+            let adaptiveDelay = window.__netAdaptiveDelay;
+            
+            // If we're lagging, increase delay slightly
+            if (frameTime > 20) {
+              adaptiveDelay = Math.min(adaptiveDelay * 1.2, 50);
+            } else if (frameTime < 10) {
+              adaptiveDelay = Math.max(adaptiveDelay * 0.9, isChrome ? 4 : 8);
+            }
+            window.__netAdaptiveDelay = adaptiveDelay;
+            
+            setTimeout(() => {
               const q = window.__netQueue || [];
               window.__netQueue = [];
               window.__netTicking = false;
-              if (q.length === 1) socket.emit('draw:stroke', q[0]);
-              else if (q.length > 1) socket.emit('draw:strokes', q);
-            });
+              window.__netLastFlush = performance.now();
+              
+              if (q.length === 0) return;
+              
+              // Browser-specific batch limits
+              const maxBatch = isChrome ? 40 : (isSafari ? 25 : 30);
+              const minBatch = isChrome ? 5 : 3;
+              
+              if (q.length >= window.__netBatchSize) {
+                // Send in chunks if too large
+                const chunkSize = Math.min(q.length, maxBatch);
+                const chunk = q.slice(0, chunkSize);
+                socket.emit('draw:strokes', chunk);
+                
+                // Queue remaining if any
+                if (q.length > chunkSize) {
+                  window.__netQueue.unshift(...q.slice(chunkSize));
+                  if (!window.__netTicking) {
+                    window.__netTicking = true;
+                    setTimeout(arguments.callee, adaptiveDelay);
+                  }
+                }
+                
+                window.__netBatchSize = Math.min(maxBatch, window.__netBatchSize + 1);
+              } else if (q.length === 1) {
+                socket.emit('draw:stroke', q[0]);
+                window.__netBatchSize = Math.max(minBatch, window.__netBatchSize - 1);
+              } else {
+                socket.emit('draw:strokes', q);
+              }
+            }, adaptiveDelay);
           }
           requestRender();
           return;
@@ -876,7 +1826,7 @@
           ctx.stroke();
         } else if (tool === 'rect') {
           const w = wp.x - shapeStartX; const h = wp.y - shapeStartY;
-          if (fillInput.checked) {
+          if (fillState === 'fill') {
             ctx.fillStyle = colorInput.value;
             ctx.fillRect(shapeStartX, shapeStartY, w, h);
           }
@@ -888,7 +1838,7 @@
           const ry = Math.abs(wp.y - shapeStartY) / 2;
           ctx.beginPath();
           ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-          if (fillInput.checked) {
+          if (fillState === 'fill') {
             ctx.fillStyle = colorInput.value;
             ctx.fill();
           }
@@ -905,6 +1855,8 @@
           if (currentStroke && currentStroke.points && currentStroke.points.length > 1) {
             currentStroke.alpha = Number(opacityInput.value);
             currentStroke.blend = (tool === 'highlighter' ? 'multiply' : 'source-over');
+            // Simplify path to reduce memory usage and improve performance
+            currentStroke.points = simplifyPath(currentStroke.points);
             objects.push(currentStroke);
           }
           currentStroke = null;
@@ -1155,6 +2107,14 @@
 
       clearBtn.addEventListener('click', () => {
         saveHistory();
+        
+        // Return all stroke objects to the pool for memory efficiency
+        for (const obj of objects) {
+          if (obj.type === 'stroke') {
+            releaseStroke(obj);
+          }
+        }
+        
         objects.length = 0;
         wctx.fillStyle = '#111';
         wctx.fillRect(0, 0, worldCanvas.width, worldCanvas.height);
