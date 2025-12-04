@@ -1,0 +1,371 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 221 83% 53%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.75rem;
+
+    /* App-specific light theme colors */
+    --app-bg: 210 20% 98%;
+    --app-surface: 0 0% 100%;
+    --app-surface-hover: 210 20% 96%;
+    --app-border: 214 32% 91%;
+    --app-text: 222 47% 11%;
+    --app-text-muted: 215 16% 47%;
+    --app-canvas-bg: 0 0% 100%;
+    --app-sidebar-bg: 210 20% 96%;
+    --app-topbar-bg: 0 0% 100%;
+  }
+
+  .dark {
+    /* Dark theme */
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+
+    /* App-specific dark theme colors */
+    --app-bg: 222 47% 4%;
+    --app-surface: 222 47% 8%;
+    --app-surface-hover: 222 47% 12%;
+    --app-border: 217 33% 17%;
+    --app-text: 210 40% 98%;
+    --app-text-muted: 215 20% 65%;
+    --app-canvas-bg: 222 47% 11%;
+    --app-sidebar-bg: 222 47% 6%;
+    --app-topbar-bg: 222 47% 7%;
+  }
+
+  .light {
+    /* Explicit light theme (same as :root) */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 221 83% 53%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    /* App-specific light theme colors */
+    --app-bg: 210 20% 98%;
+    --app-surface: 0 0% 100%;
+    --app-surface-hover: 210 20% 96%;
+    --app-border: 214 32% 91%;
+    --app-text: 222 47% 11%;
+    --app-text-muted: 215 16% 47%;
+    --app-canvas-bg: 0 0% 100%;
+    --app-sidebar-bg: 210 20% 96%;
+    --app-topbar-bg: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+@layer components {
+  /* Glass morphism effects */
+  .glass {
+    @apply bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-xl border border-white/20 shadow-2xl;
+  }
+  .light .glass {
+    @apply from-black/5 via-black/5 to-transparent border-black/10;
+  }
+  
+  .glass-button {
+    @apply glass hover:from-white/15 hover:via-white/10 hover:to-transparent active:scale-95 transition-all duration-300 ease-out;
+  }
+  .light .glass-button {
+    @apply hover:from-black/10 hover:via-black/5;
+  }
+
+  .glass-card {
+    @apply glass rounded-2xl p-6 shadow-xl;
+  }
+
+  /* Theme-aware app backgrounds */
+  .app-bg {
+    background-color: hsl(var(--app-bg));
+  }
+  
+  .app-surface {
+    background-color: hsl(var(--app-surface));
+  }
+
+  .app-surface-hover:hover {
+    background-color: hsl(var(--app-surface-hover));
+  }
+
+  .app-border {
+    border-color: hsl(var(--app-border));
+  }
+
+  .app-text {
+    color: hsl(var(--app-text));
+  }
+
+  .app-text-muted {
+    color: hsl(var(--app-text-muted));
+  }
+
+  /* Theme-aware gradient backgrounds */
+  .gradient-bg {
+    @apply bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50;
+  }
+  .dark .gradient-bg {
+    @apply bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950;
+  }
+
+  .gradient-text {
+    @apply text-foreground;
+  }
+
+  /* Theme-aware borders */
+  .theme-border {
+    @apply border-slate-200;
+  }
+  .dark .theme-border {
+    @apply border-white/10;
+  }
+
+  /* Theme-aware surfaces */
+  .theme-surface {
+    @apply bg-white;
+  }
+  .dark .theme-surface {
+    @apply bg-slate-900;
+  }
+
+  .theme-surface-elevated {
+    @apply bg-white shadow-sm;
+  }
+  .dark .theme-surface-elevated {
+    @apply bg-slate-800/50 shadow-none;
+  }
+
+  /* Theme-aware text */
+  .theme-text {
+    @apply text-slate-900;
+  }
+  .dark .theme-text {
+    @apply text-slate-100;
+  }
+
+  .theme-text-muted {
+    @apply text-slate-500;
+  }
+  .dark .theme-text-muted {
+    @apply text-slate-400;
+  }
+
+  /* Color picker styles */
+  .color-preview {
+    @apply shadow-lg ring-2 ring-white/20;
+  }
+  .light .color-preview {
+    @apply ring-black/10;
+  }
+  
+  .color-swatch {
+    @apply transition-all duration-200 hover:scale-110 hover:shadow-lg;
+  }
+
+  .tool-button {
+    @apply relative overflow-hidden transition-all duration-300 hover:scale-105 active:scale-95;
+  }
+
+  .tool-button::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 transition-opacity duration-300;
+  }
+  .light .tool-button::before {
+    @apply from-black/5;
+  }
+
+  .tool-button:hover::before {
+    @apply opacity-100;
+  }
+}
+
+/* Canvas specific styles */
+canvas {
+  touch-action: none;
+  -ms-interpolation-mode: nearest-neighbor;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: pixelated;
+}
+
+/* Performance optimizations */
+.hw-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .mobile-hide {
+    display: none;
+  }
+}
+
+/* Custom scrollbar - Dark theme */
+.dark ::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.5), rgba(6, 182, 212, 0.5));
+  border-radius: 9999px;
+  border: 2px solid rgba(15, 23, 42, 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.7), rgba(6, 182, 212, 0.7));
+}
+
+/* Custom scrollbar - Light theme */
+.light ::-webkit-scrollbar {
+  width: 10px;
+}
+
+.light ::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 1);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.4), rgba(6, 182, 212, 0.4));
+  border-radius: 9999px;
+  border: 2px solid rgba(241, 245, 249, 1);
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.6), rgba(6, 182, 212, 0.6));
+}
+
+/* Smooth animations */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 1000px 100%;
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
