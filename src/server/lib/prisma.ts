@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import Prisma from '@prisma/client';
+const { PrismaClient } = Prisma;
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { logger } from '../utils/logger.js';
@@ -8,7 +9,7 @@ import { logger } from '../utils/logger.js';
 // Learn more: https://pris.ly/d/help/next-js-best-practices
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  prisma: InstanceType<typeof PrismaClient> | undefined;
 };
 
 const databaseUrl = process.env.DATABASE_URL;

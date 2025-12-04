@@ -12,7 +12,8 @@ import {
   Triangle,
   Type, 
   Palette,
-  Hand
+  Hand,
+  Move
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDrawingSocket } from '@/hooks/useSocket';
@@ -22,6 +23,7 @@ import { createProject, updateProject, getProject, listProjects } from '@/lib/ap
 
 const tools = [
   { id: 'hand', icon: Hand, label: 'Hand' },
+  { id: 'move', icon: Move, label: 'Move' },
   { id: 'pen', icon: Pen, label: 'Pen' },
   { id: 'eraser', icon: Eraser, label: 'Eraser' },
   { id: 'line', icon: Minus, label: 'Line' },

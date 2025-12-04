@@ -116,6 +116,18 @@ export function serializeProject(objects: DrawingObject[], worldW: number, world
           fontSize: o.fontSize || 24
         });
       }
+    } else if (o.type === 'image') {
+      if (typeof o.x === 'number' && typeof o.y === 'number' && o.imageData) {
+        acc.push({
+          id: o.id,
+          type: 'image',
+          x: o.x, y: o.y, 
+          width: o.width || 0, 
+          height: o.height || 0,
+          color: o.color, size: o.size, alpha: o.alpha,
+          imageData: o.imageData
+        });
+      }
     }
     return acc;
   }, []);
@@ -163,6 +175,20 @@ export function deserializeProject(file: ProjectFile | { objects?: unknown[] } |
             fontSize: obj.fontSize as number || 24
           };
         }
+        if (obj.type === 'image') {
+          return {
+            id: obj.id as string,
+            type: 'image' as const,
+            x: obj.x as number,
+            y: obj.y as number,
+            width: obj.width as number,
+            height: obj.height as number,
+            color: obj.color as string,
+            size: obj.size as number,
+            alpha: obj.alpha as number,
+            imageData: obj.imageData as string || ''
+          };
+        }
         return {
           id: obj.id as string,
           type: obj.type as DrawingObject['type'],
@@ -207,6 +233,16 @@ export function deserializeProject(file: ProjectFile | { objects?: unknown[] } |
         color: o.color, size: o.size, alpha: o.alpha,
         text: textObj.text || '',
         fontSize: textObj.fontSize || 24
+      };
+    }
+    if (o.type === 'image') {
+      const imageObj = o as { imageData?: string };
+      return {
+        id: o.id,
+        type: 'image' as const,
+        x: o.x, y: o.y, width: o.width, height: o.height,
+        color: o.color, size: o.size, alpha: o.alpha,
+        imageData: imageObj.imageData || ''
       };
     }
     return {

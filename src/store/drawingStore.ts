@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-export type Tool = 'pen' | 'eraser' | 'line' | 'rectangle' | 'ellipse' | 'triangle' | 'text' | 'eyedropper' | 'hand';
+export type Tool = 'pen' | 'eraser' | 'line' | 'rectangle' | 'ellipse' | 'triangle' | 'text' | 'eyedropper' | 'hand' | 'move';
 
 export interface StrokeData {
   x0: number;
@@ -17,7 +17,7 @@ export interface StrokeData {
 
 export interface DrawingObject {
   id: string;
-  type: 'stroke' | 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text';
+  type: 'stroke' | 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
   points?: { x: number; y: number }[];
   x?: number;
   y?: number;
@@ -30,6 +30,7 @@ export interface DrawingObject {
   fontSize?: number;
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
+  imageData?: string; // Base64 data URL for images
 }
 
 interface DrawingState {

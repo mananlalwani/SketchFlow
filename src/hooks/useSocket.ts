@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { ServerToClientEvents, ClientToServerEvents, StrokeData, ShapeData, CanvasSnapshot } from '@/types/socket';
-import { useToast } from '@/hooks/use-toast';
 
 type SocketInstance = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -160,7 +159,6 @@ const socketManager = new SocketManager();
 export const useSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<Error | null>(null);
-  const { toast } = useToast();
   const wasConnectedRef = React.useRef(false);
 
   useEffect(() => {
@@ -172,24 +170,13 @@ export const useSocket = () => {
       setIsConnected(connected);
       wasConnectedRef.current = connected;
       if (connected && !wasConnected) {
-        // Only show toast on reconnection, not initial connection
         setConnectionError(null);
-        toast({
-          title: 'Connected',
-          description: 'Successfully connected to server.',
-          variant: 'default',
-        });
       }
     });
     
     const unsubscribeError = socketManager.subscribe('error', (data: unknown) => {
       const error = data as Error;
       setConnectionError(error);
-      toast({
-        title: 'Connection Error',
-        description: 'Failed to connect to server. Retrying...',
-        variant: 'destructive',
-      });
     });
 
     setIsConnected(socketManager.getConnectionStatus());
@@ -198,7 +185,7 @@ export const useSocket = () => {
       unsubscribeConnect();
       unsubscribeError();
     };
-  }, [toast]);
+  }, []);
 
   const emit = useCallback(<T extends keyof ClientToServerEvents>(
     event: T,

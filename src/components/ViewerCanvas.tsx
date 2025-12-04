@@ -107,7 +107,8 @@ export function ViewerCanvas() {
         text: obj.text,
         fontSize: obj.fontSize,
         filled: obj.filled,
-        triangleType: obj.triangleType
+        triangleType: obj.triangleType,
+        imageData: obj.imageData
       }));
       workerRef.current.postMessage({ type: 'load-objects', data: shapes });
     }
@@ -134,7 +135,8 @@ export function ViewerCanvas() {
             text: obj.text,
             fontSize: obj.fontSize,
             filled: obj.filled,
-            triangleType: obj.triangleType
+            triangleType: obj.triangleType,
+            imageData: obj.imageData
           }));
           workerRef.current.postMessage({ type: 'load-objects', data: shapes });
         }

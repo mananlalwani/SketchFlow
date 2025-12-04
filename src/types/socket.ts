@@ -13,7 +13,7 @@ export interface StrokeData {
 
 export interface ShapeData {
   id: string;
-  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text';
+  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
   x: number;
   y: number;
   width: number;
@@ -25,6 +25,7 @@ export interface ShapeData {
   orientation?: 'up' | 'down' | 'left' | 'right';
   text?: string;
   fontSize?: number;
+  imageData?: string;
   timestamp?: number;
 }
 
@@ -98,7 +99,15 @@ export interface ProjectShapeText {
   fontSize: number;
 }
 
-export type ProjectObject = ProjectStroke | ProjectShapeLine | ProjectShapeRect | ProjectShapeEllipse | ProjectShapeCircle | ProjectShapeTriangle | ProjectShapeParabola | ProjectShapeText;
+export interface ProjectShapeImage {
+  id: string;
+  type: 'image';
+  x: number; y: number; width: number; height: number;
+  color: string; size: number; alpha?: number;
+  imageData: string;
+}
+
+export type ProjectObject = ProjectStroke | ProjectShapeLine | ProjectShapeRect | ProjectShapeEllipse | ProjectShapeCircle | ProjectShapeTriangle | ProjectShapeParabola | ProjectShapeText | ProjectShapeImage;
 
 export interface ProjectFile {
   version: ProjectVersion;

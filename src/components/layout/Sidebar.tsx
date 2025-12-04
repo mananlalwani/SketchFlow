@@ -9,11 +9,13 @@ import {
   Triangle,
   Type, 
   Hand,
+  Move,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const tools = [
   { id: 'hand', icon: Hand, label: 'Pan' },
+  { id: 'move', icon: Move, label: 'Move' },
   { id: 'pen', icon: Pen, label: 'Pen' },
   { id: 'eraser', icon: Eraser, label: 'Eraser' },
   { id: 'line', icon: Minus, label: 'Line' },

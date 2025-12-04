@@ -15,8 +15,13 @@ import {
   moveProjectToFolder
 } from '@/lib/api';
 import { useDrawingStore } from '@/store/drawingStore';
-import { deserializeProject, serializeProject } from '@/lib/utils';
+import { deserializeProject, serializeProject, generateId } from '@/lib/utils';
 import { encodeDrawFormat, decodeDrawFormat, DRAW_FORMAT_EXTENSION } from '@/lib/drawFormat';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// Configure PDF.js worker using Vite's asset import
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -53,7 +58,6 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ProjectShareDialog } from '@/components/ProjectShareDialog';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -506,6 +510,99 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     input.click();
   };
 
+  const handleImportPDF = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      
+      try {
+        toast({ title: 'Processing PDF...', description: 'This may take a moment.' });
+        
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+        
+        const objects: ReturnType<typeof deserializeProject> = [];
+        const CANVAS_SIZE = 4096;
+        let yOffset = 100; // Start with some margin
+        
+        // Calculate all page positions first
+        const pageData: Array<{ imageData: string; x: number; y: number; width: number; height: number }> = [];
+        
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 2 }); // Higher scale for better quality
+          
+          // Create a canvas to render the page
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+          
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          
+          // Convert to data URL
+          const imageData = canvas.toDataURL('image/png');
+          
+          // Scale to fit within canvas width with margin
+          const maxWidth = CANVAS_SIZE - 200;
+          const scale = Math.min(1, maxWidth / viewport.width);
+          const scaledWidth = viewport.width * scale;
+          const scaledHeight = viewport.height * scale;
+          
+          pageData.push({
+            imageData,
+            x: (CANVAS_SIZE - scaledWidth) / 2, // Center horizontally
+            y: yOffset,
+            width: scaledWidth,
+            height: scaledHeight
+          });
+          
+          yOffset += scaledHeight + 50; // Add spacing between pages
+        }
+        
+        if (pageData.length === 0) {
+          toast({ title: 'Import failed', description: 'No pages found in PDF', variant: 'destructive' });
+          return;
+        }
+        
+        // Add pages in reverse order using unshift so they render in the background
+        // (first in array = drawn first = behind, but we want page 1 visually on top)
+        for (let i = pageData.length - 1; i >= 0; i--) {
+          const page = pageData[i];
+          objects.unshift({
+            id: generateId(),
+            type: 'image',
+            x: page.x,
+            y: page.y,
+            width: page.width,
+            height: page.height,
+            color: '#000000',
+            size: 1,
+            alpha: 1,
+            imageData: page.imageData
+          });
+        }
+        
+        const projectData = serializeProject(objects, CANVAS_SIZE, CANVAS_SIZE);
+        const token = await getToken();
+        const title = file.name.replace(/\.pdf$/i, '') || 'Imported PDF';
+        await createProject(title, projectData, token);
+        await loadData();
+        toast({ title: 'PDF imported successfully', description: `${pdf.numPages} page(s) imported.` });
+      } catch (err) {
+        console.error('PDF import error:', err);
+        const message = err instanceof Error ? err.message : 'Failed to process PDF';
+        toast({ title: 'Import failed', description: message, variant: 'destructive' });
+      }
+    };
+    input.click();
+  };
+
   const toggleSort = (option: SortOption) => {
     if (sortBy === option) {
       setSortDirection(d => d === 'desc' ? 'asc' : 'desc');
@@ -524,9 +621,6 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         <h2 className="text-2xl font-bold mb-2 text-slate-900 dark:text-slate-100">Cloud Sync</h2>
         <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-sm">Sign in to save your drawings to the cloud and access them from anywhere.</p>
         <div className="text-sm text-slate-500">Use the Sign In button in the top right.</div>
-        <div className="mt-4">
-          <ThemeToggle />
-        </div>
       </div>
     );
   }
@@ -666,10 +760,6 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           ))}
         </div>
         
-        {/* Theme toggle in sidebar footer */}
-        <div className="p-3 border-t border-slate-200 dark:border-white/10 flex justify-center">
-          <ThemeToggle />
-        </div>
       </div>
 
       {/* Main Content */}
@@ -692,10 +782,24 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={handleImportDRA} variant="outline" size="sm" className="border-slate-300 dark:border-white/10">
-                <Upload className="w-4 h-4 mr-2" />
-                Import
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-slate-300 dark:border-white/10">
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={handleImportDRA}>
+                    <FileArchive className="w-4 h-4 mr-2" />
+                    Import .dra file
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={handleImportPDF}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Import PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button onClick={handleCreate} disabled={creating} className="bg-blue-600 hover:bg-blue-500">
                 {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                 New Project
@@ -792,10 +896,24 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   <Plus className="w-4 h-4 mr-2" />
                   New Project
                 </Button>
-                <Button onClick={handleImportDRA} variant="outline" className="border-slate-300 dark:border-white/20">
-                  <Upload className="w-4 h-4 mr-2" />
-                  Import
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="border-slate-300 dark:border-white/20">
+                      <Upload className="w-4 h-4 mr-2" />
+                      Import
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={handleImportDRA}>
+                      <FileArchive className="w-4 h-4 mr-2" />
+                      Import .dra file
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleImportPDF}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Import PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           )
@@ -922,7 +1040,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 deleteProject(project.id, token).then(() => {
                                   setProjects(prev => prev.filter(p => p.id !== project.id));
                                   if (currentProjectId === project.id) {
-                                    useDrawingStore.getState().newProject();
+                                    const store = useDrawingStore.getState();
+                                    store.newProject();
+                                    store.clearCanvas();
+                                    setCurrentProject(undefined);
                                   }
                                   toast({ title: 'Project deleted' });
                                 });
@@ -1104,7 +1225,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 deleteProject(project.id, token).then(() => {
                                   setProjects(prev => prev.filter(p => p.id !== project.id));
                                   if (currentProjectId === project.id) {
-                                    useDrawingStore.getState().newProject();
+                                    const store = useDrawingStore.getState();
+                                    store.newProject();
+                                    store.clearCanvas();
+                                    setCurrentProject(undefined);
                                   }
                                   toast({ title: 'Project deleted' });
                                 });

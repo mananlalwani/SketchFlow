@@ -44,6 +44,9 @@ export function ClerkThemeWrapper({ children }: ClerkThemeWrapperProps) {
             ? 'bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-700' 
             : 'bg-slate-50 border-slate-200 text-slate-900 hover:bg-slate-100',
           socialButtonsBlockButtonText: isDark ? 'text-slate-100' : 'text-slate-900',
+          socialButtonsProviderIcon: isDark 
+            ? 'bg-white/90 rounded p-0.5' 
+            : '',
           
           // Divider
           dividerLine: isDark ? 'bg-slate-700' : 'bg-slate-200',

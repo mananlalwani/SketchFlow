@@ -33,8 +33,10 @@ export function DrawingCanvas() {
     objects,
     needsFullRedraw,
     clearFullRedraw,
+    requestFullRedraw,
     addObject,
     removeObject,
+    setObjects,
     saveHistory,
     updatePerformanceStats,
     setZoom,
@@ -71,6 +73,8 @@ export function DrawingCanvas() {
   const [triangleVertices, setTriangleVertices] = useState<{ x: number; y: number }[]>([]);
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const [textInputValue, setTextInputValue] = useState('');
+  const [draggedObject, setDraggedObject] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
   // removed unused groupId state
 
   // Worker-based renderer
@@ -93,7 +97,7 @@ export function DrawingCanvas() {
           strokes.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, color: obj.color, size: obj.size, alpha: obj.alpha ?? 1, timestamp: Date.now() });
         }
         if (strokes.length) workerRef.current?.postMessage({ type: 'strokes', data: strokes });
-      } else if ((obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'parabola' || obj.type === 'text') && obj.x !== undefined && obj.y !== undefined) {
+      } else if ((obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'parabola' || obj.type === 'text' || obj.type === 'image') && obj.x !== undefined && obj.y !== undefined) {
         const shape: ShapeData = { 
           id: obj.id, 
           type: obj.type, 
@@ -108,6 +112,7 @@ export function DrawingCanvas() {
           orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation, 
           text: obj.text,
           fontSize: obj.fontSize,
+          imageData: obj.imageData,
           timestamp: Date.now() 
         };
         workerRef.current?.postMessage({ type: 'shape', data: shape });
@@ -426,6 +431,7 @@ export function DrawingCanvas() {
     // Close text input when tool changes
     if (currentTool !== 'text') {
       setTextInputPos(null);
+      setTextInputValue('');
     }
   }, [currentTool]);
 
@@ -537,6 +543,10 @@ export function DrawingCanvas() {
     // Iterate from topmost (last) to bottom
     for (let i = objects.length - 1; i >= 0; i--) {
       const obj = objects[i];
+      // Skip images - they are not erasable
+      if (obj.type === 'image') {
+        continue;
+      }
       const tol = Math.max(6, obj.size);
       if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
         // Ignore background-color eraser strokes (treat them as holes, not objects)
@@ -773,7 +783,24 @@ export function DrawingCanvas() {
       // ignore pointer capture errors
     }
     
-    // Hand tool: start panning
+    // Move tool: drag objects
+    if (currentTool === 'move') {
+      const hitId = findHitObjectIdAt(worldPos.x, worldPos.y);
+      if (hitId) {
+        const obj = objects.find(o => o.id === hitId);
+        if (obj && (obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'text' || obj.type === 'image')) {
+          // Start dragging object
+          const offsetX = worldPos.x - (obj.x ?? 0);
+          const offsetY = worldPos.y - (obj.y ?? 0);
+          setDraggedObject({ id: hitId, offsetX, offsetY });
+          saveHistory();
+          return;
+        }
+      }
+      return;
+    }
+    
+    // Hand tool: pan only
     if (currentTool === 'hand' || isSpacePan) {
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY, viewX, viewY });
@@ -916,18 +943,29 @@ export function DrawingCanvas() {
       setIsDrawing(true);
       setStartPoint(worldPos);
       setLastPoint(worldPos);
-        saveHistory();
-      } else if (currentTool === 'text') {
-        // Text tool: click to start typing
-        setTextInputPos({ 
-          x: e.clientX, 
-          y: e.clientY, 
-          worldX: worldPos.x, 
-          worldY: worldPos.y 
-        });
-        // Wait for render then focus
-        setTimeout(() => textInputRef.current?.focus(), 10);
-      } else if (currentTool === 'triangle') {
+      saveHistory();
+    } else if (currentTool === 'text') {
+      // Text tool: click to start typing
+      e.preventDefault();
+      e.stopPropagation();
+      const inputPos = { 
+        x: e.clientX, 
+        y: e.clientY, 
+        worldX: worldPos.x, 
+        worldY: worldPos.y 
+      };
+      setTextInputPos(inputPos);
+      setTextInputValue('');
+      // Wait for render then focus
+      setTimeout(() => {
+        if (textInputRef.current) {
+          const fontSize = Math.max(12, brushSize * 3);
+          textInputRef.current.style.width = '20px';
+          textInputRef.current.style.height = `${fontSize}px`;
+          textInputRef.current.focus();
+        }
+      }, 50);
+    } else if (currentTool === 'triangle') {
         // Triangle mode depends on triangleMode setting
         if (triangleMode === 'custom') {
         // Custom mode: three-click mode
@@ -990,16 +1028,57 @@ export function DrawingCanvas() {
         saveHistory();
       }
     }
-  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, autoShape, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape]);
+  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, autoShape, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject]);
 
   const draw = useCallback((e: React.PointerEvent) => {
-    if (currentTool === 'hand' || isSpacePan) {
-      if (!isPanning || !panStart) return;
+    // Handle panning first (before other operations)
+    if (isPanning && panStart) {
       const deltaX = e.clientX - panStart.x;
       const deltaY = e.clientY - panStart.y;
       const newViewX = Math.max(0, Math.min(WORLD_WIDTH, panStart.viewX - deltaX / zoom));
       const newViewY = Math.max(0, Math.min(WORLD_HEIGHT, panStart.viewY - deltaY / zoom));
       setView(newViewX, newViewY);
+      return;
+    }
+    
+    // Handle object dragging
+    if (draggedObject) {
+      const worldPos = screenToWorld(e.clientX, e.clientY);
+      const newX = worldPos.x - draggedObject.offsetX;
+      const newY = worldPos.y - draggedObject.offsetY;
+      
+      const obj = objects.find(o => o.id === draggedObject.id);
+      if (obj) {
+        const updatedObjects = objects.map(o => 
+          o.id === draggedObject.id 
+            ? { ...o, x: newX, y: newY }
+            : o
+        );
+        setObjects(updatedObjects);
+        
+        // Update in worker without full redraw
+        if (obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'text' || obj.type === 'image') {
+          const shapeData: ShapeData = {
+            id: obj.id,
+            type: obj.type,
+            x: newX,
+            y: newY,
+            width: obj.width ?? 0,
+            height: obj.height ?? 0,
+            color: obj.color,
+            size: obj.size,
+            alpha: obj.alpha ?? 1,
+            filled: obj.filled,
+            orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
+            text: obj.text,
+            fontSize: obj.fontSize,
+            imageData: obj.imageData,
+            timestamp: Date.now()
+          };
+          // Update shape position in worker
+          workerRef.current?.postMessage({ type: 'shape', data: shapeData });
+        }
+      }
       return;
     }
     if (!isDrawing) return;
@@ -1067,9 +1146,16 @@ export function DrawingCanvas() {
       });
     }
     // Custom triangle uses click mode, not drag mode - handled in startDrawing
-  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, isSpacePan, triangleMode]);
+  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, triangleMode, draggedObject, objects, setObjects]);
 
   const stopDrawing = useCallback(() => {
+    // Stop dragging
+    if (draggedObject) {
+      setDraggedObject(null);
+      requestFullRedraw();
+      return;
+    }
+    
     if (currentTool === 'hand' || isSpacePan) {
       setIsPanning(false);
       setPanStart(null);
@@ -1291,7 +1377,7 @@ export function DrawingCanvas() {
         }
       }, 100);
     }
-  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, emitStroke, emitStrokes, flushWorkerStrokes, isSpacePan, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices]);
+  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, emitStroke, emitStrokes, flushWorkerStrokes, isSpacePan, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices, draggedObject, requestFullRedraw]);
 
 
   // Zoom and pan handlers
@@ -1552,26 +1638,57 @@ export function DrawingCanvas() {
               left: textInputPos.x,
               top: textInputPos.y,
               transform: 'translate(0, -50%)',
-              zIndex: 50
+              zIndex: 9999,
+              pointerEvents: 'auto',
+              display: 'inline-block',
+              lineHeight: 0
             }}
           >
             <textarea
               ref={textInputRef}
-              className="bg-transparent text-white border border-blue-500/50 rounded p-2 outline-none resize-none overflow-hidden min-w-[200px]"
+              value={textInputValue}
+              onChange={(e) => {
+                setTextInputValue(e.target.value);
+                // Auto-resize width to match canvas text measurement exactly
+                const fontSize = Math.max(12, brushSize);
+                const ctx = document.createElement('canvas').getContext('2d');
+                if (ctx) {
+                  ctx.font = `${fontSize}px sans-serif`;
+                  const text = e.target.value || '';
+                  const measuredWidth = text ? ctx.measureText(text).width : 20;
+                  e.target.style.width = `${Math.max(measuredWidth, 20)}px`;
+                }
+              }}
+              className="bg-transparent border-none outline-none resize-none overflow-hidden p-0 m-0"
               style={{ 
                 fontSize: `${Math.max(12, brushSize * 3)}px`,
-                lineHeight: '1.2',
-                textShadow: '0 0 2px black'
+                lineHeight: '1',
+                height: `${Math.max(12, brushSize * 3)}px`,
+                zIndex: 9999,
+                fontFamily: 'sans-serif',
+                color: brushColor,
+                textShadow: '0 0 2px rgba(0,0,0,0.5)',
+                minWidth: '20px',
+                width: '20px',
+                verticalAlign: 'middle',
+                display: 'inline-block',
+                margin: 0,
+                padding: 0,
+                border: 'none',
+                outline: 'none'
               }}
-              placeholder="Type here..."
+              placeholder=""
               autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
+                e.stopPropagation();
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   const text = e.currentTarget.value.trim();
                   if (text) {
                     // Approximate width/height for hit detection and erasure
-                    const fontSize = Math.max(12, brushSize * 3);
+                    const fontSize = Math.max(12, brushSize);
                     const ctx = document.createElement('canvas').getContext('2d');
                     if (ctx) ctx.font = `${fontSize}px sans-serif`;
                     const width = ctx ? ctx.measureText(text).width : text.length * fontSize * 0.6;
@@ -1592,20 +1709,37 @@ export function DrawingCanvas() {
                     };
                     
                     addObject(textObject);
-                    workerRef.current?.postMessage({ type: 'shape', data: textObject });
-                    emitShape({ ...textObject, timestamp: Date.now() });
+                    const shapeData: ShapeData = {
+                      id: textObject.id,
+                      type: 'text',
+                      x: textObject.x,
+                      y: textObject.y,
+                      width: textObject.width,
+                      height: textObject.height,
+                      color: textObject.color,
+                      size: textObject.size,
+                      alpha: textObject.alpha ?? 1,
+                      text: textObject.text,
+                      fontSize: textObject.fontSize,
+                      timestamp: Date.now()
+                    };
+                    workerRef.current?.postMessage({ type: 'shape', data: shapeData });
+                    emitShape({ ...shapeData });
+                    requestFullRedraw();
                   }
                   setTextInputPos(null);
+                  setTextInputValue('');
                   useDrawingStore.getState().setTool('pen'); // Switch back to pen after text
                 } else if (e.key === 'Escape') {
                   setTextInputPos(null);
+                  setTextInputValue('');
                 }
               }}
               onBlur={(e) => {
                 // Commit on blur if there's text
                 const text = e.currentTarget.value.trim();
                 if (text) {
-                  const fontSize = Math.max(12, brushSize * 3);
+                  const fontSize = Math.max(12, brushSize);
                   const ctx = document.createElement('canvas').getContext('2d');
                   if (ctx) ctx.font = `${fontSize}px sans-serif`;
                   const width = ctx ? ctx.measureText(text).width : text.length * fontSize * 0.6;
@@ -1626,10 +1760,26 @@ export function DrawingCanvas() {
                   };
                   
                   addObject(textObject);
-                  workerRef.current?.postMessage({ type: 'shape', data: textObject });
-                  emitShape({ ...textObject, timestamp: Date.now() });
+                  const shapeData: ShapeData = {
+                    id: textObject.id,
+                    type: 'text',
+                    x: textObject.x,
+                    y: textObject.y,
+                    width: textObject.width,
+                    height: textObject.height,
+                    color: textObject.color,
+                    size: textObject.size,
+                    alpha: textObject.alpha ?? 1,
+                    text: textObject.text,
+                    fontSize: textObject.fontSize,
+                    timestamp: Date.now()
+                  };
+                  workerRef.current?.postMessage({ type: 'shape', data: shapeData });
+                  emitShape({ ...shapeData });
+                  requestFullRedraw();
                 }
                 setTextInputPos(null);
+                setTextInputValue('');
               }}
             />
           </div>

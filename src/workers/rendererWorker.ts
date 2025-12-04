@@ -27,7 +27,7 @@ type StrokeMessage = {
 
 type Shape = {
   id: string;
-  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text';
+  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
   x: number;
   y: number;
   width: number;
@@ -40,7 +40,26 @@ type Shape = {
   points?: { x: number; y: number }[]; // For custom triangle vertices
   text?: string;
   fontSize?: number;
+  imageData?: string; // Base64 data URL for images
 };
+
+// Cache for loaded image bitmaps
+const imageBitmapCache = new Map<string, ImageBitmap>();
+
+async function loadImageBitmap(dataUrl: string): Promise<ImageBitmap | null> {
+  if (imageBitmapCache.has(dataUrl)) {
+    return imageBitmapCache.get(dataUrl)!;
+  }
+  try {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    const bitmap = await createImageBitmap(blob);
+    imageBitmapCache.set(dataUrl, bitmap);
+    return bitmap;
+  } catch {
+    return null;
+  }
+}
 
 type ShapeMessage = {
   type: 'shape';
@@ -67,8 +86,9 @@ type RemoveGroupMessage = { type: 'remove-group'; groupId: string };
 type SnapshotMessage = { type: 'snapshot' };
 type SnapshotImageMessage = { type: 'snapshot-image'; dataUrl: string; worldWidth?: number; worldHeight?: number };
 type ThemeMessage = { type: 'theme'; bgColor: string };
+type LoadObjectsMessage = { type: 'load-objects'; data: Shape[] };
 
-type Inbound = InitMessage | StrokeMessage | ShapeMessage | ViewportMessage | ClearMessage | ClearRegionMessage | RemoveGroupMessage | ClearShapeMessage | SnapshotMessage | SnapshotImageMessage | ThemeMessage;
+type Inbound = InitMessage | StrokeMessage | ShapeMessage | ViewportMessage | ClearMessage | ClearRegionMessage | RemoveGroupMessage | ClearShapeMessage | SnapshotMessage | SnapshotImageMessage | ThemeMessage | LoadObjectsMessage;
 
 type Outbound = { type: 'snapshot'; dataUrl: string };
 
@@ -282,8 +302,26 @@ function drawStrokeToWorld(stroke: Stroke) {
 }
 
 function drawShapeToWorld(shape: Shape) {
-  // Track for vector redraws only; do not rasterize into world here to keep vector crispness during zoom
-  retainedShapes.push(shape);
+  // Check if shape already exists (for updates during dragging)
+  const existingIndex = retainedShapes.findIndex(s => s.id === shape.id);
+  if (existingIndex >= 0) {
+    // Update existing shape
+    retainedShapes[existingIndex] = shape;
+  } else {
+    // Add new shape
+    retainedShapes.push(shape);
+  }
+  
+  // Preload image if it's an image shape - load immediately
+  if (shape.type === 'image' && shape.imageData) {
+    if (!imageBitmapCache.has(shape.imageData)) {
+      loadImageBitmap(shape.imageData).then(() => {
+        scheduleBlit(); // Re-render once image is loaded
+      }).catch(() => {
+        // Failed to load, but don't block rendering
+      });
+    }
+  }
 }
 
 function blit() {
@@ -363,6 +401,34 @@ function blit() {
     vectorSSCtx.translate(snappedTx, snappedTy);
     vectorSSCtx.scale(zoom, zoom);
 
+    // Draw images first (in background)
+    for (let i = 0; i < retainedShapes.length; i++) {
+      const sh = retainedShapes[i] as unknown as {
+        type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
+        x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
+        points?: { x: number; y: number }[];
+        text?: string; fontSize?: number;
+        imageData?: string;
+      };
+      if (sh.type === 'image' && sh.imageData) {
+        // Check viewport intersection for images (they can be large)
+        if (objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
+          const bitmap = imageBitmapCache.get(sh.imageData);
+          if (bitmap) {
+            vectorSSCtx.save();
+            vectorSSCtx.globalAlpha = sh.alpha ?? 1;
+            vectorSSCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
+            vectorSSCtx.restore();
+          } else {
+            // Image not loaded yet, try to load it
+            loadImageBitmap(sh.imageData).then(() => {
+              scheduleBlit(); // Re-render once loaded
+            });
+          }
+        }
+      }
+    }
+
     // Draw vectors with viewport culling
     for (let i = 0; i < retainedStrokes.length; i++) {
       const s = retainedStrokes[i] as unknown as { type: string } & Stroke;
@@ -383,12 +449,20 @@ function blit() {
 
     for (let i = 0; i < retainedShapes.length; i++) {
       const sh = retainedShapes[i] as unknown as {
-        type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text';
+        type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
         x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
         points?: { x: number; y: number }[];
         text?: string; fontSize?: number;
+        imageData?: string;
       };
-      if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
+      // Skip images - already rendered above
+      if (sh.type === 'image') continue;
+      // For text, check position directly (text might have 0 width/height from old projects)
+      if (sh.type === 'text') {
+        if (sh.x < vx1 || sh.x > vx2 || sh.y < vy1 || sh.y > vy2) continue;
+      } else {
+        if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
+      }
       const adjustedShColor = adjustColorForTheme(sh.color);
       vectorSSCtx.save();
       vectorSSCtx.strokeStyle = adjustedShColor;
@@ -473,6 +547,11 @@ function blit() {
         vectorSSCtx.font = `${sh.fontSize || 24}px sans-serif`;
         vectorSSCtx.textBaseline = 'middle';
         vectorSSCtx.fillText(sh.text, sh.x, sh.y);
+      } else if (sh.type === 'image' && sh.imageData) {
+        const bitmap = imageBitmapCache.get(sh.imageData);
+        if (bitmap) {
+          vectorSSCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
+        }
       }
       vectorSSCtx.restore();
     }
@@ -501,6 +580,31 @@ function blit() {
   screenCtx.translate(snappedTx, snappedTy);
   screenCtx.scale(zoom, zoom);
 
+  // Draw images first (in background)
+  for (let i = 0; i < retainedShapes.length; i++) {
+    const sh = retainedShapes[i] as unknown as {
+      type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
+      x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
+      points?: { x: number; y: number }[];
+      text?: string; fontSize?: number;
+      imageData?: string;
+    };
+    if (sh.type === 'image' && sh.imageData && objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
+      const bitmap = imageBitmapCache.get(sh.imageData);
+      if (bitmap) {
+        screenCtx.save();
+        screenCtx.globalAlpha = sh.alpha ?? 1;
+        screenCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
+        screenCtx.restore();
+      } else {
+        // Image not loaded yet, try to load it
+        loadImageBitmap(sh.imageData).then(() => {
+          scheduleBlit(); // Re-render once loaded
+        });
+      }
+    }
+  }
+
   for (let i = 0; i < retainedStrokes.length; i++) {
     const s = retainedStrokes[i] as unknown as { type: string } & Stroke;
     const strokeObj = { type: 'stroke', points: [{ x: s.x0, y: s.y0 }, { x: s.x1, y: s.y1 }], size: s.size };
@@ -524,12 +628,20 @@ function blit() {
 
   for (let i = 0; i < retainedShapes.length; i++) {
     const sh = retainedShapes[i] as unknown as {
-      type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text';
+      type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
       x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
       points?: { x: number; y: number }[];
       text?: string; fontSize?: number;
+      imageData?: string;
     };
-    if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
+    // Skip images - already rendered above
+    if (sh.type === 'image') continue;
+    // For text, check position directly (text might have 0 width/height from old projects)
+    if (sh.type === 'text') {
+      if (sh.x < vx1 || sh.x > vx2 || sh.y < vy1 || sh.y > vy2) continue;
+    } else {
+      if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
+    }
     const adjustedColor = adjustColorForTheme(sh.color);
     screenCtx.save();
     screenCtx.strokeStyle = adjustedColor;
@@ -624,6 +736,11 @@ function blit() {
       screenCtx.font = `${(sh.fontSize || 24)}px sans-serif`;
       screenCtx.textBaseline = 'middle';
       screenCtx.fillText(sh.text, sh.x, sh.y);
+    } else if (sh.type === 'image' && sh.imageData) {
+      const bitmap = imageBitmapCache.get(sh.imageData);
+      if (bitmap) {
+        screenCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
+      }
     }
     screenCtx.restore();
   }
@@ -686,6 +803,19 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       scheduleBlit();
       break;
     }
+    case 'load-objects': {
+      ensureWorld();
+      // Clear existing retained objects
+      retainedStrokes.length = 0;
+      retainedShapes.length = 0;
+      // Load all shapes (including images)
+      const loadMsg = msg as LoadObjectsMessage;
+      for (let i = 0; i < loadMsg.data.length; i++) {
+        drawShapeToWorld(loadMsg.data[i] as Shape);
+      }
+      scheduleBlit();
+      break;
+    }
     case 'viewport': {
       lastViewport = msg as ViewportMessage;
       scheduleBlit();
@@ -733,6 +863,10 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       }
       for (let i = retainedShapes.length - 1; i >= 0; i--) {
         const sh = retainedShapes[i];
+        // Skip images - they are not erasable
+        if (sh.type === 'image') {
+          continue;
+        }
         let minX = 0, minY = 0, maxX = 0, maxY = 0;
         if (sh.type === 'line') {
           const bb = lineBBox(sh.x, sh.y, sh.x + sh.width, sh.y + sh.height);
@@ -891,6 +1025,19 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         ctx.drawImage(world, 0, 0);
       }
       // Draw vectors in world space
+      // Images first (in background)
+      for (let i = 0; i < retainedShapes.length; i++) {
+        const sh = retainedShapes[i] as unknown as { type: string; imageData?: string; x?: number; y?: number; width?: number; height?: number; alpha?: number };
+        if (sh.type === 'image' && sh.imageData && sh.x !== undefined && sh.y !== undefined && sh.width !== undefined && sh.height !== undefined) {
+          const bitmap = imageBitmapCache.get(sh.imageData);
+          if (bitmap) {
+            ctx.save();
+            ctx.globalAlpha = sh.alpha ?? 1;
+            ctx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
+            ctx.restore();
+          }
+        }
+      }
       // Strokes
       for (let i = 0; i < retainedStrokes.length; i++) {
         const s = retainedStrokes[i];
@@ -906,9 +1053,10 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         ctx.stroke();
         ctx.restore();
       }
-      // Shapes
+      // Shapes (skip images - already rendered above)
       for (let i = 0; i < retainedShapes.length; i++) {
         const sh = retainedShapes[i];
+        if (sh.type === 'image') continue;
         ctx.save();
         ctx.strokeStyle = sh.color;
         ctx.lineWidth = sh.size; // in world space
