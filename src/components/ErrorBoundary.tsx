@@ -1,14 +1,17 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { reportError } from '@/lib/errorReporting';
 
 interface Props {
   children: React.ReactNode;
+  fallback?: React.ReactNode;
 }
 
 interface State {
   hasError: boolean;
   error?: Error;
+  eventId?: string;
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
@@ -22,7 +25,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
+    // Report error to tracking service
+    reportError(error, {
+      componentStack: errorInfo.componentStack || undefined,
+    });
   }
 
   handleRetry = () => {

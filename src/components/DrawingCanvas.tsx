@@ -11,9 +11,17 @@ import { generateId, isIOS } from '@/lib/utils';
 import type { DrawingObject } from '@/store/drawingStore';
 import type { StrokeData, ShapeData } from '@/types/socket';
 import { detectShapes } from '@/lib/shapeDetectors';
+import { getImageFromClipboard, compressImage } from '@/lib/clipboard';
+import { ShortcutsDialog } from './ShortcutsDialog';
 
 const WORLD_WIDTH = 4096;
 const WORLD_HEIGHT = 4096;
+
+// Background colors for each theme
+const BG_COLORS = {
+  dark: '#0f172a',
+  light: '#f8fafc'
+} as const;
 
 export function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -27,6 +35,7 @@ export function DrawingCanvas() {
     brushColor,
     brushOpacity,
     triangleMode,
+    starPoints,
     zoom,
     viewX,
     viewY,
@@ -73,8 +82,10 @@ export function DrawingCanvas() {
   const [triangleVertices, setTriangleVertices] = useState<{ x: number; y: number }[]>([]);
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [textInputValue, setTextInputValue] = useState('');
   const [draggedObject, setDraggedObject] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   // removed unused groupId state
 
   // Worker-based renderer
@@ -122,6 +133,21 @@ export function DrawingCanvas() {
   }, [needsFullRedraw, clearFullRedraw, objects]);
 
   // Removed worldCanvas setup; the worker owns the world surface
+
+  // Center the view on first load (only once)
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const centerViewX = (WORLD_WIDTH / 2) - (rect.width / 2);
+    const centerViewY = (WORLD_HEIGHT / 2) - (rect.height / 2);
+    setView(centerViewX, centerViewY);
+  }, [setView]);
 
   // Setup canvas + worker
   useEffect(() => {
@@ -395,6 +421,12 @@ export function DrawingCanvas() {
           e.preventDefault();
           setIsSpacePan(true);
         }
+        
+        // ? to show shortcuts dialog
+        if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+          e.preventDefault();
+          setShowShortcuts(true);
+        }
       }
     };
 
@@ -418,6 +450,144 @@ export function DrawingCanvas() {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
+
+  // Paste image from clipboard
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      // Don't handle paste if typing in text input
+      if (textInputPos) return;
+      
+      const image = await getImageFromClipboard(e);
+      if (!image) return;
+      
+      e.preventDefault();
+      
+      // Compress large images
+      const maxSize = 1920;
+      const needsCompression = image.width > maxSize || image.height > maxSize;
+      const finalImage = needsCompression 
+        ? await compressImage(image.dataUrl, maxSize, maxSize, 0.85)
+        : image;
+      
+      // Calculate center position in world coordinates
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const centerX = viewX + (canvas.width / 2 / zoom);
+      const centerY = viewY + (canvas.height / 2 / zoom);
+      
+      const imageObject: DrawingObject = {
+        id: generateId(),
+        type: 'image',
+        x: centerX - finalImage.width / 2,
+        y: centerY - finalImage.height / 2,
+        width: finalImage.width,
+        height: finalImage.height,
+        imageData: finalImage.dataUrl,
+        color: '#ffffff',
+        size: 1,
+        alpha: 1,
+      };
+      
+      saveHistory();
+      addObject(imageObject);
+      
+      // Emit to other clients
+      const shapeData: ShapeData = {
+        id: imageObject.id,
+        type: 'image',
+        x: imageObject.x!,
+        y: imageObject.y!,
+        width: imageObject.width!,
+        height: imageObject.height!,
+        color: imageObject.color,
+        size: imageObject.size,
+        alpha: imageObject.alpha ?? 1,
+        imageData: imageObject.imageData,
+        timestamp: Date.now(),
+      };
+      emitShape(shapeData);
+    };
+    
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [viewX, viewY, zoom, textInputPos, addObject, saveHistory, emitShape]);
+
+  // Handle image file selection
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      console.warn('Invalid file type');
+      return;
+    }
+    
+    // Read file as data URL
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      
+      // Create image to get dimensions
+      const img = new Image();
+      img.onload = async () => {
+        // Compress large images
+        const maxSize = 1920;
+        const needsCompression = img.width > maxSize || img.height > maxSize;
+        const finalImage = needsCompression 
+          ? await compressImage(dataUrl, maxSize, maxSize, 0.85)
+          : { dataUrl, width: img.width, height: img.height };
+        
+        // Calculate center position in world coordinates
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        const centerX = viewX + (canvas.width / 2 / zoom);
+        const centerY = viewY + (canvas.height / 2 / zoom);
+        
+        const imageObject: DrawingObject = {
+          id: generateId(),
+          type: 'image',
+          x: centerX - finalImage.width / 2,
+          y: centerY - finalImage.height / 2,
+          width: finalImage.width,
+          height: finalImage.height,
+          imageData: finalImage.dataUrl,
+          color: '#ffffff',
+          size: 1,
+          alpha: 1,
+        };
+        
+        saveHistory();
+        addObject(imageObject);
+        
+        // Emit to other clients
+        const shapeData: ShapeData = {
+          id: imageObject.id,
+          type: 'image',
+          x: imageObject.x!,
+          y: imageObject.y!,
+          width: imageObject.width!,
+          height: imageObject.height!,
+          color: imageObject.color,
+          size: imageObject.size,
+          alpha: imageObject.alpha ?? 1,
+          imageData: imageObject.imageData,
+          timestamp: Date.now(),
+        };
+        emitShape(shapeData);
+        
+        // Switch back to move tool after adding image
+        useDrawingStore.getState().setTool('move');
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset the input so the same file can be selected again
+    e.target.value = '';
+  }, [viewX, viewY, zoom, addObject, saveHistory, emitShape]);
 
   // Reset constraint mode when switching tools
   useEffect(() => {
@@ -539,18 +709,29 @@ export function DrawingCanvas() {
     return Math.sqrt(ddx * ddx + ddy * ddy);
   }, []);
 
-  const findHitObjectIdAt = useCallback((x: number, y: number) => {
+  const findHitObjectIdAt = useCallback((x: number, y: number, options?: { includeImages?: boolean }) => {
+    const includeImages = options?.includeImages ?? false;
     // Iterate from topmost (last) to bottom
     for (let i = objects.length - 1; i >= 0; i--) {
       const obj = objects[i];
-      // Skip images - they are not erasable
-      if (obj.type === 'image') {
+      const tol = Math.max(6, obj.size);
+      
+      // Handle images separately
+      if (obj.type === 'image' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        if (!includeImages) continue;
+        const minX = obj.x - tol;
+        const minY = obj.y - tol;
+        const maxX = obj.x + obj.width + tol;
+        const maxY = obj.y + obj.height + tol;
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+          return obj.id;
+        }
         continue;
       }
-      const tol = Math.max(6, obj.size);
       if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
         // Ignore background-color eraser strokes (treat them as holes, not objects)
-        if (obj.color.toLowerCase() === '#0f172a') {
+        const normalizedColor = obj.color.toLowerCase();
+        if (normalizedColor === BG_COLORS.dark || normalizedColor === BG_COLORS.light) {
           continue;
         }
         for (let p = 0; p < obj.points.length - 1; p++) {
@@ -568,26 +749,26 @@ export function DrawingCanvas() {
         if (distancePointToSegment(x, y, x1, y1, x2, y2) <= tol) {
           return obj.id;
         }
-        } else if ((obj.type === 'rectangle' || obj.type === 'ellipse') && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
-          const minX = Math.min(obj.x, obj.x + obj.width) - tol;
-          const minY = Math.min(obj.y, obj.y + obj.height) - tol;
-          const maxX = Math.max(obj.x, obj.x + obj.width) + tol;
-          const maxY = Math.max(obj.y, obj.y + obj.height) + tol;
-          if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-            return obj.id;
-          }
-        } else if (obj.type === 'text' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
-          const minX = obj.x - tol;
-          const minY = obj.y - obj.height / 2 - tol; // Text y is usually middle or baseline
-          const maxX = obj.x + obj.width + tol;
-          const maxY = obj.y + obj.height / 2 + tol;
-          if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-            return obj.id;
-          }
+      } else if ((obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'star' || obj.type === 'parabola') && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        const minX = Math.min(obj.x, obj.x + obj.width) - tol;
+        const minY = Math.min(obj.y, obj.y + obj.height) - tol;
+        const maxX = Math.max(obj.x, obj.x + obj.width) + tol;
+        const maxY = Math.max(obj.y, obj.y + obj.height) + tol;
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+          return obj.id;
+        }
+      } else if (obj.type === 'text' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        const minX = obj.x - tol;
+        const minY = obj.y - obj.height / 2 - tol; // Text y is usually middle or baseline
+        const maxX = obj.x + obj.width + tol;
+        const maxY = obj.y + obj.height / 2 + tol;
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+          return obj.id;
         }
       }
-      return null;
-    }, [objects, distancePointToSegment]);
+    }
+    return null;
+  }, [objects, distancePointToSegment]);
 
   // Modern shape detection using the new pipeline
   const detectShapeFromStroke = useCallback((points: { x: number; y: number }[]):
@@ -776,6 +957,9 @@ export function DrawingCanvas() {
 
   // Drawing handlers
   const startDrawing = useCallback((e: React.PointerEvent) => {
+    // Don't start drawing if text input is active
+    if (textInputPos) return;
+    
     const worldPos = screenToWorld(e.clientX, e.clientY);
     try {
       (e.currentTarget as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
@@ -785,7 +969,7 @@ export function DrawingCanvas() {
     
     // Move tool: drag objects
     if (currentTool === 'move') {
-      const hitId = findHitObjectIdAt(worldPos.x, worldPos.y);
+      const hitId = findHitObjectIdAt(worldPos.x, worldPos.y, { includeImages: true });
       if (hitId) {
         const obj = objects.find(o => o.id === hitId);
         if (obj && (obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'text' || obj.type === 'image')) {
@@ -807,16 +991,13 @@ export function DrawingCanvas() {
       return;
     }
 
-    // Right mouse button panning regardless of tool
+    // Ignore right-click
     if ((e as unknown as MouseEvent).button === 2) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY, viewX, viewY });
       return;
     }
     
     if (currentTool === 'eraser' && eraserMode === 'object') {
-      const hitId = findHitObjectIdAt(worldPos.x, worldPos.y);
+      const hitId = findHitObjectIdAt(worldPos.x, worldPos.y, { includeImages: true });
       if (hitId) {
         saveHistory();
         const removed = objects.find(o => o.id === hitId);
@@ -830,7 +1011,7 @@ export function DrawingCanvas() {
             minY = Math.min(...removed.points.map(p => p.y)) - removed.size;
             maxX = Math.max(...removed.points.map(p => p.x)) + removed.size;
             maxY = Math.max(...removed.points.map(p => p.y)) + removed.size;
-          } else if ((removed.type === 'line' || removed.type === 'rectangle' || removed.type === 'ellipse') && removed.x !== undefined && removed.y !== undefined && removed.width !== undefined && removed.height !== undefined) {
+          } else if ((removed.type === 'line' || removed.type === 'rectangle' || removed.type === 'ellipse' || removed.type === 'circle' || removed.type === 'triangle' || removed.type === 'star' || removed.type === 'parabola' || removed.type === 'image') && removed.x !== undefined && removed.y !== undefined && removed.width !== undefined && removed.height !== undefined) {
             const rx2 = removed.x + removed.width;
             const ry2 = removed.y + removed.height;
             minX = Math.min(removed.x, rx2) - removed.size;
@@ -856,7 +1037,7 @@ export function DrawingCanvas() {
               oy1 = Math.min(...obj.points.map(p => p.y)) - obj.size;
               ox2 = Math.max(...obj.points.map(p => p.x)) + obj.size;
               oy2 = Math.max(...obj.points.map(p => p.y)) + obj.size;
-            } else if ((obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse') && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+            } else if ((obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'star' || obj.type === 'parabola' || obj.type === 'image') && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
               const x2 = obj.x + obj.width;
               const y2 = obj.y + obj.height;
               ox1 = Math.min(obj.x, x2) - obj.size;
@@ -922,6 +1103,21 @@ export function DrawingCanvas() {
                 timestamp: Date.now()
               };
               workerRef.current?.postMessage({ type: 'shape', data: shape });
+            } else if (obj.type === 'image' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+              const shape: ShapeData = {
+                id: obj.id,
+                type: obj.type,
+                x: obj.x,
+                y: obj.y,
+                width: obj.width,
+                height: obj.height,
+                color: obj.color,
+                size: obj.size,
+                alpha: obj.alpha ?? 1,
+                imageData: obj.imageData,
+                timestamp: Date.now()
+              };
+              workerRef.current?.postMessage({ type: 'shape', data: shape });
             }
           }
         }
@@ -933,38 +1129,24 @@ export function DrawingCanvas() {
       setIsDrawing(true);
       setLastPoint(worldPos);
       setCurrentStroke([]);
-      if (currentTool === 'pen' && autoShape) {
-        strokeGroupRef.current = generateId();
-      } else {
-        strokeGroupRef.current = null;
-      }
+      // Always generate a groupId for pen/eraser strokes for efficient path batching
+      strokeGroupRef.current = generateId();
       saveHistory();
-    } else if (['line', 'rectangle', 'ellipse'].includes(currentTool)) {
+    } else if (['line', 'rectangle', 'ellipse', 'star'].includes(currentTool)) {
       setIsDrawing(true);
       setStartPoint(worldPos);
       setLastPoint(worldPos);
       saveHistory();
     } else if (currentTool === 'text') {
-      // Text tool: click to start typing
-      e.preventDefault();
-      e.stopPropagation();
-      const inputPos = { 
+      // Text tool: show input at click position
+      setTextInputPos({ 
         x: e.clientX, 
         y: e.clientY, 
         worldX: worldPos.x, 
         worldY: worldPos.y 
-      };
-      setTextInputPos(inputPos);
+      });
       setTextInputValue('');
-      // Wait for render then focus
-      setTimeout(() => {
-        if (textInputRef.current) {
-          const fontSize = Math.max(12, brushSize * 3);
-          textInputRef.current.style.width = '20px';
-          textInputRef.current.style.height = `${fontSize}px`;
-          textInputRef.current.focus();
-        }
-      }, 50);
+      setTimeout(() => textInputRef.current?.focus(), 0);
     } else if (currentTool === 'triangle') {
         // Triangle mode depends on triangleMode setting
         if (triangleMode === 'custom') {
@@ -1028,16 +1210,32 @@ export function DrawingCanvas() {
         saveHistory();
       }
     }
-  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, autoShape, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject]);
+  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, autoShape, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject, textInputPos]);
 
   const draw = useCallback((e: React.PointerEvent) => {
     // Handle panning first (before other operations)
     if (isPanning && panStart) {
       const deltaX = e.clientX - panStart.x;
       const deltaY = e.clientY - panStart.y;
-      const newViewX = Math.max(0, Math.min(WORLD_WIDTH, panStart.viewX - deltaX / zoom));
-      const newViewY = Math.max(0, Math.min(WORLD_HEIGHT, panStart.viewY - deltaY / zoom));
+      const newViewX = Math.max(0, Math.min(WORLD_WIDTH - 100, panStart.viewX - deltaX / zoom));
+      const newViewY = Math.max(0, Math.min(WORLD_HEIGHT - 100, panStart.viewY - deltaY / zoom));
       setView(newViewX, newViewY);
+      
+      // Update worker viewport for smooth panning
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
+        workerRef.current?.postMessage({
+          type: 'viewport',
+          zoom,
+          viewX: newViewX,
+          viewY: newViewY,
+          canvasWidth: rect.width,
+          canvasHeight: rect.height,
+          dpr
+        });
+      }
       return;
     }
     
@@ -1100,7 +1298,7 @@ export function DrawingCanvas() {
           y0: lp.y,
           x1: p.x,
           y1: p.y,
-          color: currentTool === 'eraser' ? '#0f172a' : brushColor,
+          color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
           size: brushSize,
           alpha: brushOpacity,
           timestamp: Date.now(),
@@ -1111,7 +1309,7 @@ export function DrawingCanvas() {
         lp = p;
       }
       if (lp) setLastPoint(lp);
-    } else if (['line', 'rectangle', 'ellipse'].includes(currentTool) && startPoint) {
+    } else if (['line', 'rectangle', 'ellipse', 'star'].includes(currentTool) && startPoint) {
       // Apply constraint if needed
       const lastEv = events[events.length - 1];
       const endPos = screenToWorld(lastEv.clientX, lastEv.clientY);
@@ -1146,7 +1344,7 @@ export function DrawingCanvas() {
       });
     }
     // Custom triangle uses click mode, not drag mode - handled in startDrawing
-  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, triangleMode, draggedObject, objects, setObjects]);
+  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, triangleMode, draggedObject, objects, setObjects, theme]);
 
   const stopDrawing = useCallback(() => {
     // Stop dragging
@@ -1156,10 +1354,14 @@ export function DrawingCanvas() {
       return;
     }
     
-    if (currentTool === 'hand' || isSpacePan) {
+    // Stop panning (hand tool, space-pan, or right-click pan)
+    if (isPanning || currentTool === 'hand' || isSpacePan) {
       setIsPanning(false);
       setPanStart(null);
-      return;
+      // Only return early if we weren't also drawing
+      if (currentTool === 'hand' || isSpacePan || !isDrawing) {
+        return;
+      }
     }
     if (!isDrawing) return;
     flushWorkerStrokes();
@@ -1188,7 +1390,7 @@ export function DrawingCanvas() {
               y: Math.min(shape.y, shape.y + shape.height),
               width: Math.abs(shape.width),
               height: Math.abs(shape.height),
-              color: '#0f172a',
+              color: BG_COLORS[theme],
               size: Math.max(brushSize, 1),
               alpha: brushOpacity,
               orientation: (shape as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation
@@ -1248,7 +1450,7 @@ export function DrawingCanvas() {
             id: generateId(),
             type: 'stroke' as const,
             points: currentStroke.map(s => ({ x: s.x1, y: s.y1 })),
-            color: currentTool === 'eraser' ? '#0f172a' : brushColor,
+            color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
             size: brushSize,
             alpha: brushOpacity
           };
@@ -1299,6 +1501,47 @@ export function DrawingCanvas() {
       // Emit shape to other users (with timestamp for socket)
       emitShape({
         ...shapeObject,
+        timestamp: Date.now()
+      });
+    } else if (currentTool === 'star' && startPoint && previewShape) {
+      // Create star shape - centered on start point, radius extends to cursor
+      const dx = previewShape.endX - startPoint.x;
+      const dy = previewShape.endY - startPoint.y;
+      const outerRadius = Math.sqrt(dx * dx + dy * dy);
+      
+      // Calculate bounding box from center and radius
+      const x = startPoint.x - outerRadius;
+      const y = startPoint.y - outerRadius;
+      const width = outerRadius * 2;
+      const height = outerRadius * 2;
+      
+      const starObject = {
+        id: generateId(),
+        type: 'star' as const,
+        x,
+        y,
+        width,
+        height,
+        color: brushColor,
+        size: brushSize,
+        alpha: brushOpacity,
+        filled: useDrawingStore.getState().shapeFilled,
+        properties: {
+          pointCount: starPoints
+        }
+      };
+      
+      addObject(starObject);
+      
+      // Send star to worker for drawing
+      workerRef.current?.postMessage({ 
+        type: 'shape', 
+        data: starObject 
+      });
+      
+      // Emit star to other users
+      emitShape({
+        ...starObject,
         timestamp: Date.now()
       });
     } else if (currentTool === 'triangle' && triangleMode !== 'custom' && startPoint && previewShape) {
@@ -1377,7 +1620,7 @@ export function DrawingCanvas() {
         }
       }, 100);
     }
-  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, emitStroke, emitStrokes, flushWorkerStrokes, isSpacePan, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices, draggedObject, requestFullRedraw]);
+  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, emitStroke, emitStrokes, flushWorkerStrokes, isSpacePan, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices, draggedObject, requestFullRedraw, starPoints, theme]);
 
 
   // Zoom and pan handlers
@@ -1520,6 +1763,18 @@ export function DrawingCanvas() {
           >
             <RotateCcw className="w-4 h-4" />
           </Button>
+          
+          {/* FPS Counter - visible in dev mode */}
+          {import.meta.env.DEV && (
+            <div 
+              className={`px-2 py-1 glass rounded text-xs font-mono ${
+                fps >= 55 ? 'text-green-500' : fps >= 30 ? 'text-yellow-500' : 'text-red-500'
+              }`}
+              title="Frames per second"
+            >
+              {fps} FPS
+            </div>
+          )}
         </div>
         
         {/* Shape preview overlay */}
@@ -1571,6 +1826,26 @@ export function DrawingCanvas() {
                       const y3 = (vertices[2].y - viewY) * zoom;
                       return <polygon points={`${x1},${y1} ${x2},${y2} ${x3},${y3}`} fill="none" stroke="#60a5fa" strokeWidth="2" strokeDasharray="8,4" opacity="0.6" />;
                     }
+                  }
+                  if (previewShape.type === 'star') {
+                    // Star expands from start point (center) to cursor position
+                    const centerX = (previewShape.startX - viewX) * zoom;
+                    const centerY = (previewShape.startY - viewY) * zoom;
+                    const dx = (previewShape.endX - previewShape.startX) * zoom;
+                    const dy = (previewShape.endY - previewShape.startY) * zoom;
+                    const outerRadius = Math.sqrt(dx * dx + dy * dy);
+                    const innerRadius = outerRadius * 0.38;
+                    const pointCount = starPoints;
+                    
+                    if (outerRadius < 5) return null; // Too small to draw
+                    
+                    const starPointsArr: string[] = [];
+                    for (let i = 0; i < pointCount * 2; i++) {
+                      const angle = (i * Math.PI / pointCount) - Math.PI / 2;
+                      const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                      starPointsArr.push(`${centerX + radius * Math.cos(angle)},${centerY + radius * Math.sin(angle)}`);
+                    }
+                    return <polygon points={starPointsArr.join(' ')} fill="none" stroke="#60a5fa" strokeWidth="2" strokeDasharray="8,4" opacity="0.6" />;
                   }
                   return <rect x={x} y={y} width={w} height={h} fill="none" stroke="#60a5fa" strokeWidth="2" strokeDasharray="8,4" opacity="0.6" />;
                 })()}
@@ -1630,160 +1905,101 @@ export function DrawingCanvas() {
           </Button>
         )}
         
-        {/* Text Input Overlay */}
+        {/* Text Input */}
         {textInputPos && (
-          <div
+          <textarea
+            ref={textInputRef}
+            value={textInputValue}
+            onChange={(e) => setTextInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              // Ctrl/Cmd+Enter to submit, Escape to cancel
+              if ((e.key === 'Enter' && (e.ctrlKey || e.metaKey)) && textInputValue.trim()) {
+                e.preventDefault();
+                const text = textInputValue.trim();
+                const fontSize = Math.max(16, brushSize * 2);
+                const ctx = document.createElement('canvas').getContext('2d');
+                ctx!.font = `${fontSize}px Inter, system-ui, sans-serif`;
+                
+                // Calculate dimensions for multi-line text
+                const lines = text.split('\n');
+                const maxWidth = Math.max(...lines.map(line => ctx!.measureText(line).width));
+                const height = fontSize * lines.length * 1.2;
+                
+                const textObj = {
+                  id: generateId(),
+                  type: 'text' as const,
+                  x: textInputPos.worldX,
+                  y: textInputPos.worldY,
+                  text,
+                  fontSize,
+                  color: brushColor,
+                  size: brushSize,
+                  alpha: brushOpacity,
+                  width: maxWidth,
+                  height
+                };
+                
+                saveHistory();
+                addObject(textObj);
+                workerRef.current?.postMessage({ 
+                  type: 'shape', 
+                  data: { ...textObj, timestamp: Date.now() } 
+                });
+                emitShape({ ...textObj, timestamp: Date.now() } as ShapeData);
+                
+                setTextInputPos(null);
+                setTextInputValue('');
+              } else if (e.key === 'Escape') {
+                setTextInputPos(null);
+                setTextInputValue('');
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            autoFocus
+            placeholder="Type here... (Ctrl+Enter to submit)"
             style={{
               position: 'fixed',
               left: textInputPos.x,
               top: textInputPos.y,
-              transform: 'translate(0, -50%)',
-              zIndex: 9999,
-              pointerEvents: 'auto',
-              display: 'inline-block',
-              lineHeight: 0
+              zIndex: 10000,
+              fontSize: `${Math.max(16, brushSize * 2)}px`,
+              fontFamily: 'Inter, system-ui, sans-serif',
+              lineHeight: '1.4',
+              color: brushColor,
+              background: '#1e1e1e',
+              border: '2px solid #3b82f6',
+              borderRadius: '8px',
+              padding: '12px',
+              minWidth: '250px',
+              minHeight: '60px',
+              maxWidth: '400px',
+              resize: 'both',
+              outline: 'none',
             }}
-          >
-            <textarea
-              ref={textInputRef}
-              value={textInputValue}
-              onChange={(e) => {
-                setTextInputValue(e.target.value);
-                // Auto-resize width to match canvas text measurement exactly
-                const fontSize = Math.max(12, brushSize);
-                const ctx = document.createElement('canvas').getContext('2d');
-                if (ctx) {
-                  ctx.font = `${fontSize}px sans-serif`;
-                  const text = e.target.value || '';
-                  const measuredWidth = text ? ctx.measureText(text).width : 20;
-                  e.target.style.width = `${Math.max(measuredWidth, 20)}px`;
-                }
-              }}
-              className="bg-transparent border-none outline-none resize-none overflow-hidden p-0 m-0"
-              style={{ 
-                fontSize: `${Math.max(12, brushSize * 3)}px`,
-                lineHeight: '1',
-                height: `${Math.max(12, brushSize * 3)}px`,
-                zIndex: 9999,
-                fontFamily: 'sans-serif',
-                color: brushColor,
-                textShadow: '0 0 2px rgba(0,0,0,0.5)',
-                minWidth: '20px',
-                width: '20px',
-                verticalAlign: 'middle',
-                display: 'inline-block',
-                margin: 0,
-                padding: 0,
-                border: 'none',
-                outline: 'none'
-              }}
-              placeholder=""
-              autoFocus
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  const text = e.currentTarget.value.trim();
-                  if (text) {
-                    // Approximate width/height for hit detection and erasure
-                    const fontSize = Math.max(12, brushSize);
-                    const ctx = document.createElement('canvas').getContext('2d');
-                    if (ctx) ctx.font = `${fontSize}px sans-serif`;
-                    const width = ctx ? ctx.measureText(text).width : text.length * fontSize * 0.6;
-                    const height = fontSize;
-
-                    const textObject = {
-                      id: generateId(),
-                      type: 'text' as const,
-                      x: textInputPos.worldX,
-                      y: textInputPos.worldY,
-                      text: text,
-                      fontSize: fontSize,
-                      color: brushColor,
-                      size: brushSize,
-                      alpha: brushOpacity,
-                      width: width,
-                      height: height
-                    };
-                    
-                    addObject(textObject);
-                    const shapeData: ShapeData = {
-                      id: textObject.id,
-                      type: 'text',
-                      x: textObject.x,
-                      y: textObject.y,
-                      width: textObject.width,
-                      height: textObject.height,
-                      color: textObject.color,
-                      size: textObject.size,
-                      alpha: textObject.alpha ?? 1,
-                      text: textObject.text,
-                      fontSize: textObject.fontSize,
-                      timestamp: Date.now()
-                    };
-                    workerRef.current?.postMessage({ type: 'shape', data: shapeData });
-                    emitShape({ ...shapeData });
-                    requestFullRedraw();
-                  }
-                  setTextInputPos(null);
-                  setTextInputValue('');
-                  useDrawingStore.getState().setTool('pen'); // Switch back to pen after text
-                } else if (e.key === 'Escape') {
-                  setTextInputPos(null);
-                  setTextInputValue('');
-                }
-              }}
-              onBlur={(e) => {
-                // Commit on blur if there's text
-                const text = e.currentTarget.value.trim();
-                if (text) {
-                  const fontSize = Math.max(12, brushSize);
-                  const ctx = document.createElement('canvas').getContext('2d');
-                  if (ctx) ctx.font = `${fontSize}px sans-serif`;
-                  const width = ctx ? ctx.measureText(text).width : text.length * fontSize * 0.6;
-                  const height = fontSize;
-
-                  const textObject = {
-                    id: generateId(),
-                    type: 'text' as const,
-                    x: textInputPos.worldX,
-                    y: textInputPos.worldY,
-                    text: text,
-                    fontSize: fontSize,
-                    color: brushColor,
-                    size: brushSize,
-                    alpha: brushOpacity,
-                    width: width,
-                    height: height
-                  };
-                  
-                  addObject(textObject);
-                  const shapeData: ShapeData = {
-                    id: textObject.id,
-                    type: 'text',
-                    x: textObject.x,
-                    y: textObject.y,
-                    width: textObject.width,
-                    height: textObject.height,
-                    color: textObject.color,
-                    size: textObject.size,
-                    alpha: textObject.alpha ?? 1,
-                    text: textObject.text,
-                    fontSize: textObject.fontSize,
-                    timestamp: Date.now()
-                  };
-                  workerRef.current?.postMessage({ type: 'shape', data: shapeData });
-                  emitShape({ ...shapeData });
-                  requestFullRedraw();
-                }
-                setTextInputPos(null);
-                setTextInputValue('');
-              }}
-            />
-          </div>
+          />
         )}
+        
+        {/* Keyboard shortcuts dialog - opened by ? key */}
+        <ShortcutsDialog 
+          mode="draw" 
+          open={showShortcuts} 
+          onOpenChange={setShowShortcuts}
+          showTrigger={false}
+        />
+        
+        {/* Hidden file input for image upload */}
+        <input
+          id="image-upload-input"
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="hidden"
+          aria-label="Upload image"
+        />
     </div>
   );
 }

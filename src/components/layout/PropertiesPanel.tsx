@@ -18,12 +18,15 @@ export function PropertiesPanel() {
     eraserMode,
     setEraserMode,
     triangleMode,
-    setTriangleMode
+    setTriangleMode,
+    starPoints,
+    setStarPoints
   } = useDrawingStore();
 
-  const showBrushProps = ['pen', 'line', 'rectangle', 'ellipse', 'triangle', 'text'].includes(currentTool);
+  const showBrushProps = ['pen', 'line', 'rectangle', 'ellipse', 'triangle', 'star', 'text'].includes(currentTool);
   const showEraserProps = currentTool === 'eraser';
   const showTriangleProps = currentTool === 'triangle';
+  const showStarProps = currentTool === 'star';
   const showTextProps = currentTool === 'text';
 
   const fontSize = Math.max(12, brushSize * 3);
@@ -116,6 +119,44 @@ export function PropertiesPanel() {
                 {triangleMode === 'custom' 
                   ? 'Click 3 times to place triangle vertices'
                   : 'Click and drag to draw triangle'}
+              </p>
+            </div>
+          )}
+
+          {showStarProps && (
+            <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-white/10">
+              <div className="text-sm text-slate-500 dark:text-slate-400">Star Points</div>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant={starPoints === 5 ? 'default' : 'secondary'}
+                  size="sm"
+                  onClick={() => setStarPoints(5)}
+                  className={cn(starPoints === 5 && "bg-blue-600")}
+                  title="5-pointed star"
+                >
+                  5
+                </Button>
+                <Button
+                  variant={starPoints === 6 ? 'default' : 'secondary'}
+                  size="sm"
+                  onClick={() => setStarPoints(6)}
+                  className={cn(starPoints === 6 && "bg-blue-600")}
+                  title="6-pointed star (Star of David)"
+                >
+                  6
+                </Button>
+                <Button
+                  variant={starPoints === 8 ? 'default' : 'secondary'}
+                  size="sm"
+                  onClick={() => setStarPoints(8)}
+                  className={cn(starPoints === 8 && "bg-blue-600")}
+                  title="8-pointed star"
+                >
+                  8
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Click to set center, drag to set size
               </p>
             </div>
           )}

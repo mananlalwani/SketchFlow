@@ -10,11 +10,15 @@ import {
   Trash2,
   Cloud,
   Loader2,
-  Share2
+  Share2,
+  Download,
+  Image,
+  FileCode
 } from 'lucide-react';
 import { 
   serializeProject
 } from '@/lib/utils';
+import { exportAsPNG, exportAsSVG, downloadFile } from '@/lib/export';
 import { 
   createProject, 
   updateProject, 
@@ -23,6 +27,7 @@ import { FloatingAuthButton } from '@/components/AuthButton';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { ProjectShareDialog } from '@/components/ProjectShareDialog';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { useAuth } from '@clerk/clerk-react';
 
 export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean }) {
@@ -43,6 +48,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   const { toast } = useToast();
   const { getToken, userId } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Create a project-like object for the share dialog
   const currentProject = useMemo(() => {
@@ -114,6 +120,33 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     setCurrentProject(undefined);
     clearCanvas();
   }, [setCurrentProject, clearCanvas]);
+
+  const handleExportPNG = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const blob = await exportAsPNG(objects, { scale: 1 });
+      const filename = `${projectTitle || 'drawing'}.png`;
+      downloadFile(blob, filename);
+      toast({ title: 'Exported PNG', description: filename });
+    } catch (e) {
+      console.error('Export failed', e);
+      toast({ title: 'Export failed', variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [objects, projectTitle, toast]);
+
+  const handleExportSVG = useCallback(() => {
+    try {
+      const svg = exportAsSVG(objects);
+      const filename = `${projectTitle || 'drawing'}.svg`;
+      downloadFile(svg, filename, 'image/svg+xml');
+      toast({ title: 'Exported SVG', description: filename });
+    } catch (e) {
+      console.error('Export failed', e);
+      toast({ title: 'Export failed', variant: 'destructive' });
+    }
+  }, [objects, projectTitle, toast]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -193,6 +226,31 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
             </Button>
 
             <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+            
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleExportPNG} 
+              disabled={isExporting || objects.length === 0}
+              title="Export as PNG"
+              className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            >
+              <Image className="w-4 h-4 mr-2" />
+              PNG
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleExportSVG}
+              disabled={objects.length === 0}
+              title="Export as SVG"
+              className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            >
+              <FileCode className="w-4 h-4 mr-2" />
+              SVG
+            </Button>
+
+            <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
 
             {currentProject ? (
               <ProjectShareDialog 
@@ -216,6 +274,8 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
           </>
         )}
         
+        <ConnectionStatus />
+        <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
         <ThemeToggle className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white" />
         <FloatingAuthButton />
       </div>

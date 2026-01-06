@@ -23,6 +23,8 @@ export { RectangleDetector } from './RectangleDetector';
 export { EllipseDetector } from './EllipseDetector';
 export { TriangleDetector } from './TriangleDetector';
 export { ParabolaDetector } from './ParabolaDetector';
+export { ArrowDetector } from './ArrowDetector';
+export { StarDetector } from './StarDetector';
 
 // Convenience function for quick shape detection
 import { ShapeDetectionPipeline } from './ShapeDetectionPipeline';

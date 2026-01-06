@@ -7,9 +7,11 @@ import {
   Square, 
   Circle, 
   Triangle,
+  Star,
   Type, 
   Hand,
   Move,
+  ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,18 +24,30 @@ const tools = [
   { id: 'rectangle', icon: Square, label: 'Rectangle' },
   { id: 'ellipse', icon: Circle, label: 'Ellipse' },
   { id: 'triangle', icon: Triangle, label: 'Triangle' },
+  { id: 'star', icon: Star, label: 'Star' },
   { id: 'text', icon: Type, label: 'Text' },
+  { id: 'image', icon: ImageIcon, label: 'Image' },
 ] as const;
 
 export function Sidebar() {
   const { currentTool, setTool } = useDrawingStore();
+
+  const handleToolClick = (id: string) => {
+    if (id === 'image') {
+      // For image tool, trigger the file input in DrawingCanvas
+      const fileInput = document.getElementById('image-upload-input') as HTMLInputElement;
+      fileInput?.click();
+    } else {
+      setTool(id as Tool);
+    }
+  };
 
   return (
     <div className="h-full w-16 border-r border-slate-200 dark:border-white/10 bg-slate-100/50 dark:bg-slate-900/50 flex flex-col items-center py-4 gap-2 z-20 transition-colors duration-200">
       {tools.map(({ id, icon: Icon, label }) => (
         <Button
           key={id}
-          onClick={() => setTool(id as Tool)}
+          onClick={() => handleToolClick(id)}
           variant={currentTool === id ? "default" : "ghost"}
           size="icon"
           className={cn(
