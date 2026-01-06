@@ -9,6 +9,15 @@ import { clerkMiddleware, getAuth, requireAuth, clerkClient } from '@clerk/expre
 import { DrawingService } from './services/DrawingService.js';
 import { ProjectService } from './services/ProjectService.js';
 import { logger } from './utils/logger.js';
+import { env, isProd, clerkPublishableKey } from './config/env.js';
+import { disconnectPrisma, checkDatabaseHealth } from './lib/prisma.js';
+import {
+  requestIdMiddleware,
+  requestLoggingMiddleware,
+  securityHeadersMiddleware,
+  rateLimitMiddleware,
+  errorHandlerMiddleware,
+} from './middleware/index.js';
 import type { 
   StrokeData, 
   ShapeData,
@@ -33,20 +42,29 @@ class LiveDrawServer {
   private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
   private drawingService = new DrawingService();
   private projectService = new ProjectService();
-  private port = parseInt(process.env.PORT || '3000');
-  private host = process.env.HOST || '0.0.0.0';
+  private isShuttingDown = false;
 
   constructor() {
+    // Configure CORS origins
+    const corsOrigins = isProd && env.CORS_ORIGINS.length > 0 
+      ? env.CORS_ORIGINS 
+      : '*';
+
     this.io = new SocketIOServer(this.server, {
       cors: { 
-        origin: process.env.NODE_ENV === 'production' ? false : '*',
+        origin: corsOrigins,
         credentials: true 
       },
-      maxHttpBufferSize: 10 * 1024 * 1024, // Reduced to 10MB for better performance
+      maxHttpBufferSize: 10 * 1024 * 1024, // 10MB for better performance
       pingTimeout: 20000,
       pingInterval: 10000,
-      transports: ['websocket']
+      transports: ['websocket', 'polling'], // Support polling fallback for LB health checks
     });
+
+    // Trust proxy when behind load balancer
+    if (isProd) {
+      this.app.set('trust proxy', 1);
+    }
 
     this.setupMiddleware();
     this.setupRoutes();
@@ -54,40 +72,89 @@ class LiveDrawServer {
   }
 
   private setupMiddleware(): void {
+    // Request ID for correlation (must be first)
+    this.app.use(requestIdMiddleware);
+
     // Security headers
-    this.app.use((req, res, next) => {
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('X-Frame-Options', 'DENY');
-      res.setHeader('X-XSS-Protection', '1; mode=block');
-      next();
-    });
+    this.app.use(securityHeadersMiddleware);
+
+    // Request logging
+    this.app.use(requestLoggingMiddleware);
 
     // Cookie parser
     this.app.use(cookieParser());
 
-    // Clerk middleware - must be before other routes
-    // Clerk needs both publishable key and secret key
+    // Rate limiting for auth endpoints
+    const authRateLimiter = rateLimitMiddleware({
+      windowMs: 60 * 1000, // 1 minute
+      maxRequests: 30,     // 30 requests per minute
+    });
+
+    // Apply rate limiting to auth-heavy endpoints
+    this.app.use('/api/auth', authRateLimiter);
+    this.app.use('/api/projects/:id/collaborators', authRateLimiter);
+
+    // Clerk middleware
     this.app.use(clerkMiddleware({
-      secretKey: process.env.CLERK_SECRET_KEY,
-      publishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY
+      secretKey: env.CLERK_SECRET_KEY,
+      publishableKey: clerkPublishableKey,
     }));
 
     // Static files - serve the built client
-    const staticPath = process.env.NODE_ENV === 'production' 
-      ? path.join(__dirname, '../../dist') 
-      : path.join(__dirname, '../../dist');
-    
-    this.app.use(express.static(staticPath));
+    const staticPath = path.join(__dirname, '../../dist');
+    this.app.use(express.static(staticPath, {
+      // Cache static assets aggressively in production
+      maxAge: isProd ? '1y' : 0,
+      etag: true,
+      lastModified: true,
+      // Don't cache HTML
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    }));
+
+    // Body parsing with limits
     this.app.use(express.json({ limit: '50mb' }));
   }
 
   private setupRoutes(): void {
-    // Health check
-    this.app.get('/api/health', (req, res) => {
+    // Health check - basic liveness
+    this.app.get('/api/health', (_req, res) => {
       res.json({ 
         status: 'ok', 
         timestamp: new Date().toISOString(),
-        connections: this.drawingService.getConnectionCount()
+        connections: this.drawingService.getConnectionCount(),
+      });
+    });
+
+    // Liveness probe (Kubernetes style) - is the process alive?
+    this.app.get('/api/healthz', (_req, res) => {
+      if (this.isShuttingDown) {
+        res.status(503).json({ status: 'shutting_down' });
+        return;
+      }
+      res.json({ status: 'ok' });
+    });
+
+    // Readiness probe - can we serve traffic?
+    this.app.get('/api/readyz', async (_req, res) => {
+      if (this.isShuttingDown) {
+        res.status(503).json({ status: 'shutting_down' });
+        return;
+      }
+
+      const dbHealthy = await checkDatabaseHealth();
+      if (!dbHealthy) {
+        res.status(503).json({ status: 'database_unhealthy' });
+        return;
+      }
+
+      res.json({ 
+        status: 'ok',
+        database: 'connected',
+        connections: this.drawingService.getConnectionCount(),
       });
     });
 
@@ -97,7 +164,6 @@ class LiveDrawServer {
       if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
-      // Return user ID - Clerk handles the rest
       res.json({ userId });
     });
 
@@ -345,11 +411,12 @@ class LiveDrawServer {
       }
     });
 
-    // Serve React app for all routes
-    this.app.get('*', (req, res) => {
-      const indexPath = process.env.NODE_ENV === 'production'
-        ? path.join(__dirname, '../../dist/index.html')
-        : path.join(__dirname, '../../dist/index.html');
+    // Error handler (must be last middleware)
+    this.app.use(errorHandlerMiddleware);
+
+    // Serve React app for all other routes (SPA fallback)
+    this.app.get('*', (_req, res) => {
+      const indexPath = path.join(__dirname, '../../dist/index.html');
       res.sendFile(indexPath);
     });
   }
@@ -360,6 +427,9 @@ class LiveDrawServer {
       logger.info(`Client connected: ${clientId}`);
       
       this.drawingService.addConnection(clientId);
+      
+      // Broadcast updated connection count to all clients
+      this.io.emit('connection:count', this.drawingService.getConnectionCount());
 
       // Send current canvas state to new client
       const currentSnapshot = this.drawingService.getCurrentSnapshot();
@@ -370,7 +440,7 @@ class LiveDrawServer {
       // Handle drawing strokes
       socket.on('draw:stroke', (stroke: StrokeData) => {
         if (!this.isValidStroke(stroke)) {
-          logger.warn(`Invalid stroke from ${clientId}:`, stroke);
+          logger.warn(`Invalid stroke from ${clientId}:`, { stroke });
           return;
         }
 
@@ -403,7 +473,7 @@ class LiveDrawServer {
       // Handle shapes
       socket.on('draw:shape', (shape: ShapeData) => {
         if (!this.isValidShape(shape)) {
-          logger.warn(`Invalid shape from ${clientId}:`, shape);
+          logger.warn(`Invalid shape from ${clientId}:`, { shape });
           return;
         }
 
@@ -447,6 +517,8 @@ class LiveDrawServer {
       // Handle disconnection
       socket.on('disconnect', (reason) => {
         this.drawingService.removeConnection(clientId);
+        // Broadcast updated connection count to all remaining clients
+        this.io.emit('connection:count', this.drawingService.getConnectionCount());
         logger.info(`Client disconnected: ${clientId}, reason: ${reason}`);
       });
 
@@ -526,41 +598,77 @@ class LiveDrawServer {
 
   public async start(): Promise<void> {
     return new Promise((resolve) => {
-      this.server.listen(this.port, this.host, async () => {
+      this.server.listen(env.PORT, env.HOST, async () => {
         const ips = await this.getLocalIPs();
         
-        logger.info('🎨 Live Draw Server Started');
-        logger.info(`📍 Server running on:`);
-        logger.info(`   - http://localhost:${this.port}`);
-        ips.forEach(ip => logger.info(`   - http://${ip}:${this.port}`));
-        logger.info(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-        logger.info(`📊 Max connections: ${this.drawingService.getMaxConnections()}`);
+        logger.info('Live Draw Server Started', {
+          port: env.PORT,
+          host: env.HOST,
+          environment: env.NODE_ENV,
+          maxConnections: this.drawingService.getMaxConnections(),
+        });
+        
+        logger.info(`Server running on:`);
+        logger.info(`   - http://localhost:${env.PORT}`);
+        ips.forEach(ip => logger.info(`   - http://${ip}:${env.PORT}`));
         
         resolve();
       });
     });
   }
 
-  public stop(): void {
-    this.server.close();
-    logger.info('Server stopped');
+  public async stop(): Promise<void> {
+    this.isShuttingDown = true;
+    logger.info('Starting graceful shutdown...');
+
+    // Close Socket.IO connections
+    this.io.close(() => {
+      logger.info('Socket.IO server closed');
+    });
+
+    // Close HTTP server (stop accepting new connections)
+    await new Promise<void>((resolve) => {
+      this.server.close(() => {
+        logger.info('HTTP server closed');
+        resolve();
+      });
+    });
+
+    // Disconnect Prisma
+    await disconnectPrisma();
+    
+    logger.info('Graceful shutdown complete');
   }
 }
 
 // Start server
 const server = new LiveDrawServer();
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  logger.info('Received SIGINT, shutting down gracefully...');
-  server.stop();
-  process.exit(0);
+// Graceful shutdown handlers
+async function handleShutdown(signal: string): Promise<void> {
+  logger.info(`Received ${signal}, shutting down gracefully...`);
+  
+  try {
+    await server.stop();
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception:', error);
+  handleShutdown('uncaughtException');
 });
 
-process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM, shutting down gracefully...');
-  server.stop();
-  process.exit(0);
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection:', reason);
+  // Don't exit on unhandled rejection, just log it
 });
 
 // Start the server

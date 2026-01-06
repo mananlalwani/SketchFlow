@@ -159,10 +159,11 @@ const socketManager = new SocketManager();
 export const useSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<Error | null>(null);
+  const [connectionCount, setConnectionCount] = useState(1);
   const wasConnectedRef = React.useRef(false);
 
   useEffect(() => {
-    socketManager.connect();
+    const socket = socketManager.connect();
     
     const unsubscribeConnect = socketManager.subscribe('connect', (data: unknown) => {
       const connected = data as boolean;
@@ -179,11 +180,21 @@ export const useSocket = () => {
       setConnectionError(error);
     });
 
+    // Listen for connection count updates
+    if (socket) {
+      socket.on('connection:count', (count: number) => {
+        setConnectionCount(count);
+      });
+    }
+
     setIsConnected(socketManager.getConnectionStatus());
 
     return () => {
       unsubscribeConnect();
       unsubscribeError();
+      if (socket) {
+        socket.off('connection:count');
+      }
     };
   }, []);
 
@@ -209,6 +220,7 @@ export const useSocket = () => {
   return {
     isConnected,
     connectionError,
+    connectionCount,
     emit,
     on,
     reconnect,

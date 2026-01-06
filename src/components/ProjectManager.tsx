@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/clerk-react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { 
   listProjects, 
   createProject, 
@@ -59,6 +59,13 @@ import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ProjectShareDialog } from '@/components/ProjectShareDialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -103,6 +110,40 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [sharingProject, setSharingProject] = useState<ProjectListItem | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  
+  // Track when menu was last closed to ignore clicks right after
+  const menuClosedAtRef = useRef<number>(0);
+  
+  const handleCardClick = (projectId: string, e: React.MouseEvent) => {
+    // Check if click originated from within a dropdown menu (rendered in portal)
+    const target = e.target as HTMLElement;
+    if (target.closest('[role="menu"]') || target.closest('[data-radix-popper-content-wrapper]')) {
+      return;
+    }
+    
+    // Ignore clicks within 500ms of menu closing
+    if (Date.now() - menuClosedAtRef.current < 500) {
+      return;
+    }
+    // Also ignore if menu is currently open
+    if (openMenuId) {
+      return;
+    }
+    handleLoad(projectId);
+  };
+  
+  const handleMenuOpenChange = (open: boolean, projectId: string) => {
+    if (open) {
+      setOpenMenuId(projectId);
+    } else {
+      setOpenMenuId(null);
+      menuClosedAtRef.current = Date.now();
+    }
+  };
+  
   const { 
     setObjects, 
     replaceHistory, 
@@ -233,28 +274,61 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     try {
       const token = await getToken();
       await moveProjectToFolder(projectId, folderId, token);
+      
+      // Get the old folderId before updating
+      const oldFolderId = projects.find(p => p.id === projectId)?.folderId;
+      
+      // Update projects state
       setProjects(prev => prev.map(p => 
         p.id === projectId ? { ...p, folderId } : p
       ));
+      
+      // Update folder counts
+      setFolders(prev => prev.map(f => {
+        if (f.id === oldFolderId) {
+          // Decrement old folder count
+          return { ...f, projectCount: Math.max(0, (f.projectCount || 1) - 1) };
+        }
+        if (f.id === folderId) {
+          // Increment new folder count
+          return { ...f, projectCount: (f.projectCount || 0) + 1 };
+        }
+        return f;
+      }));
+      
       toast({ title: folderId ? 'Moved to folder' : 'Moved to All Projects' });
     } catch {
       toast({ title: 'Failed to move project', variant: 'destructive' });
     }
   };
 
+  const openNewProjectDialog = () => {
+    setNewProjectName('');
+    setShowNewProjectDialog(true);
+  };
+
   const handleCreate = async () => {
     if (!userId) return;
+    const projectName = newProjectName.trim() || 'Untitled Project';
     setCreating(true);
+    setShowNewProjectDialog(false);
     try {
       const token = await getToken();
       const emptyProjectData = serializeProject([], 4096, 4096);
-      const newProj = await createProject('Untitled Project', emptyProjectData, token);
+      const newProj = await createProject(projectName, emptyProjectData, token);
+      
+      // If a folder is selected, move the project to that folder
+      if (selectedFolderId) {
+        await moveProjectToFolder(newProj.id, selectedFolderId, token);
+      }
+      
       await handleLoad(newProj.id);
     } catch (e) {
       console.error('Create project error:', e);
       toast({ title: 'Failed to create project', variant: 'destructive' });
     } finally {
       setCreating(false);
+      setNewProjectName('');
     }
   };
 
@@ -673,10 +747,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             }`}
           >
             <Home className="w-4 h-4" />
-            <span className="truncate">All Projects</span>
-            <span className="ml-auto text-xs opacity-60">
+            <span className="truncate flex-1">Unsorted</span>
+            <span className="text-xs opacity-60">
               {projects.filter(p => !p.folderId).length}
             </span>
+            {/* Spacer to align with folder dropdown buttons */}
+            <div className="w-6 h-6" />
           </button>
 
           {folders.map(folder => (
@@ -800,12 +876,42 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button onClick={handleCreate} disabled={creating} className="bg-blue-600 hover:bg-blue-500">
+              <Button onClick={openNewProjectDialog} disabled={creating} className="bg-blue-600 hover:bg-blue-500">
                 {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                 New Project
               </Button>
             </div>
           </div>
+
+          {/* New Project Dialog */}
+          <Dialog open={showNewProjectDialog} onOpenChange={setShowNewProjectDialog}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create New Project</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <Input
+                  placeholder="Project name"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreate();
+                    if (e.key === 'Escape') setShowNewProjectDialog(false);
+                  }}
+                  autoFocus
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowNewProjectDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreate} disabled={creating}>
+                  {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Create
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Search and Filter Bar */}
           <div className="flex items-center gap-3">
@@ -892,7 +998,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
               <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">Start Creating</h3>
               <p className="text-slate-500 mb-6 text-center max-w-sm">Create your first drawing or import an existing project.</p>
               <div className="flex gap-3">
-                <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-500">
+                <Button onClick={openNewProjectDialog} className="bg-blue-600 hover:bg-blue-500">
                   <Plus className="w-4 h-4 mr-2" />
                   New Project
                 </Button>
@@ -922,7 +1028,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             {filteredProjects.map(project => (
               <div 
                 key={project.id}
-                onClick={() => handleLoad(project.id)}
+                onClick={(e) => handleCardClick(project.id, e)}
                 className="group relative bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl p-4 cursor-pointer transition-all duration-200 flex flex-col gap-3 shadow-sm hover:shadow-md"
               >
                 {/* Thumbnail placeholder */}
@@ -950,7 +1056,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     </div>
                   )}
                   
-                  <DropdownMenu>
+                  <DropdownMenu 
+                    modal={true}
+                    onOpenChange={(open) => handleMenuOpenChange(open, project.id)}
+                  >
                     <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                       <Button
                         variant="ghost"
@@ -960,7 +1069,13 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         <MoreHorizontal className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuContent 
+                      align="end" 
+                      className="w-48"
+                      onCloseAutoFocus={(e) => e.preventDefault()}
+                      onPointerDownOutside={() => { menuClosedAtRef.current = Date.now(); }}
+                      onInteractOutside={() => { menuClosedAtRef.current = Date.now(); }}
+                    >
                       <DropdownMenuItem onSelect={() => {
                         setRenameValue(project.title || '');
                         setRenamingId(project.id);
@@ -1034,8 +1149,11 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            onSelect={() => {
-                              if (!confirm('Are you sure you want to delete this project?')) return;
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              if (!confirm('Are you sure you want to delete this project?')) {
+                                return;
+                              }
                               getToken().then(token => {
                                 deleteProject(project.id, token).then(() => {
                                   setProjects(prev => prev.filter(p => p.id !== project.id));
@@ -1047,7 +1165,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   }
                                   toast({ title: 'Project deleted' });
                                 });
-                              }).catch(() => toast({ title: 'Failed to delete', variant: 'destructive' }));
+                              }).catch(() => {
+                                toast({ title: 'Failed to delete', variant: 'destructive' });
+                              });
                             }}
                             className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400"
                           >
@@ -1088,8 +1208,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             {filteredProjects.map(project => (
               <div 
                 key={project.id}
-                onClick={() => handleLoad(project.id)}
-                className="group flex items-center gap-4 bg-white dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 hover:border-blue-400 dark:hover:border-blue-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg p-3 cursor-pointer transition-all duration-200 shadow-sm"
+                onClick={(e) => handleCardClick(project.id, e)}
+                className="group relative flex items-center gap-4 bg-white dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 hover:border-blue-400 dark:hover:border-blue-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg p-3 cursor-pointer transition-all duration-200 shadow-sm"
               >
                 <div className="w-16 h-12 bg-slate-100 dark:bg-slate-900/50 rounded border border-slate-200 dark:border-white/5 flex items-center justify-center shrink-0">
                   <FileEdit className="w-5 h-5 text-slate-400 dark:text-slate-700" />
@@ -1139,13 +1259,22 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     </span>
                   )}
                   
-                  <DropdownMenu>
+                  <DropdownMenu 
+                    modal={true}
+                    onOpenChange={(open) => handleMenuOpenChange(open, project.id)}
+                  >
                     <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                       <Button variant="ghost" size="icon" className="h-8 w-8">
                         <MoreHorizontal className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuContent 
+                      align="end" 
+                      className="w-48"
+                      onCloseAutoFocus={(e) => e.preventDefault()}
+                      onPointerDownOutside={() => { menuClosedAtRef.current = Date.now(); }}
+                      onInteractOutside={() => { menuClosedAtRef.current = Date.now(); }}
+                    >
                       <DropdownMenuItem onSelect={() => {
                         setRenameValue(project.title || '');
                         setRenamingId(project.id);
@@ -1219,8 +1348,11 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            onSelect={() => {
-                              if (!confirm('Are you sure you want to delete this project?')) return;
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              if (!confirm('Are you sure you want to delete this project?')) {
+                                return;
+                              }
                               getToken().then(token => {
                                 deleteProject(project.id, token).then(() => {
                                   setProjects(prev => prev.filter(p => p.id !== project.id));
@@ -1232,7 +1364,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   }
                                   toast({ title: 'Project deleted' });
                                 });
-                              }).catch(() => toast({ title: 'Failed to delete', variant: 'destructive' }));
+                              }).catch(() => {
+                                toast({ title: 'Failed to delete', variant: 'destructive' });
+                              });
                             }}
                             className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400"
                           >

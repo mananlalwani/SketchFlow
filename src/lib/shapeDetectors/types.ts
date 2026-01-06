@@ -13,7 +13,7 @@ export interface DetectionResult {
 }
 
 export interface DetectedShape {
-  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola';
+  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'arrow' | 'star';
   boundingBox: BoundingBox;
   points?: Point[]; // Key points (e.g., triangle vertices, line endpoints)
   center?: Point;

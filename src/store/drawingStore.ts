@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-export type Tool = 'pen' | 'eraser' | 'line' | 'rectangle' | 'ellipse' | 'triangle' | 'text' | 'eyedropper' | 'hand' | 'move';
+export type Tool = 'pen' | 'eraser' | 'line' | 'rectangle' | 'ellipse' | 'triangle' | 'star' | 'text' | 'eyedropper' | 'hand' | 'move' | 'image';
 
 export interface StrokeData {
   x0: number;
@@ -17,7 +17,7 @@ export interface StrokeData {
 
 export interface DrawingObject {
   id: string;
-  type: 'stroke' | 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
+  type: 'stroke' | 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'arrow' | 'star';
   points?: { x: number; y: number }[];
   x?: number;
   y?: number;
@@ -31,6 +31,7 @@ export interface DrawingObject {
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
   imageData?: string; // Base64 data URL for images
+  properties?: Record<string, any>; // Shape-specific properties (e.g., arrow direction, star point count)
 }
 
 interface DrawingState {
@@ -53,6 +54,7 @@ interface DrawingState {
   viewMode: 'draw' | 'view';
   shapeFilled: boolean;
   triangleMode: 'custom' | 'right' | '45-45-90' | '30-60-90';
+  starPoints: 5 | 6 | 8;
   autoShape: boolean;
   autoShapeThresholds: {
     closureFactor: number; // 0-1 factor of diag for closure tolerance
@@ -114,6 +116,7 @@ interface DrawingState {
   setViewMode: (mode: 'draw' | 'view') => void;
   setShapeFilled: (filled: boolean) => void;
   setTriangleMode: (mode: 'custom' | 'right' | '45-45-90' | '30-60-90') => void;
+  setStarPoints: (points: 5 | 6 | 8) => void;
   setAutoShape: (enabled: boolean) => void;
   setAutoShapeThresholds: (t: Partial<DrawingState['autoShapeThresholds']>) => void;
   
@@ -162,6 +165,7 @@ export const useDrawingStore = create<DrawingState>()(
         viewMode: 'draw',
         shapeFilled: false,
         triangleMode: 'custom',
+        starPoints: 5,
         autoShape: false,
         autoShapeThresholds: {
           closureFactor: 0.15,
@@ -191,8 +195,9 @@ export const useDrawingStore = create<DrawingState>()(
         customColors: defaultColors,
         
         zoom: 1,
-        viewX: 0,
-        viewY: 0,
+        // Start centered in the world (will be adjusted precisely by canvas on mount)
+        viewX: 1548,
+        viewY: 1748,
         
         // Actions
         setTool: (tool) => set({ currentTool: tool }),
@@ -243,6 +248,7 @@ export const useDrawingStore = create<DrawingState>()(
         setViewMode: (mode) => set({ viewMode: mode }),
         setShapeFilled: (filled) => set({ shapeFilled: filled }),
         setTriangleMode: (mode) => set({ triangleMode: mode }),
+        setStarPoints: (points) => set({ starPoints: points }),
         setAutoShape: (enabled) => set({ autoShape: enabled }),
         setAutoShapeThresholds: (t) => set((s) => ({ autoShapeThresholds: { ...s.autoShapeThresholds, ...t } })),
         
@@ -313,7 +319,13 @@ export const useDrawingStore = create<DrawingState>()(
         // View actions
         setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
         setView: (x, y) => set({ viewX: x, viewY: y }),
-        resetView: () => set({ zoom: 1, viewX: 0, viewY: 0 })
+        // Reset centers the view in the middle of the world canvas
+        resetView: () => {
+          // Default center position - will be adjusted by canvas on mount
+          const centerX = 2048 - 500; // Approximate center
+          const centerY = 2048 - 300;
+          set({ zoom: 1, viewX: centerX, viewY: centerY });
+        }
       }),
       {
         name: 'drawing-store',

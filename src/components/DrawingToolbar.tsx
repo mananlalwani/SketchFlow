@@ -10,6 +10,7 @@ import {
   Square, 
   Circle, 
   Triangle,
+  Star,
   Type, 
   Palette,
   Hand,
@@ -30,6 +31,7 @@ const tools = [
   { id: 'rectangle', icon: Square, label: 'Rectangle' },
   { id: 'ellipse', icon: Circle, label: 'Ellipse' },
   { id: 'triangle', icon: Triangle, label: 'Triangle' },
+  { id: 'star', icon: Star, label: 'Star' },
   { id: 'text', icon: Type, label: 'Text' },
 ] as const;
 

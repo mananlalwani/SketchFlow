@@ -15,6 +15,8 @@ import { RectangleDetector } from './RectangleDetector';
 import { EllipseDetector } from './EllipseDetector';
 import { TriangleDetector } from './TriangleDetector';
 import { ParabolaDetector } from './ParabolaDetector';
+import { ArrowDetector } from './ArrowDetector';
+import { StarDetector } from './StarDetector';
 
 export interface ShapeDetectionResult {
   detectedShape: DetectionResult | null;
@@ -44,6 +46,8 @@ export class ShapeDetectionPipeline {
   constructor(options: DetectionOptions = {}) {
     // Initialize all detectors
     this.detectors = [
+      new ArrowDetector(),
+      new StarDetector(),
       new LineDetector(),
       new RectangleDetector(),
       new EllipseDetector(),

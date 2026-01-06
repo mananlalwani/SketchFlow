@@ -77,13 +77,20 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
+        // Content-hash based filenames for cache busting
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
         manualChunks: {
           vendor: ['react', 'react-dom'],
           socket: ['socket.io-client'],
-          ui: ['lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-select']
+          ui: ['lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-select'],
+          clerk: ['@clerk/clerk-react'],
         }
       }
-    }
+    },
+    // Increase chunk size warning limit for production
+    chunkSizeWarningLimit: 500,
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'socket.io-client']
