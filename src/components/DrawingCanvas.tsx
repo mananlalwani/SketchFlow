@@ -14,13 +14,13 @@ import { detectShapes } from '@/lib/shapeDetectors';
 import { getImageFromClipboard, compressImage } from '@/lib/clipboard';
 import { ShortcutsDialog } from './ShortcutsDialog';
 
-const WORLD_WIDTH = 4096;
-const WORLD_HEIGHT = 4096;
+const WORLD_WIDTH = 51200;  // 20x 1440p width (2560 × 20)
+const WORLD_HEIGHT = 28800; // 20x 1440p height (1440 × 20)
 
-// Background colors for each theme
+// Background colors for each theme (must match Layout.tsx bg colors)
 const BG_COLORS = {
-  dark: '#0f172a',
-  light: '#f8fafc'
+  dark: '#020617',  // slate-950
+  light: '#f8fafc'  // slate-50
 } as const;
 
 export function DrawingCanvas() {
@@ -51,11 +51,10 @@ export function DrawingCanvas() {
     setZoom,
     setView,
     resetView,
-    autoShape,
-    clearCanvas
+    autoShape
   } = useDrawingStore();
 
-  const { emitStroke, emitStrokes, emitShape, emitSnapshot, emitClear, on } = useDrawingSocket();
+  const { emitStrokes, emitShape, emitSnapshot, emitClear, on } = useDrawingSocket();
   const { updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
   const fps = useFPSCounter();
   const { theme } = useTheme();
@@ -86,6 +85,10 @@ export function DrawingCanvas() {
   const [textInputValue, setTextInputValue] = useState('');
   const [draggedObject, setDraggedObject] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const draggedObjectsRef = useRef<DrawingObject[] | null>(null);
+  const dragRedrawScheduledRef = useRef(false);
+  const panViewportScheduledRef = useRef(false);
+  const currentPanViewRef = useRef<{ x: number; y: number } | null>(null);
   // removed unused groupId state
 
   // Worker-based renderer
@@ -102,13 +105,25 @@ export function DrawingCanvas() {
     for (const obj of objects) {
       if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
         const strokes: StrokeData[] = [];
+        // Each stroke object needs its own unique groupId for consolidation
+        const objGroupId = obj.id; // Use the object's ID as the groupId
         for (let i = 0; i < obj.points.length - 1; i++) {
           const a = obj.points[i];
           const b = obj.points[i + 1];
-          strokes.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, color: obj.color, size: obj.size, alpha: obj.alpha ?? 1, timestamp: Date.now() });
+          strokes.push({ 
+            x0: a.x, 
+            y0: a.y, 
+            x1: b.x, 
+            y1: b.y, 
+            color: obj.color, 
+            size: obj.size, 
+            alpha: obj.alpha ?? 1, 
+            groupId: objGroupId, // IMPORTANT: Use object ID as groupId
+            timestamp: Date.now() 
+          });
         }
         if (strokes.length) workerRef.current?.postMessage({ type: 'strokes', data: strokes });
-      } else if ((obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'parabola' || obj.type === 'text' || obj.type === 'image') && obj.x !== undefined && obj.y !== undefined) {
+      } else if ((obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'parabola' || obj.type === 'text' || obj.type === 'image' || obj.type === 'star' || obj.type === 'arrow') && obj.x !== undefined && obj.y !== undefined) {
         const shape: ShapeData = { 
           id: obj.id, 
           type: obj.type, 
@@ -124,6 +139,8 @@ export function DrawingCanvas() {
           text: obj.text,
           fontSize: obj.fontSize,
           imageData: obj.imageData,
+          points: obj.points, // IMPORTANT: Include points for custom triangles
+          properties: obj.properties, // IMPORTANT: Include properties for stars, etc.
           timestamp: Date.now() 
         };
         workerRef.current?.postMessage({ type: 'shape', data: shape });
@@ -192,18 +209,34 @@ export function DrawingCanvas() {
 
     sendViewport();
     const onResize = () => sendViewport();
+    const onVisibilityChange = () => {
+      // Refresh viewport when tab becomes visible
+      if (!document.hidden) {
+        sendViewport();
+      }
+    };
+    const onFocus = () => {
+      // Refresh viewport when window regains focus
+      sendViewport();
+    };
+    
     window.addEventListener('resize', onResize);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
+    
     return () => {
       window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [zoom, viewX, viewY]);
 
   // Send theme to worker when it changes
   useEffect(() => {
     if (!workerRef.current) return;
-    // Map theme to appropriate background color
-    const bgColor = theme === 'dark' ? '#0f172a' : '#f8fafc';
+    // Map theme to appropriate background color (must match BG_COLORS)
+    const bgColor = theme === 'dark' ? '#020617' : '#f8fafc';
     workerRef.current.postMessage({ type: 'theme', bgColor });
   }, [theme]);
 
@@ -449,7 +482,7 @@ export function DrawingCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [emitClear]);
 
   // Paste image from clipboard
   useEffect(() => {
@@ -637,6 +670,7 @@ export function DrawingCanvas() {
         for (const obj of list) {
           if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
             const strokes: StrokeData[] = [];
+            const objGroupId = obj.id; // Use object ID as groupId
             for (let i = 0; i < obj.points.length - 1; i++) {
               const a = obj.points[i];
               const b = obj.points[i + 1];
@@ -648,6 +682,7 @@ export function DrawingCanvas() {
                 color: obj.color,
                 size: obj.size,
                 alpha: obj.alpha ?? 1,
+                groupId: objGroupId, // IMPORTANT: Set groupId
                 timestamp: Date.now()
               };
               strokes.push(s);
@@ -972,10 +1007,21 @@ export function DrawingCanvas() {
       const hitId = findHitObjectIdAt(worldPos.x, worldPos.y, { includeImages: true });
       if (hitId) {
         const obj = objects.find(o => o.id === hitId);
-        if (obj && (obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'text' || obj.type === 'image')) {
-          // Start dragging object
-          const offsetX = worldPos.x - (obj.x ?? 0);
-          const offsetY = worldPos.y - (obj.y ?? 0);
+        if (obj) {
+          // Calculate offset based on object type
+          let offsetX = 0;
+          let offsetY = 0;
+          
+          if (obj.x !== undefined && obj.y !== undefined) {
+            // For shapes with x,y coordinates
+            offsetX = worldPos.x - obj.x;
+            offsetY = worldPos.y - obj.y;
+          } else if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
+            // For strokes, use the first point as reference
+            offsetX = worldPos.x - obj.points[0].x;
+            offsetY = worldPos.y - obj.points[0].y;
+          }
+          
           setDraggedObject({ id: hitId, offsetX, offsetY });
           saveHistory();
           return;
@@ -1055,6 +1101,7 @@ export function DrawingCanvas() {
 
             if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
               const strokes: StrokeData[] = [];
+              const objGroupId = obj.id; // Use object ID as groupId
               for (let i = 0; i < obj.points.length - 1; i++) {
                 const a = obj.points[i];
                 const b = obj.points[i + 1];
@@ -1066,6 +1113,7 @@ export function DrawingCanvas() {
                   color: obj.color,
                   size: obj.size,
                   alpha: obj.alpha ?? 1,
+                  groupId: objGroupId, // IMPORTANT: Set groupId
                   timestamp: Date.now()
                 });
               }
@@ -1129,7 +1177,8 @@ export function DrawingCanvas() {
       setIsDrawing(true);
       setLastPoint(worldPos);
       setCurrentStroke([]);
-      // Always generate a groupId for pen/eraser strokes for efficient path batching
+      // ALWAYS generate a unique groupId for each stroke session
+      // This prevents different strokes from connecting to each other
       strokeGroupRef.current = generateId();
       saveHistory();
     } else if (['line', 'rectangle', 'ellipse', 'star'].includes(currentTool)) {
@@ -1210,30 +1259,51 @@ export function DrawingCanvas() {
         saveHistory();
       }
     }
-  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, autoShape, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject, textInputPos]);
+  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject, textInputPos]);
 
   const draw = useCallback((e: React.PointerEvent) => {
     // Handle panning first (before other operations)
     if (isPanning && panStart) {
       const deltaX = e.clientX - panStart.x;
       const deltaY = e.clientY - panStart.y;
+      
+      // Calculate new view position based on the ORIGINAL panStart values
+      // This prevents accumulating errors from React state updates
       const newViewX = Math.max(0, Math.min(WORLD_WIDTH - 100, panStart.viewX - deltaX / zoom));
       const newViewY = Math.max(0, Math.min(WORLD_HEIGHT - 100, panStart.viewY - deltaY / zoom));
-      setView(newViewX, newViewY);
       
-      // Update worker viewport for smooth panning
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
-        workerRef.current?.postMessage({
-          type: 'viewport',
-          zoom,
-          viewX: newViewX,
-          viewY: newViewY,
-          canvasWidth: rect.width,
-          canvasHeight: rect.height,
-          dpr
+      // Store current pan position
+      currentPanViewRef.current = { x: newViewX, y: newViewY };
+      
+      // Throttle BOTH state updates AND worker messages to animation frames
+      if (!panViewportScheduledRef.current) {
+        panViewportScheduledRef.current = true;
+        
+        requestAnimationFrame(() => {
+          panViewportScheduledRef.current = false;
+          
+          // Get the latest pan position
+          const latestView = currentPanViewRef.current;
+          if (!latestView) return;
+          
+          // Update React state once per frame
+          setView(latestView.x, latestView.y);
+          
+          // Update worker viewport
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
+            workerRef.current?.postMessage({
+              type: 'viewport',
+              zoom,
+              viewX: latestView.x,
+              viewY: latestView.y,
+              canvasWidth: rect.width,
+              canvasHeight: rect.height,
+              dpr
+            });
+          }
         });
       }
       return;
@@ -1245,36 +1315,120 @@ export function DrawingCanvas() {
       const newX = worldPos.x - draggedObject.offsetX;
       const newY = worldPos.y - draggedObject.offsetY;
       
-      const obj = objects.find(o => o.id === draggedObject.id);
+      // Use the ref to get current objects (either from ref during drag or from state)
+      const currentObjects = draggedObjectsRef.current || objects;
+      const obj = currentObjects.find(o => o.id === draggedObject.id);
+      
       if (obj) {
-        const updatedObjects = objects.map(o => 
-          o.id === draggedObject.id 
-            ? { ...o, x: newX, y: newY }
-            : o
-        );
-        setObjects(updatedObjects);
+        let updatedObjects;
         
-        // Update in worker without full redraw
-        if (obj.type === 'line' || obj.type === 'rectangle' || obj.type === 'ellipse' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'text' || obj.type === 'image') {
-          const shapeData: ShapeData = {
-            id: obj.id,
-            type: obj.type,
-            x: newX,
-            y: newY,
-            width: obj.width ?? 0,
-            height: obj.height ?? 0,
-            color: obj.color,
-            size: obj.size,
-            alpha: obj.alpha ?? 1,
-            filled: obj.filled,
-            orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
-            text: obj.text,
-            fontSize: obj.fontSize,
-            imageData: obj.imageData,
-            timestamp: Date.now()
-          };
-          // Update shape position in worker
-          workerRef.current?.postMessage({ type: 'shape', data: shapeData });
+        if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
+          // For strokes, move all points by the delta
+          const deltaX = newX - obj.points[0].x;
+          const deltaY = newY - obj.points[0].y;
+          
+          updatedObjects = currentObjects.map(o => 
+            o.id === draggedObject.id 
+              ? { 
+                  ...o, 
+                  points: o.points!.map(p => ({ 
+                    x: p.x + deltaX, 
+                    y: p.y + deltaY 
+                  }))
+                }
+              : o
+          );
+        } else if (obj.type === 'triangle' && obj.points && obj.points.length > 0) {
+          // For triangles with custom points, move both the bounding box AND all points
+          const deltaX = newX - (obj.x ?? 0);
+          const deltaY = newY - (obj.y ?? 0);
+          
+          updatedObjects = currentObjects.map(o => 
+            o.id === draggedObject.id 
+              ? { 
+                  ...o, 
+                  x: newX, 
+                  y: newY,
+                  points: o.points!.map(p => ({ 
+                    x: p.x + deltaX, 
+                    y: p.y + deltaY 
+                  }))
+                }
+              : o
+          );
+        } else {
+          // For shapes with x,y coordinates only (rectangles, circles, etc.)
+          updatedObjects = currentObjects.map(o => 
+            o.id === draggedObject.id 
+              ? { ...o, x: newX, y: newY }
+              : o
+          );
+        }
+        
+        // Store updated objects in ref during drag (don't trigger React re-renders)
+        draggedObjectsRef.current = updatedObjects;
+        
+        // Send only the updated object to the worker - it will update in place
+        // This is MUCH faster than clearing and redrawing everything
+        if (!dragRedrawScheduledRef.current) {
+          dragRedrawScheduledRef.current = true;
+          requestAnimationFrame(() => {
+            dragRedrawScheduledRef.current = false;
+            
+            if (draggedObjectsRef.current) {
+              const updatedObj = draggedObjectsRef.current.find(o => o.id === draggedObject.id);
+              if (updatedObj) {
+                // For strokes, update the consolidated path directly
+                if (updatedObj.type === 'stroke' && updatedObj.points && updatedObj.points.length > 1) {
+                  // Remove the old consolidated path
+                  workerRef.current?.postMessage({ type: 'remove-group', groupId: updatedObj.id });
+                  
+                  // Add the stroke at new position with the same groupId
+                  const strokes: StrokeData[] = [];
+                  for (let i = 0; i < updatedObj.points.length - 1; i++) {
+                    const a = updatedObj.points[i];
+                    const b = updatedObj.points[i + 1];
+                    strokes.push({
+                      x0: a.x,
+                      y0: a.y,
+                      x1: b.x,
+                      y1: b.y,
+                      color: updatedObj.color,
+                      size: updatedObj.size,
+                      alpha: updatedObj.alpha ?? 1,
+                      groupId: updatedObj.id, // Use object ID as groupId
+                      timestamp: Date.now()
+                    });
+                  }
+                  if (strokes.length) {
+                    workerRef.current?.postMessage({ type: 'strokes', data: strokes });
+                  }
+                } else if ((updatedObj.type === 'line' || updatedObj.type === 'rectangle' || updatedObj.type === 'ellipse' || updatedObj.type === 'circle' || updatedObj.type === 'triangle' || updatedObj.type === 'parabola' || updatedObj.type === 'text' || updatedObj.type === 'image' || updatedObj.type === 'star' || updatedObj.type === 'arrow') && updatedObj.x !== undefined && updatedObj.y !== undefined) {
+                  // Send just this one shape - worker will update it in place and redraw
+                  const shape: ShapeData = {
+                    id: updatedObj.id,
+                    type: updatedObj.type,
+                    x: updatedObj.x,
+                    y: updatedObj.y,
+                    width: updatedObj.width ?? 0,
+                    height: updatedObj.height ?? 0,
+                    color: updatedObj.color,
+                    size: updatedObj.size,
+                    alpha: updatedObj.alpha ?? 1,
+                    filled: updatedObj.filled,
+                    orientation: (updatedObj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
+                    text: updatedObj.text,
+                    fontSize: updatedObj.fontSize,
+                    imageData: updatedObj.imageData,
+                    points: updatedObj.points, // Include points for custom triangles
+                    properties: updatedObj.properties, // Include properties for stars, etc.
+                    timestamp: Date.now()
+                  };
+                  workerRef.current?.postMessage({ type: 'shape', data: shape });
+                }
+              }
+            }
+          });
         }
       }
       return;
@@ -1293,6 +1447,13 @@ export function DrawingCanvas() {
           lp = p;
           continue;
         }
+        // Ensure groupId is always set - if not set, skip this stroke
+        if (!strokeGroupRef.current) {
+          console.error('No groupId set for stroke - this should not happen');
+          lp = p;
+          continue;
+        }
+        
         const stroke: StrokeData = {
           x0: lp.x,
           y0: lp.y,
@@ -1302,7 +1463,7 @@ export function DrawingCanvas() {
           size: brushSize,
           alpha: brushOpacity,
           timestamp: Date.now(),
-          groupId: strokeGroupRef.current || undefined
+          groupId: strokeGroupRef.current // REQUIRED - must always be set
         };
         enqueueWorkerStroke(stroke);
         setCurrentStroke(prev => [...prev, stroke]);
@@ -1344,18 +1505,32 @@ export function DrawingCanvas() {
       });
     }
     // Custom triangle uses click mode, not drag mode - handled in startDrawing
-  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, triangleMode, draggedObject, objects, setObjects, theme]);
+  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, triangleMode, draggedObject, objects, theme]);
 
   const stopDrawing = useCallback(() => {
     // Stop dragging
     if (draggedObject) {
+      // Apply the final dragged objects to state
+      if (draggedObjectsRef.current) {
+        setObjects(draggedObjectsRef.current);
+        draggedObjectsRef.current = null;
+      }
       setDraggedObject(null);
-      requestFullRedraw();
+      
+      // Schedule final redraw after state update
+      requestAnimationFrame(() => {
+        requestFullRedraw();
+      });
       return;
     }
     
     // Stop panning (hand tool, space-pan, or right-click pan)
     if (isPanning || currentTool === 'hand' || isSpacePan) {
+      // Commit the final pan position to React state
+      if (currentPanViewRef.current) {
+        setView(currentPanViewRef.current.x, currentPanViewRef.current.y);
+        currentPanViewRef.current = null;
+      }
       setIsPanning(false);
       setPanStart(null);
       // Only return early if we weren't also drawing
@@ -1432,7 +1607,7 @@ export function DrawingCanvas() {
             workerRef.current?.postMessage({ type: 'shape', data: shapeObject });
             emitShape({ ...shapeObject, timestamp: Date.now() });
           } else {
-            // Fallback to stroke object
+            // Fallback to stroke object (only for pen with autoShape when no shape detected)
             const drawingObject = {
               id: generateId(),
               type: 'stroke' as const,
@@ -1620,7 +1795,7 @@ export function DrawingCanvas() {
         }
       }, 100);
     }
-  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, emitStroke, emitStrokes, flushWorkerStrokes, isSpacePan, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices, draggedObject, requestFullRedraw, starPoints, theme]);
+  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, flushWorkerStrokes, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices, draggedObject, isPanning, isSpacePan, setView, requestFullRedraw, starPoints, theme, setObjects]);
 
 
   // Zoom and pan handlers
@@ -1719,11 +1894,32 @@ export function DrawingCanvas() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Handle pointer enter to refresh viewport (helps with tab switching and window manager issues)
+  const handlePointerEnter = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // Refresh viewport when pointer enters canvas
+    // This ensures coordinates are correct after tab switches or window movements
+    const rect = canvas.getBoundingClientRect();
+    const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
+    workerRef.current?.postMessage({
+      type: 'viewport',
+      zoom,
+      viewX,
+      viewY,
+      canvasWidth: rect.width,
+      canvasHeight: rect.height,
+      dpr
+    });
+  }, [zoom, viewX, viewY]);
+
   return (
-    <div className="w-full h-full relative overflow-hidden bg-transparent">
+    <div className={`w-full h-full relative overflow-hidden ${theme === 'dark' ? 'bg-[#0a0a0a]' : 'bg-[#e0e0e0]'}`}>
         <canvas
           ref={canvasRef}
           className={`absolute inset-0 w-full h-full touch-none ${(currentTool === 'hand' || isSpacePan || isPanning) ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+          onPointerEnter={handlePointerEnter}
           onPointerDown={startDrawing}
           onPointerMove={draw}
           onPointerUp={stopDrawing}
@@ -1731,6 +1927,20 @@ export function DrawingCanvas() {
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
         />
+        
+        {/* World boundary indicator - shows the 4096x4096 drawable area */}
+        {/* Drawn on top of canvas to show the boundary */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+          <rect
+            x={(0 - viewX) * zoom}
+            y={(0 - viewY) * zoom}
+            width={WORLD_WIDTH * zoom}
+            height={WORLD_HEIGHT * zoom}
+            fill="none"
+            stroke={theme === 'dark' ? '#475569' : '#94a3b8'}
+            strokeWidth={2}
+          />
+        </svg>
 
         {/* Zoom controls */}
         <div className="absolute top-4 left-4 z-40 flex items-center space-x-2">
@@ -1960,24 +2170,14 @@ export function DrawingCanvas() {
             onMouseDown={(e) => e.stopPropagation()}
             autoFocus
             placeholder="Type here... (Ctrl+Enter to submit)"
-            style={{
-              position: 'fixed',
-              left: textInputPos.x,
-              top: textInputPos.y,
-              zIndex: 10000,
-              fontSize: `${Math.max(16, brushSize * 2)}px`,
-              fontFamily: 'Inter, system-ui, sans-serif',
-              lineHeight: '1.4',
-              color: brushColor,
-              background: '#1e1e1e',
-              border: '2px solid #3b82f6',
-              borderRadius: '8px',
-              padding: '12px',
-              minWidth: '250px',
-              minHeight: '60px',
-              maxWidth: '400px',
-              resize: 'both',
-              outline: 'none',
+            className="fixed z-[10000] min-w-[250px] min-h-[60px] max-w-[400px] resize font-[Inter,system-ui,sans-serif] leading-[1.4] bg-[#1e1e1e] border-2 border-[#3b82f6] rounded-lg p-3 outline-none"
+            {...{
+              style: {
+                left: textInputPos.x,
+                top: textInputPos.y,
+                fontSize: `${Math.max(16, brushSize * 2)}px`,
+                color: brushColor,
+              }
             }}
           />
         )}

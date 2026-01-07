@@ -30,6 +30,14 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOG_FORMAT: z.enum(['pretty', 'json']).default('pretty'),
+
+  // OpenTelemetry / Honeycomb (optional - OTel disabled if not set)
+  OTEL_SERVICE_NAME: z.string().optional(),
+  OTEL_SERVICE_VERSION: z.string().optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+  HONEYCOMB_API_KEY: z.string().optional(),
+  HONEYCOMB_DATASET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
