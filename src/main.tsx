@@ -1,3 +1,11 @@
+// Initialize OpenTelemetry before any other imports
+import { initOtel } from './lib/otel';
+initOtel();
+
+// Start tool usage analytics
+import { startAnalyticsLogging } from './lib/analytics';
+startAnalyticsLogging();
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ThemeProvider } from './contexts/ThemeContext';

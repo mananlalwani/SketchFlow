@@ -96,8 +96,8 @@ type Outbound = { type: 'snapshot'; dataUrl: string };
 let screenCtx: OffscreenCanvasRenderingContext2D | null = null;
 let world: OffscreenCanvas | null = null;
 let worldCtx: OffscreenCanvasRenderingContext2D | null = null;
-let worldW = 4096;
-let worldH = 4096;
+let worldW = 51200;  // 20x 1440p width (2560 × 20)
+let worldH = 28800;  // 20x 1440p height (1440 × 20)
 
 // Retained vector model for precise zoom rendering
 const retainedShapes: Shape[] = [];
@@ -127,8 +127,8 @@ let blitScheduled = false;
 let blitTimer: number | null = null;
 const BLIT_INTERVAL_MS = 1000 / 60; // ~60 FPS cap
 
-// Theme-aware background color (default dark)
-let canvasBgColor = '#0f172a';
+// Theme-aware background color (default dark - must match slate-950)
+let canvasBgColor = '#020617';
 let isLightMode = false;
 
 // Color contrast adjustment for theme switching
@@ -158,7 +158,8 @@ function getLuminance(r: number, g: number, b: number): number {
 }
 
 // Known background colors that should never be adjusted - eraser strokes use these
-const BG_COLORS = ['#0f172a', '#f8fafc'];
+// Must match BG_COLORS in DrawingCanvas.tsx
+const BG_COLORS = ['#020617', '#f8fafc'];
 
 function isBackgroundColor(color: string): boolean {
   const normalized = color.toLowerCase();
@@ -324,8 +325,14 @@ function ensureWorld() {
 }
 
 function drawStrokeToWorld(stroke: Stroke) {
-  // All strokes must have a groupId - add to consolidated path
-  const groupId = stroke.groupId || 'default';
+  // Every stroke MUST have a unique groupId - don't fall back to 'default'
+  // If no groupId is provided, skip consolidation and just return
+  if (!stroke.groupId) {
+    console.warn('Stroke without groupId - skipping consolidation');
+    return;
+  }
+  
+  const groupId = stroke.groupId;
   let path = consolidatedPaths.get(groupId);
   if (!path) {
     path = {

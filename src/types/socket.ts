@@ -13,7 +13,7 @@ export interface StrokeData {
 
 export interface ShapeData {
   id: string;
-  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image';
+  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'star' | 'arrow';
   x: number;
   y: number;
   width: number;
@@ -26,6 +26,8 @@ export interface ShapeData {
   text?: string;
   fontSize?: number;
   imageData?: string;
+  points?: { x: number; y: number }[];  // For custom triangles and other shapes with custom vertices
+  properties?: Record<string, any>;  // For shape-specific properties (e.g., star point count)
   timestamp?: number;
 }
 

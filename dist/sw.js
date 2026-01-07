@@ -84,32 +84,32 @@ define(['./workbox-c6a197bf'], (function (workbox) { 'use strict';
     "url": "assets/html2canvas.esm-CBrSDip1.js",
     "revision": null
   }, {
-    "url": "assets/index-1_O18YMZ.js",
+    "url": "assets/index-COi2c23i.js",
     "revision": null
   }, {
-    "url": "assets/index-BMJdhdPd.css",
+    "url": "assets/index-Da3_u_U0.css",
     "revision": null
   }, {
-    "url": "assets/index.es-cLx-Sc3A.js",
+    "url": "assets/index.es-CYxIm7T6.js",
     "revision": null
   }, {
     "url": "assets/purify.es-B9ZVCkUG.js",
     "revision": null
   }, {
-    "url": "assets/rendererWorker-CohuqjMa.js",
+    "url": "assets/rendererWorker-DGXDA7-H.js",
     "revision": null
   }, {
     "url": "assets/socket-TjCxX7sJ.js",
     "revision": null
   }, {
-    "url": "assets/ui-BNgexoCq.js",
+    "url": "assets/ui-gKPaa_ME.js",
     "revision": null
   }, {
     "url": "assets/vendor-B-a6AGCV.js",
     "revision": null
   }, {
     "url": "index.html",
-    "revision": "b444fc4b6889fd798e80d7f64c363b5b"
+    "revision": "3ee8aad3fc50454ffdc2e35fcfe5b073"
   }, {
     "url": "registerSW.js",
     "revision": "1872c500de691dce40960bb85481de07"

@@ -7,8 +7,8 @@ import { isIOS } from '@/lib/utils';
 import { useFPSCounter } from '@/hooks/useFPSCounter';
 import type { StrokeData, ShapeData } from '@/types/socket';
 
-const WORLD_WIDTH = 4096;
-const WORLD_HEIGHT = 4096;
+const WORLD_WIDTH = 51200;  // 20x 1440p width (2560 × 20)
+const WORLD_HEIGHT = 28800; // 20x 1440p height (1440 × 20)
 
 export function ViewerCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -78,13 +78,13 @@ export function ViewerCanvas() {
     return () => {
       window.removeEventListener('resize', onResize);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [zoom, viewX, viewY]);
 
   // Send theme to worker when it changes
   useEffect(() => {
     if (!workerRef.current) return;
-    const bgColor = theme === 'dark' ? '#0f172a' : '#f8fafc';
+    const bgColor = theme === 'dark' ? '#020617' : '#f8fafc';
     workerRef.current.postMessage({ type: 'theme', bgColor });
   }, [theme]);
 

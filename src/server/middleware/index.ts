@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
-import { Logger, logger } from '../utils/logger.js';
+import { Logger, logger, getTraceContext } from '../utils/logger.js';
 
 /**
  * Request ID middleware - adds correlation ID to all requests
@@ -123,10 +123,13 @@ export function rateLimitMiddleware(options: {
  * Error handling middleware - consistent error responses
  */
 export function errorHandlerMiddleware(err: Error, req: Request, res: Response, _next: NextFunction): void {
+  const traceContext = getTraceContext();
+  
   logger.error('Unhandled error', err, {
     method: req.method,
     path: req.path,
     query: req.query,
+    ...(traceContext.traceId && { traceId: traceContext.traceId }),
   });
 
   // Don't leak error details in production
@@ -137,6 +140,7 @@ export function errorHandlerMiddleware(err: Error, req: Request, res: Response, 
   res.status(500).json({
     error: message,
     requestId: req.headers['x-request-id'],
+    ...(traceContext.traceId && { traceId: traceContext.traceId }),
   });
 }
 

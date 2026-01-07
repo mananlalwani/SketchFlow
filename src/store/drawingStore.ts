@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import { trackToolSelection, trackObjectCreated, trackFeatureUsage } from '../lib/analytics';
 
 export type Tool = 'pen' | 'eraser' | 'line' | 'rectangle' | 'ellipse' | 'triangle' | 'star' | 'text' | 'eyedropper' | 'hand' | 'move' | 'image';
 
@@ -200,7 +201,11 @@ export const useDrawingStore = create<DrawingState>()(
         viewY: 1748,
         
         // Actions
-        setTool: (tool) => set({ currentTool: tool }),
+        setTool: (tool) => {
+          const previousTool = get().currentTool;
+          trackToolSelection(tool, previousTool);
+          set({ currentTool: tool });
+        },
         setEraserMode: (mode) => set({ eraserMode: mode }),
         setObjects: (objects) => set({ objects, objectCount: objects.length, unsavedChanges: true }),
         replaceHistory: (objects) => set({ history: [objects], historyIndex: 0 }),
@@ -228,6 +233,11 @@ export const useDrawingStore = create<DrawingState>()(
         setBrushOpacity: (opacity) => set({ brushOpacity: Math.max(0.1, Math.min(1, opacity)) }),
         
         addObject: (object) => set((state) => {
+          // Track object creation with current tool
+          trackObjectCreated(object.type, state.currentTool, {
+            hasText: !!object.text,
+            filled: object.filled,
+          });
           const newObjects = [...state.objects, object];
           return { objects: newObjects, objectCount: newObjects.length, unsavedChanges: true };
         }),
@@ -239,6 +249,7 @@ export const useDrawingStore = create<DrawingState>()(
         
         clearCanvas: () => {
           const state = get();
+          trackFeatureUsage('clear_canvas', { objectCount: state.objects.length });
           state.saveHistory();
           set({ objects: [], objectCount: 0, unsavedChanges: true });
         },
@@ -277,6 +288,7 @@ export const useDrawingStore = create<DrawingState>()(
         
         undo: () => set((state) => {
           if (state.historyIndex > 0) {
+            trackFeatureUsage('undo', { historyIndex: state.historyIndex });
             const newIndex = state.historyIndex - 1;
             const objects = [...state.history[newIndex]];
             return {
@@ -290,6 +302,7 @@ export const useDrawingStore = create<DrawingState>()(
         
         redo: () => set((state) => {
           if (state.historyIndex < state.history.length - 1) {
+            trackFeatureUsage('redo', { historyIndex: state.historyIndex });
             const newIndex = state.historyIndex + 1;
             const objects = [...state.history[newIndex]];
             return {

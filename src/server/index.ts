@@ -1,4 +1,7 @@
+// Load environment variables first
 import 'dotenv/config';
+// OpenTelemetry must be initialized before other app imports for auto-instrumentation
+import './otel.js';
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';

@@ -1,49 +1,74 @@
 /**
- * Error reporting utility
+ * Error reporting utility with OpenTelemetry integration
  * 
- * This module provides a simple interface for error reporting that can be
- * extended to integrate with services like Sentry, LogRocket, etc.
- * 
- * To integrate Sentry:
- * 1. Install: pnpm add @sentry/react
- * 2. Initialize in main.tsx before render
- * 3. Update this file to use Sentry.captureException
+ * This module provides a simple interface for error reporting that integrates
+ * with OpenTelemetry for trace correlation and can be extended for services
+ * like Sentry, LogRocket, etc.
  */
+import { getTraceContext, recordError, getTracer } from './otel';
 
 interface ErrorContext {
   componentStack?: string;
   [key: string]: unknown;
 }
 
+// Store current user for context
+let currentUserId: string | null = null;
+
 /**
  * Report an error to the error tracking service
  */
 export function reportError(error: Error, context?: ErrorContext): void {
+  const traceContext = getTraceContext();
+  
+  // Record error on current OTel span if available
+  recordError(error);
+
+  // Create a span for the error if we have a tracer
+  const tracer = getTracer();
+  if (tracer) {
+    const span = tracer.startSpan('error.reported');
+    span.setAttribute('error.message', error.message);
+    span.setAttribute('error.name', error.name);
+    if (error.stack) {
+      span.setAttribute('error.stack', error.stack);
+    }
+    if (context?.componentStack) {
+      span.setAttribute('error.componentStack', context.componentStack);
+    }
+    if (currentUserId) {
+      span.setAttribute('user.id', currentUserId);
+    }
+    span.recordException(error);
+    span.end();
+  }
+
+  // Build log context
+  const logContext = {
+    message: error.message,
+    name: error.name,
+    stack: error.stack,
+    ...context,
+    ...(traceContext.traceId && { traceId: traceContext.traceId }),
+    ...(traceContext.spanId && { spanId: traceContext.spanId }),
+    ...(currentUserId && { userId: currentUserId }),
+  };
+
   // In development, just log to console
   if (import.meta.env.DEV) {
-    console.error('[Error Reported]', error, context);
+    console.error('[Error Reported]', error, logContext);
     return;
   }
 
-  // In production, send to error tracking service
-  // TODO: Integrate with Sentry or similar service
-  // Example Sentry integration:
-  // Sentry.captureException(error, { extra: context });
-  
-  // For now, log to console in production as well
-  console.error('[Production Error]', {
-    message: error.message,
-    stack: error.stack,
-    ...context,
-  });
+  // In production, log structured error
+  console.error('[Production Error]', JSON.stringify(logContext));
 }
 
 /**
  * Set user context for error tracking
  */
 export function setErrorUser(userId: string | null): void {
-  // TODO: Integrate with Sentry or similar
-  // Sentry.setUser(userId ? { id: userId } : null);
+  currentUserId = userId;
   
   if (import.meta.env.DEV) {
     console.debug('[Error Tracking] User set:', userId);
@@ -52,12 +77,33 @@ export function setErrorUser(userId: string | null): void {
 
 /**
  * Add breadcrumb for error tracking
+ * Creates an OTel span event for trace correlation
  */
 export function addBreadcrumb(message: string, category?: string, data?: Record<string, unknown>): void {
-  // TODO: Integrate with Sentry or similar
-  // Sentry.addBreadcrumb({ message, category, data });
+  const traceContext = getTraceContext();
+  const tracer = getTracer();
+
+  // Create a span for the breadcrumb
+  if (tracer) {
+    const span = tracer.startSpan(`breadcrumb.${category || 'general'}`);
+    span.setAttribute('breadcrumb.message', message);
+    span.setAttribute('breadcrumb.category', category || 'general');
+    if (data) {
+      Object.entries(data).forEach(([key, value]) => {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          span.setAttribute(`breadcrumb.data.${key}`, value);
+        }
+      });
+    }
+    span.end();
+  }
   
   if (import.meta.env.DEV) {
-    console.debug('[Breadcrumb]', category || 'general', message, data);
+    console.debug('[Breadcrumb]', category || 'general', message, data, traceContext);
   }
 }
+
+/**
+ * Get current trace context for correlation
+ */
+export { getTraceContext } from './otel';
