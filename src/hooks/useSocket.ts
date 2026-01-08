@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useAuthStore } from '@/store/authStore';
 import type { ServerToClientEvents, ClientToServerEvents, StrokeData, ShapeData, CanvasSnapshot } from '@/types/socket';
 
 type SocketInstance = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -161,8 +162,15 @@ export const useSocket = () => {
   const [connectionError, setConnectionError] = useState<Error | null>(null);
   const [connectionCount, setConnectionCount] = useState(1);
   const wasConnectedRef = React.useRef(false);
+  const { isGuest } = useAuthStore();
 
   useEffect(() => {
+    // Don't connect socket for guests
+    if (isGuest) {
+      setIsConnected(false);
+      return;
+    }
+
     const socket = socketManager.connect();
     
     const unsubscribeConnect = socketManager.subscribe('connect', (data: unknown) => {
@@ -196,26 +204,34 @@ export const useSocket = () => {
         socket.off('connection:count');
       }
     };
-  }, []);
+  }, [isGuest]);
 
   const emit = useCallback(<T extends keyof ClientToServerEvents>(
     event: T,
     ...args: Parameters<ClientToServerEvents[T]>
   ) => {
+    // Don't emit for guests
+    if (isGuest) return;
     socketManager.emit(event, ...args);
-  }, []);
+  }, [isGuest]);
 
   const on = useCallback(<T extends keyof ServerToClientEvents>(
     event: T,
     callback: ServerToClientEvents[T]
   ) => {
+    // Mock listener for guests - never calls callback
+    if (isGuest) {
+      return () => {}; // Return no-op cleanup
+    }
     socketManager.on(event, callback);
     return () => socketManager.off(event, callback);
-  }, []);
+  }, [isGuest]);
 
   const reconnect = useCallback(() => {
+    // Don't reconnect for guests
+    if (isGuest) return;
     socketManager.reconnect();
-  }, []);
+  }, [isGuest]);
 
   return {
     isConnected,

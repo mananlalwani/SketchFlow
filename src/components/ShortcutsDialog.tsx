@@ -25,11 +25,11 @@ export function ShortcutsDialog({ mode, open, onOpenChange, showTrigger = true }
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200">
+      <DialogContent className="max-w-2xl max-h-[85vh] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200">
         <DialogHeader>
           <DialogTitle>Keyboard Shortcuts</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-8 py-4">
+        <div className="grid grid-cols-2 gap-8 py-4 overflow-y-auto max-h-[calc(85vh-8rem)] pr-2">
           <div className="space-y-6">
             <div>
               <h3 className="font-semibold mb-3 text-blue-600 dark:text-blue-400">Tools</h3>
@@ -67,10 +67,6 @@ export function ShortcutsDialog({ mode, open, onOpenChange, showTrigger = true }
                     <div className="flex justify-between">
                       <span>Text</span>
                       <kbd className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">T</kbd>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Eyedropper</span>
-                      <kbd className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">I</kbd>
                     </div>
                   </>
                 )}

@@ -1,3 +1,5 @@
+import { localProjectsService } from './localProjects';
+
 export interface ProjectListItem {
   id: string;
   userId: string;
@@ -95,14 +97,26 @@ export async function getClerkToken(): Promise<string | null> {
 }
 
 export async function listProjects(token?: string | null): Promise<ProjectListItem[]> {
+  // If no token provided, assume guest mode (use local storage)
+  if (!token) {
+    return localProjectsService.list();
+  }
   return httpWithRetry<ProjectListItem[]>('/api/projects', undefined, token);
 }
 
 export async function getProject<T = unknown>(id: string, token?: string | null): Promise<ProjectRecord<T>> {
+  if (!token) {
+    const project = await localProjectsService.get(id);
+    if (!project) throw new Error('Project not found');
+    return project as ProjectRecord<T>;
+  }
   return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, undefined, token);
 }
 
 export async function createProject<T = unknown>(title: string, data: T, token?: string | null): Promise<ProjectRecord<T>> {
+  if (!token) {
+    return localProjectsService.create(title, data) as Promise<ProjectRecord<T>>;
+  }
   return httpWithRetry<ProjectRecord<T>>('/api/projects', {
     method: 'POST',
     body: JSON.stringify({ title, data })
@@ -110,6 +124,9 @@ export async function createProject<T = unknown>(title: string, data: T, token?:
 }
 
 export async function updateProject<T = unknown>(id: string, title: string, data: T, token?: string | null): Promise<ProjectRecord<T>> {
+  if (!token) {
+    return localProjectsService.save(id, title, data) as Promise<ProjectRecord<T>>;
+  }
   return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ title, data })
@@ -117,18 +134,28 @@ export async function updateProject<T = unknown>(id: string, title: string, data
 }
 
 export async function deleteProject(id: string, token?: string | null): Promise<void> {
+  if (!token) {
+    await localProjectsService.delete(id);
+    return;
+  }
   return httpWithRetry<void>(`/api/projects/${id}`, {
     method: 'DELETE'
   }, token);
 }
 
 export async function shareProject(id: string, token?: string | null): Promise<{ shareToken: string; shareUrl: string }> {
+  if (!token) {
+    throw new Error('Sharing is not available in guest mode. Please sign in to share projects.');
+  }
   return httpWithRetry<{ shareToken: string; shareUrl: string }>(`/api/projects/${id}/share`, {
     method: 'POST'
   }, token);
 }
 
 export async function unshareProject(id: string, token?: string | null): Promise<void> {
+  if (!token) {
+    throw new Error('Sharing is not available in guest mode. Please sign in to share projects.');
+  }
   return httpWithRetry<void>(`/api/projects/${id}/unshare`, {
     method: 'POST'
   }, token);
@@ -152,10 +179,16 @@ export interface CollaboratorRecord {
 }
 
 export async function getCollaborators(projectId: string, token?: string | null): Promise<CollaboratorRecord[]> {
+  if (!token) {
+    throw new Error('Collaboration is not available in guest mode. Please sign in to collaborate.');
+  }
   return httpWithRetry<CollaboratorRecord[]>(`/api/projects/${projectId}/collaborators`, undefined, token);
 }
 
 export async function addCollaboratorByEmail(projectId: string, email: string, role: 'editor' | 'viewer' = 'editor', token?: string | null): Promise<void> {
+  if (!token) {
+    throw new Error('Collaboration is not available in guest mode. Please sign in to collaborate.');
+  }
   return httpWithRetry<void>(`/api/projects/${projectId}/collaborators`, {
     method: 'POST',
     body: JSON.stringify({ email, role })
@@ -163,6 +196,9 @@ export async function addCollaboratorByEmail(projectId: string, email: string, r
 }
 
 export async function removeCollaborator(projectId: string, collaboratorUserId: string, token?: string | null): Promise<void> {
+  if (!token) {
+    throw new Error('Collaboration is not available in guest mode. Please sign in to collaborate.');
+  }
   return httpWithRetry<void>(`/api/projects/${projectId}/collaborators/${collaboratorUserId}`, {
     method: 'DELETE'
   }, token);
@@ -170,10 +206,17 @@ export async function removeCollaborator(projectId: string, collaboratorUserId: 
 
 // Folder APIs
 export async function listFolders(token?: string | null): Promise<FolderRecord[]> {
+  if (!token) {
+    // Guests don't have folders
+    return [];
+  }
   return httpWithRetry<FolderRecord[]>('/api/folders', undefined, token);
 }
 
 export async function createFolder(name: string, color?: string, parentId?: string | null, token?: string | null): Promise<FolderRecord> {
+  if (!token) {
+    throw new Error('Folders are not available in guest mode. Please sign in to organize projects.');
+  }
   return httpWithRetry<FolderRecord>('/api/folders', {
     method: 'POST',
     body: JSON.stringify({ name, color, parentId })
@@ -181,6 +224,9 @@ export async function createFolder(name: string, color?: string, parentId?: stri
 }
 
 export async function updateFolder(id: string, name: string, color?: string, parentId?: string | null, token?: string | null): Promise<FolderRecord> {
+  if (!token) {
+    throw new Error('Folders are not available in guest mode. Please sign in to organize projects.');
+  }
   return httpWithRetry<FolderRecord>(`/api/folders/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ name, color, parentId })
@@ -188,12 +234,18 @@ export async function updateFolder(id: string, name: string, color?: string, par
 }
 
 export async function deleteFolder(id: string, token?: string | null): Promise<void> {
+  if (!token) {
+    throw new Error('Folders are not available in guest mode. Please sign in to organize projects.');
+  }
   return httpWithRetry<void>(`/api/folders/${id}`, {
     method: 'DELETE'
   }, token);
 }
 
 export async function moveProjectToFolder(projectId: string, folderId: string | null, token?: string | null): Promise<void> {
+  if (!token) {
+    throw new Error('Folders are not available in guest mode. Please sign in to organize projects.');
+  }
   return httpWithRetry<void>(`/api/projects/${projectId}/move`, {
     method: 'POST',
     body: JSON.stringify({ folderId })

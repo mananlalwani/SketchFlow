@@ -6,6 +6,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { isIOS } from '@/lib/utils';
 import { useFPSCounter } from '@/hooks/useFPSCounter';
 import type { StrokeData, ShapeData } from '@/types/socket';
+import { LiveCursors } from './LiveCursors';
+import { useLiveCursors } from '@/hooks/useLiveCursors';
 
 const WORLD_WIDTH = 51200;  // 20x 1440p width (2560 × 20)
 const WORLD_HEIGHT = 28800; // 20x 1440p height (1440 × 20)
@@ -20,10 +22,12 @@ export function ViewerCanvas() {
     updatePerformanceStats,
     setZoom,
     setView,
-    resetView
+    resetView,
+    currentProjectId,
   } = useDrawingStore();
 
   const { on } = useDrawingSocket();
+  const { cursors, emitCursor } = useLiveCursors(currentProjectId);
   const { metrics, updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
   const liveFps = useFPSCounter();
   const { theme } = useTheme();
@@ -261,6 +265,17 @@ export function ViewerCanvas() {
   }, [viewX, viewY]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    // Emit cursor position for live cursors (viewers can show cursor but not draw)
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const worldX = viewX + screenX / zoom;
+      const worldY = viewY + screenY / zoom;
+      emitCursor(worldX, worldY);
+    }
+    
     if (!isPanning || !panStart) return;
 
     const now = performance.now();
@@ -277,7 +292,7 @@ export function ViewerCanvas() {
     const newViewY = Math.max(0, Math.min(WORLD_HEIGHT, panStart.viewY - deltaY / zoom));
     
     setView(newViewX, newViewY);
-  }, [isPanning, panStart, zoom, setView, metrics.adaptiveQuality]);
+  }, [isPanning, panStart, zoom, setView, metrics.adaptiveQuality, viewX, viewY, emitCursor]);
 
   const handlePointerUp = useCallback(() => {
     setIsPanning(false);
@@ -401,6 +416,18 @@ export function ViewerCanvas() {
         onPointerLeave={handlePointerUp}
         onWheel={handleWheel}
       />
+      
+      {/* Live Cursors */}
+      {canvasRef.current && (
+        <LiveCursors
+          cursors={cursors}
+          zoom={zoom}
+          viewX={viewX}
+          viewY={viewY}
+          canvasWidth={canvasRef.current.getBoundingClientRect().width}
+          canvasHeight={canvasRef.current.getBoundingClientRect().height}
+        />
+      )}
     </div>
   );
 }

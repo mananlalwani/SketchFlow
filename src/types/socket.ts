@@ -38,6 +38,15 @@ export interface CanvasSnapshot {
   timestamp?: number;
 }
 
+export interface CursorData {
+  userId: string;
+  username: string;
+  x: number;
+  y: number;
+  color: string;
+  timestamp?: number;
+}
+
 // Project file format for import/export
 export type ProjectVersion = '1.0.0';
 
@@ -125,6 +134,10 @@ export interface ServerToClientEvents {
   'canvas:snapshot': (snapshot: CanvasSnapshot) => void;
   'canvas:clear': () => void;
   'connection:count': (count: number) => void;
+  'cursor:move': (cursor: CursorData) => void;
+  'cursor:join': (cursor: CursorData) => void;
+  'cursor:leave': (userId: string) => void;
+  'cursors:all': (cursors: CursorData[]) => void;
 }
 
 export interface ClientToServerEvents {
@@ -133,6 +146,9 @@ export interface ClientToServerEvents {
   'draw:shape': (shape: ShapeData) => void;
   'canvas:snapshot': (snapshot: CanvasSnapshot) => void;
   'canvas:clear': () => void;
+  'cursor:move': (cursor: CursorData) => void;
+  'room:join': (projectId: string) => void;
+  'room:leave': () => void;
 }
 
 

@@ -1,5 +1,6 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useState, useMemo, useRef } from 'react';
+import { useAuthStore } from '@/store/authStore';
 import { 
   listProjects, 
   createProject, 
@@ -28,7 +29,6 @@ import {
   Plus, 
   FolderOpen, 
   Trash2, 
-  Cloud, 
   Clock, 
   Loader2,
   FileEdit,
@@ -53,7 +53,9 @@ import {
   FolderPlus,
   Home,
   FolderInput,
-  Share2
+  Share2,
+  X,
+  Info
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -93,9 +95,13 @@ const FOLDER_COLORS = [
 
 export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const { getToken, userId, isLoaded } = useAuth();
+  const { isGuest, isAuthenticated } = useAuthStore();
   const { toast } = useToast();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
+  const [guestBannerDismissed, setGuestBannerDismissed] = useState(() => {
+    return localStorage.getItem('guest-banner-dismissed') === 'true';
+  });
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -151,38 +157,70 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     setProjectTitle, 
     setCurrentProject, 
     markSaved,
-    currentProjectId
+    currentProjectId,
+    setProjectRole
   } = useDrawingStore();
 
+  const handleDismissBanner = () => {
+    setGuestBannerDismissed(true);
+    localStorage.setItem('guest-banner-dismissed', 'true');
+  };
+
   const loadData = async () => {
-    if (!userId) return;
     setLoading(true);
     try {
-      const token = await getToken();
-      const [projectList, folderList] = await Promise.all([
-        listProjects(token),
-        listFolders(token).catch(() => [] as FolderRecord[])
-      ]);
-      setProjects(projectList.filter(p => p && p.id).map(p => ({
-        ...p,
-        shared: p.shared ?? false,
-        role: p.role ?? 'owner'
-      })));
-      setFolders(folderList);
+      if (isGuest) {
+        // For guests, load local projects only
+        const projectList = await listProjects(null);
+        setProjects(projectList.filter(p => p && p.id).map(p => ({
+          ...p,
+          shared: p.shared ?? false,
+          role: p.role ?? 'owner'
+        })));
+        setFolders([]);
+      } else if (userId) {
+        // For authenticated users, load from server
+        const token = await getToken();
+        const [projectList, folderList] = await Promise.all([
+          listProjects(token),
+          listFolders(token).catch(() => [] as FolderRecord[])
+        ]);
+        setProjects(projectList.filter(p => p && p.id).map(p => ({
+          ...p,
+          shared: p.shared ?? false,
+          role: p.role ?? 'owner'
+        })));
+        setFolders(folderList);
+      }
     } catch (e) {
-      console.error(e);
-      toast({ title: 'Failed to load projects', variant: 'destructive' });
+      console.error('Failed to load projects:', e);
+      // For guests, an empty list is fine (they might be new)
+      // Only show error toast for authenticated users
+      if (!isGuest) {
+        toast({ title: 'Failed to load projects', variant: 'destructive' });
+      }
+      // Set empty arrays so UI can still render
+      setProjects([]);
+      setFolders([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isLoaded && userId) {
+    if (isLoaded) {
       loadData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, userId]);
+  }, [isLoaded, userId, isGuest]);
+
+  // Reset banner dismissal when user signs in
+  useEffect(() => {
+    if (isAuthenticated) {
+      localStorage.removeItem('guest-banner-dismissed');
+      setGuestBannerDismissed(false);
+    }
+  }, [isAuthenticated]);
 
   const filteredProjects = useMemo(() => {
     let result = [...projects];
@@ -307,8 +345,30 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     setShowNewProjectDialog(true);
   };
 
+  // Guest-friendly: Create a local project and start drawing immediately
+  const handleCreateGuestProject = async () => {
+    const projectName = 'My Drawing';
+    setCreating(true);
+    try {
+      const emptyProjectData = serializeProject([], 4096, 4096);
+      // For guests, createProject will route to local storage
+      const newProj = await createProject(projectName, emptyProjectData, null);
+      await handleLoad(newProj.id);
+      if (onSelect) onSelect();
+    } catch (e) {
+      console.error('Create local project error:', e);
+      toast({ title: 'Failed to create project', variant: 'destructive' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const handleCreate = async () => {
-    if (!userId) return;
+    if (!userId) {
+      // For guests, create local project directly
+      await handleCreateGuestProject();
+      return;
+    }
     const projectName = newProjectName.trim() || 'Untitled Project';
     setCreating(true);
     setShowNewProjectDialog(false);
@@ -344,6 +404,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       setProjectTitle(record.title);
       setCurrentProject(record.id);
       markSaved();
+      
+      // Set project role - guests always get 'owner' role for local projects
+      const role = isGuest ? 'owner' : (record.role || 'owner');
+      setProjectRole(role);
       
       localStorage.setItem('lastProjectId', record.id);
       
@@ -688,34 +752,67 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
   if (!isLoaded) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-400" /></div>;
 
-  if (!userId) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
-        <Cloud className="w-16 h-16 text-slate-400 dark:text-slate-600 mb-4" />
-        <h2 className="text-2xl font-bold mb-2 text-slate-900 dark:text-slate-100">Cloud Sync</h2>
-        <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-sm">Sign in to save your drawings to the cloud and access them from anywhere.</p>
-        <div className="text-sm text-slate-500">Use the Sign In button in the top right.</div>
-      </div>
-    );
-  }
+  // Don't block guests - they can use local storage
+  // if (!userId && !isGuest) {
+  //   return (
+  //     <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+  //       <Cloud className="w-16 h-16 text-slate-400 dark:text-slate-600 mb-4" />
+  //       <h2 className="text-2xl font-bold mb-2 text-slate-900 dark:text-slate-100">Cloud Sync</h2>
+  //       <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-sm">Sign in to save your drawings to the cloud and access them from anywhere.</p>
+  //       <div className="text-sm text-slate-500">Use the Sign In button in the top right.</div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <>
-    <div className="flex h-full w-full animate-fade-in bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+    <div className="flex h-full w-full animate-fade-in bg-slate-50 dark:bg-slate-950 transition-colors duration-200 flex-col">
+      {/* Guest Mode Banner - Dismissable */}
+      {isGuest && !guestBannerDismissed && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b border-blue-200 dark:border-blue-800/50 px-6 py-3">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                <Info className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                  You're in Guest Mode
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Projects are saved locally. Sign in to sync and collaborate.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDismissBanner}
+              className="h-8 w-8 p-0 hover:bg-blue-200 dark:hover:bg-blue-900/50"
+            >
+              <X className="w-4 h-4 text-blue-700 dark:text-blue-300" />
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      <div className="flex flex-1 overflow-hidden">
       {/* Folder Sidebar */}
       <div className="w-56 border-r border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-900/30 flex flex-col shrink-0 transition-colors duration-200">
         <div className="p-3 border-b border-slate-200 dark:border-white/10">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Folders</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-              onClick={() => setCreatingFolder(true)}
-              title="New Folder"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-            </Button>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{isGuest ? 'Local Projects' : 'Folders'}</span>
+            {!isGuest && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                onClick={() => setCreatingFolder(true)}
+                title="New Folder"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+              </Button>
+            )}
           </div>
           {creatingFolder && (
             <div className="flex gap-1">
@@ -995,14 +1092,34 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           ) : (
             <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-300 dark:border-white/10 rounded-2xl bg-white/50 dark:bg-white/5 p-12">
               <Sparkles className="w-12 h-12 text-blue-500 dark:text-blue-400 mb-4" />
-              <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">Start Creating</h3>
-              <p className="text-slate-500 mb-6 text-center max-w-sm">Create your first drawing or import an existing project.</p>
+              <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">
+                {isGuest ? 'Start Drawing Locally' : 'Start Creating'}
+              </h3>
+              <p className="text-slate-500 mb-6 text-center max-w-sm">
+                {isGuest 
+                  ? 'Create a local drawing project. Sign in to sync and collaborate.' 
+                  : 'Create your first drawing or import an existing project.'}
+              </p>
               <div className="flex gap-3">
-                <Button onClick={openNewProjectDialog} className="bg-blue-600 hover:bg-blue-500">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Project
+                <Button 
+                  onClick={isGuest ? handleCreateGuestProject : openNewProjectDialog} 
+                  disabled={creating}
+                  className="bg-blue-600 hover:bg-blue-500"
+                >
+                  {creating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {isGuest ? 'Start Drawing' : 'New Project'}
+                    </>
+                  )}
                 </Button>
-                <DropdownMenu>
+                {!isGuest && (
+                  <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" className="border-slate-300 dark:border-white/20">
                       <Upload className="w-4 h-4 mr-2" />
@@ -1020,6 +1137,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                )}
               </div>
             </div>
           )
@@ -1083,18 +1201,19 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         <Pencil className="w-4 h-4 mr-2" />
                         Rename
                       </DropdownMenuItem>
-                      {(project.role === 'owner' || !project.role) && (
+                      {!isGuest && (project.role === 'owner' || !project.role) && (
                         <DropdownMenuItem onSelect={() => setSharingProject(project)}>
                           <Share2 className="w-4 h-4 mr-2" />
                           Share
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          <FolderInput className="w-4 h-4 mr-2" />
-                          Move to folder
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
+                      {!isGuest && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <FolderInput className="w-4 h-4 mr-2" />
+                            Move to folder
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
                           <DropdownMenuItem onSelect={() => handleMoveToFolder(project.id, null)}>
                             <Home className="w-4 h-4 mr-2" />
                             All Projects
@@ -1110,7 +1229,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuSubContent>
-                      </DropdownMenuSub>
+                        </DropdownMenuSub>
+                      )}
                       <DropdownMenuItem onSelect={() => {
                         getToken().then(token => {
                           getProject<ReturnType<typeof serializeProject>>(project.id, token).then(record => {
@@ -1282,18 +1402,19 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         <Pencil className="w-4 h-4 mr-2" />
                         Rename
                       </DropdownMenuItem>
-                      {(project.role === 'owner' || !project.role) && (
+                      {!isGuest && (project.role === 'owner' || !project.role) && (
                         <DropdownMenuItem onSelect={() => setSharingProject(project)}>
                           <Share2 className="w-4 h-4 mr-2" />
                           Share
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          <FolderInput className="w-4 h-4 mr-2" />
-                          Move to folder
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
+                      {!isGuest && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <FolderInput className="w-4 h-4 mr-2" />
+                            Move to folder
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
                           <DropdownMenuItem onSelect={() => handleMoveToFolder(project.id, null)}>
                             <Home className="w-4 h-4 mr-2" />
                             All Projects
@@ -1309,7 +1430,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuSubContent>
-                      </DropdownMenuSub>
+                        </DropdownMenuSub>
+                      )}
                       <DropdownMenuItem onSelect={() => {
                         getToken().then(token => {
                           getProject<ReturnType<typeof serializeProject>>(project.id, token).then(record => {
@@ -1383,6 +1505,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           </div>
         )}
       </div>
+    </div>
     </div>
   </div>
 

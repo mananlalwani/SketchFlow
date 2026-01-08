@@ -1,8 +1,15 @@
 import { useSocket } from '@/hooks/useSocket';
+import { useAuthStore } from '@/store/authStore';
 import { Wifi, WifiOff, Loader2 } from 'lucide-react';
 
 export function ConnectionStatus() {
   const { isConnected, connectionError, reconnect } = useSocket();
+  const { isGuest } = useAuthStore();
+
+  // Don't show connection status for guests
+  if (isGuest) {
+    return null;
+  }
 
   if (isConnected) {
     return (

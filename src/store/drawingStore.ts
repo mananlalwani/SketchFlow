@@ -45,6 +45,7 @@ interface DrawingState {
   unsavedChanges: boolean;
   lastSavedAt?: number;
   currentProjectId?: string;
+  projectRole?: 'owner' | 'editor' | 'viewer' | null;
   brushSize: number;
   brushColor: string;
   brushOpacity: number;
@@ -104,6 +105,7 @@ interface DrawingState {
   markDirty: () => void;
   newProject: () => void;
   setCurrentProject: (id: string | undefined) => void;
+  setProjectRole: (role: 'owner' | 'editor' | 'viewer' | null) => void;
   setBrushSize: (size: number) => void;
   setBrushColor: (color: string) => void;
   setBrushOpacity: (opacity: number) => void;
@@ -214,6 +216,7 @@ export const useDrawingStore = create<DrawingState>()(
         setProjectTitle: (title) => set({ projectTitle: title, unsavedChanges: true }),
         markSaved: () => set({ unsavedChanges: false, lastSavedAt: Date.now() }),
         markDirty: () => set({ unsavedChanges: true }),
+        setProjectRole: (role) => set({ projectRole: role }),
         newProject: () => {
           set({ 
             objects: [], 

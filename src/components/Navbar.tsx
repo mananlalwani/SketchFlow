@@ -12,7 +12,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 export function Navbar() {
   const location = useLocation();
   const { isConnected, objectCount, fps } = useDrawingStore();
-  const { user, isAuthenticated, isLoading } = useAuthStore();
+  const { user, isAuthenticated, isLoading, isGuest } = useAuthStore();
   const { reconnect } = useSocket();
   const clerk = useClerk();
   const [navVisible, setNavVisible] = useState(true);
@@ -115,33 +115,40 @@ export function Navbar() {
             </h1>
           </div>
           
-          {/* Connection status */}
-          <div className="flex items-center gap-2">
-            <div className={cn(
-              "flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300",
-              isConnected 
-                ? "bg-green-100 dark:bg-gradient-to-r dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-400/40 shadow-lg shadow-green-500/10 dark:shadow-green-500/20" 
-                : "bg-red-100 dark:bg-gradient-to-r dark:from-red-500/20 dark:to-rose-500/20 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-400/40 shadow-lg shadow-red-500/10 dark:shadow-red-500/20"
-            )}>
-              {isConnected ? (
-                <Wifi className="w-3.5 h-3.5 animate-pulse" />
-              ) : (
-                <WifiOff className="w-3.5 h-3.5" />
-              )}
-              <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+          {/* Connection status or Guest badge */}
+          {isGuest ? (
+            <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 bg-amber-100 dark:bg-gradient-to-r dark:from-amber-500/20 dark:to-yellow-500/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-400/40 shadow-lg shadow-amber-500/10 dark:shadow-amber-500/20">
+              <User className="w-3.5 h-3.5" />
+              <span>Guest Mode</span>
             </div>
-            {!isConnected && (
-              <Button
-                onClick={reconnect}
-                variant="secondary"
-                size="sm"
-                title="Retry connection"
-                className="h-8 px-3 hover:scale-105"
-              >
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              </Button>
-            )}
-          </div>
+          ) : isAuthenticated && (
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                "flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300",
+                isConnected 
+                  ? "bg-green-100 dark:bg-gradient-to-r dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-400/40 shadow-lg shadow-green-500/10 dark:shadow-green-500/20" 
+                  : "bg-red-100 dark:bg-gradient-to-r dark:from-red-500/20 dark:to-rose-500/20 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-400/40 shadow-lg shadow-red-500/10 dark:shadow-red-500/20"
+              )}>
+                {isConnected ? (
+                  <Wifi className="w-3.5 h-3.5 animate-pulse" />
+                ) : (
+                  <WifiOff className="w-3.5 h-3.5" />
+                )}
+                <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+              </div>
+              {!isConnected && (
+                <Button
+                  onClick={reconnect}
+                  variant="secondary"
+                  size="sm"
+                  title="Retry connection"
+                  className="h-8 px-3 hover:scale-105"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Navigation */}

@@ -425,8 +425,21 @@ class LiveDrawServer {
   }
 
   private setupSocketHandlers(): void {
+    // Track active cursors per room
+    const roomCursors = new Map<string, Map<string, { userId: string; username: string; x: number; y: number; color: string; timestamp: number }>>();
+    
+    // Generate color for user
+    const getUserColor = (userId: string): string => {
+      const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
+      const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      return colors[hash % colors.length];
+    };
+    
     this.io.on('connection', (socket) => {
       const clientId = socket.id;
+      let currentRoom: string | null = null;
+      let currentUserId: string | null = null;
+      
       logger.info(`Client connected: ${clientId}`);
       
       this.drawingService.addConnection(clientId);
@@ -440,11 +453,29 @@ class LiveDrawServer {
         socket.emit('canvas:snapshot', currentSnapshot);
       }
 
+      // Helper to check if user can edit in current room
+      const canUserEdit = async (): Promise<boolean> => {
+        if (!currentRoom || !currentUserId) return false;
+        
+        // Check permission
+        const canEdit = await this.projectService.checkPermission(currentRoom, currentUserId, 'edit');
+        return canEdit;
+      };
+
       // Handle drawing strokes
-      socket.on('draw:stroke', (stroke: StrokeData) => {
+      socket.on('draw:stroke', async (stroke: StrokeData) => {
         if (!this.isValidStroke(stroke)) {
           logger.warn(`Invalid stroke from ${clientId}:`, { stroke });
           return;
+        }
+
+        // Check if user has edit permission
+        if (currentRoom && currentUserId) {
+          const canEdit = await canUserEdit();
+          if (!canEdit) {
+            logger.warn(`User ${currentUserId} attempted to draw without permission in ${currentRoom}`);
+            return;
+          }
         }
 
         try {
@@ -456,8 +487,17 @@ class LiveDrawServer {
       });
 
       // Handle batch strokes
-      socket.on('draw:strokes', (strokes: StrokeData[]) => {
+      socket.on('draw:strokes', async (strokes: StrokeData[]) => {
         if (!Array.isArray(strokes) || strokes.length === 0) return;
+        
+        // Check edit permission
+        if (currentRoom && currentUserId) {
+          const canEdit = await canUserEdit();
+          if (!canEdit) {
+            logger.warn(`User ${currentUserId} attempted to draw without permission in ${currentRoom}`);
+            return;
+          }
+        }
         
         const validStrokes = strokes
           .slice(0, 100) // Limit batch size
@@ -474,10 +514,19 @@ class LiveDrawServer {
       });
 
       // Handle shapes
-      socket.on('draw:shape', (shape: ShapeData) => {
+      socket.on('draw:shape', async (shape: ShapeData) => {
         if (!this.isValidShape(shape)) {
           logger.warn(`Invalid shape from ${clientId}:`, { shape });
           return;
+        }
+
+        // Check edit permission
+        if (currentRoom && currentUserId) {
+          const canEdit = await canUserEdit();
+          if (!canEdit) {
+            logger.warn(`User ${currentUserId} attempted to draw without permission in ${currentRoom}`);
+            return;
+          }
         }
 
         try {
@@ -507,7 +556,16 @@ class LiveDrawServer {
       });
 
       // Handle clear canvas
-      socket.on('canvas:clear', () => {
+      socket.on('canvas:clear', async () => {
+        // Check edit permission
+        if (currentRoom && currentUserId) {
+          const canEdit = await canUserEdit();
+          if (!canEdit) {
+            logger.warn(`User ${currentUserId} attempted to clear canvas without permission in ${currentRoom}`);
+            return;
+          }
+        }
+        
         try {
           this.drawingService.clearCanvas();
           this.io.emit('canvas:clear');
@@ -517,9 +575,99 @@ class LiveDrawServer {
         }
       });
 
+      // Handle room join
+      socket.on('room:join', (projectId: string) => {
+        // Leave previous room if any
+        if (currentRoom) {
+          socket.leave(currentRoom);
+          // Remove cursor from previous room
+          if (currentUserId && roomCursors.has(currentRoom)) {
+            roomCursors.get(currentRoom)?.delete(currentUserId);
+            this.io.to(currentRoom).emit('cursor:leave', currentUserId);
+          }
+        }
+        
+        // Join new room
+        currentRoom = projectId;
+        socket.join(projectId);
+        
+        // Initialize room cursor map if needed
+        if (!roomCursors.has(projectId)) {
+          roomCursors.set(projectId, new Map());
+        }
+        
+        // Send all existing cursors in room to new joiner
+        const cursorsInRoom = roomCursors.get(projectId);
+        if (cursorsInRoom) {
+          const allCursors = Array.from(cursorsInRoom.values());
+          socket.emit('cursors:all', allCursors);
+        }
+        
+        logger.info(`Client ${clientId} joined room: ${projectId}`);
+      });
+      
+      // Handle room leave
+      socket.on('room:leave', () => {
+        if (currentRoom && currentUserId) {
+          socket.leave(currentRoom);
+          // Remove cursor
+          if (roomCursors.has(currentRoom)) {
+            roomCursors.get(currentRoom)?.delete(currentUserId);
+            this.io.to(currentRoom).emit('cursor:leave', currentUserId);
+          }
+          currentRoom = null;
+        }
+      });
+      
+      // Handle cursor movement
+      socket.on('cursor:move', (cursor) => {
+        if (!currentRoom) return;
+        
+        // Validate cursor data
+        if (!cursor || typeof cursor.userId !== 'string' || 
+            typeof cursor.x !== 'number' || typeof cursor.y !== 'number') {
+          return;
+        }
+        
+        // Store current user ID
+        if (!currentUserId) {
+          currentUserId = cursor.userId;
+        }
+        
+        // Ensure color is set
+        if (!cursor.color) {
+          cursor.color = getUserColor(cursor.userId);
+        }
+        
+        // Update cursor in room
+        const roomCursorMap = roomCursors.get(currentRoom);
+        if (roomCursorMap) {
+          roomCursorMap.set(cursor.userId, {
+            userId: cursor.userId,
+            username: cursor.username,
+            x: cursor.x,
+            y: cursor.y,
+            color: cursor.color,
+            timestamp: Date.now()
+          });
+        }
+        
+        // Broadcast to others in room
+        socket.to(currentRoom).emit('cursor:move', cursor);
+      });
+
       // Handle disconnection
       socket.on('disconnect', (reason) => {
         this.drawingService.removeConnection(clientId);
+        
+        // Clean up cursor from current room
+        if (currentRoom && currentUserId) {
+          if (roomCursors.has(currentRoom)) {
+            roomCursors.get(currentRoom)?.delete(currentUserId);
+            this.io.to(currentRoom).emit('cursor:leave', currentUserId);
+          }
+        }
+        
         // Broadcast updated connection count to all remaining clients
         this.io.emit('connection:count', this.drawingService.getConnectionCount());
         logger.info(`Client disconnected: ${clientId}, reason: ${reason}`);
