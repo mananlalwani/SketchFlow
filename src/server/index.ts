@@ -327,6 +327,13 @@ class LiveDrawServer {
           return res.status(404).json({ error: 'User not found with that email' });
         }
         
+        // Extra safety check: prevent adding yourself
+        if (collaboratorUserId === userId) {
+          return res.status(400).json({ error: 'Cannot add yourself as a collaborator' });
+        }
+        
+        logger.info(`Adding collaborator ${collaboratorUserId} to project ${req.params.id} by owner ${userId}`);
+        
         const added = await this.projectService.addCollaborator(req.params.id, userId, collaboratorUserId, role || 'editor');
         if (!added) {
           return res.status(404).json({ error: 'Project not found or unauthorized' });
@@ -480,7 +487,8 @@ class LiveDrawServer {
 
         try {
           this.drawingService.addStroke(stroke);
-          socket.broadcast.emit('draw:stroke', stroke);
+          // Only broadcast to other clients in the same room/project
+          socket.to(currentRoom).emit('draw:stroke', stroke);
         } catch (error) {
           logger.error(`Error processing stroke from ${clientId}:`, error);
         }
@@ -507,7 +515,8 @@ class LiveDrawServer {
 
         try {
           this.drawingService.addStrokes(validStrokes);
-          socket.broadcast.emit('draw:strokes', validStrokes);
+          // Only broadcast to other clients in the same room/project
+          socket.to(currentRoom).emit('draw:strokes', validStrokes);
         } catch (error) {
           logger.error(`Error processing strokes batch from ${clientId}:`, error);
         }
@@ -531,7 +540,8 @@ class LiveDrawServer {
 
         try {
           this.drawingService.addShape(shape);
-          socket.broadcast.emit('draw:shape', shape);
+          // Only broadcast to other clients in the same room/project
+          socket.to(currentRoom).emit('draw:shape', shape);
         } catch (error) {
           logger.error(`Error processing shape from ${clientId}:`, error);
         }
@@ -546,9 +556,9 @@ class LiveDrawServer {
 
         try {
           this.drawingService.updateSnapshot(snapshot);
-          // Throttled broadcast to prevent spam
+          // Throttled broadcast to prevent spam - only to room
           this.drawingService.broadcastSnapshotThrottled(() => {
-            socket.broadcast.emit('canvas:snapshot', snapshot);
+            socket.to(currentRoom).emit('canvas:snapshot', snapshot);
           });
         } catch (error) {
           logger.error(`Error processing snapshot from ${clientId}:`, error);
@@ -568,8 +578,9 @@ class LiveDrawServer {
         
         try {
           this.drawingService.clearCanvas();
-          this.io.emit('canvas:clear');
-          logger.info(`Canvas cleared by ${clientId}`);
+          // Only broadcast to clients in the same room/project
+          socket.to(currentRoom).emit('canvas:clear');
+          logger.info(`Canvas cleared by ${clientId} in room ${currentRoom}`);
         } catch (error) {
           logger.error(`Error clearing canvas from ${clientId}:`, error);
         }
@@ -590,7 +601,10 @@ class LiveDrawServer {
         // Join new room
         currentRoom = projectId;
         socket.join(projectId);
-        
+
+        // Log room join for debugging
+        logger.debug(`Client ${clientId} joined room ${projectId}`);
+
         // Initialize room cursor map if needed
         if (!roomCursors.has(projectId)) {
           roomCursors.set(projectId, new Map());
@@ -762,6 +776,10 @@ class LiveDrawServer {
         logger.info(`Server running on:`);
         logger.info(`   - http://localhost:${env.PORT}`);
         ips.forEach(ip => logger.info(`   - http://${ip}:${env.PORT}`));
+        
+        // Clean up any corrupt collaborator data on startup
+        logger.info('Running collaborator data cleanup...');
+        await this.projectService.cleanupCorruptCollaborators();
         
         resolve();
       });

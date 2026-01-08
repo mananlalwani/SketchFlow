@@ -31,7 +31,7 @@ export function requestLoggingMiddleware(req, res, next) {
 /**
  * Security headers middleware (helmet-like)
  */
-export function securityHeadersMiddleware(req, res, next) {
+export function securityHeadersMiddleware(_req, res, next) {
     // Prevent MIME type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // Prevent clickjacking

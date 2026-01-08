@@ -9,7 +9,7 @@ declare const envSchema: z.ZodObject<{
         production: "production";
         test: "test";
     }>>;
-    PORT: z.ZodDefault<z.ZodPipe<z.ZodString, z.ZodTransform<number, string>>>;
+    PORT: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     HOST: z.ZodDefault<z.ZodString>;
     DATABASE_URL: z.ZodString;
     CLERK_SECRET_KEY: z.ZodString;

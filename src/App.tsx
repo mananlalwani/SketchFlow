@@ -12,12 +12,15 @@ import { AutoSaveHandler } from '@/components/AutoSaveHandler';
 import { ProjectManager } from '@/components/ProjectManager';
 import { useAuth } from '@clerk/clerk-react';
 import { deserializeProject } from '@/lib/utils';
+import { useProjectMigration } from '@/hooks/useProjectMigration';
+import { WelcomeTutorial, EmptyStateHint } from '@/components/WelcomeTutorial';
 
 function EditorRoute() {
   // Helper to restore last session on load if nothing loaded
   const { objectCount, currentProjectId, setObjects, replaceHistory, setProjectTitle, requestFullRedraw } = useDrawingStore();
   const { userId, isLoaded } = useAuth();
   const [initialized, setInitialized] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -52,6 +55,16 @@ function EditorRoute() {
     setInitialized(true);
   }, [isLoaded, userId, currentProjectId, setObjects, replaceHistory, setProjectTitle, requestFullRedraw]);
 
+  // Show tutorial on first visit
+  useEffect(() => {
+    if (initialized && currentProjectId && objectCount === 0) {
+      const tutorialCompleted = localStorage.getItem('live-draw-tutorial-completed');
+      if (!tutorialCompleted) {
+        setShowTutorial(true);
+      }
+    }
+  }, [initialized, currentProjectId, objectCount]);
+
   if (!initialized) return null;
 
   // Show ProjectManager (Welcome Screen) if no content and no active project
@@ -67,6 +80,8 @@ function EditorRoute() {
     <Layout>
       <AutoSaveHandler />
       <DrawingCanvas />
+      {!showTutorial && <EmptyStateHint />}
+      {showTutorial && <WelcomeTutorial onComplete={() => setShowTutorial(false)} />}
     </Layout>
   );
 }
@@ -74,6 +89,9 @@ function EditorRoute() {
 function App() {
   const { isConnected } = useSocket();
   const { setConnectionStatus } = useDrawingStore();
+  
+  // Handle automatic migration of guest projects when user signs in
+  useProjectMigration();
 
   useEffect(() => {
     setConnectionStatus(isConnected);

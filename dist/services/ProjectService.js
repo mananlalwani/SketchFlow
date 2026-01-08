@@ -16,7 +16,6 @@ export class ProjectService {
                 return false;
             const isOwner = project.userId === userId;
             const collaborator = project.collaborators.find(c => c.userId === userId);
-            const role = isOwner ? 'owner' : (collaborator?.role || null);
             switch (action) {
                 case 'view':
                     return isOwner || !!collaborator || project.shared;
@@ -84,7 +83,7 @@ export class ProjectService {
             }
             catch (e) {
                 // Collaborators table might not exist yet - fallback to simple query
-                logger.warn('Collaborators query failed, falling back to simple query', e);
+                logger.warn('Collaborators query failed, falling back to simple query', { error: e });
                 const projects = await prisma.project.findMany({
                     where: { userId },
                     select: {
@@ -111,7 +110,7 @@ export class ProjectService {
                 }));
             }
             // Combine and dedupe (in case user is both owner and collaborator somehow)
-            const allProjects = [...ownedProjects, ...collaboratedProjects];
+            const allProjects = [...ownedProjects, ...(collaboratedProjects || [])];
             const seen = new Set();
             const deduped = allProjects.filter(p => {
                 if (seen.has(p.id))
@@ -121,8 +120,16 @@ export class ProjectService {
             });
             return deduped.map(p => {
                 const isOwner = p.userId === userId;
-                const collab = p.collaborators.find(c => c.userId === userId);
+                const collab = p.collaborators?.find((c) => c.userId === userId);
                 const role = isOwner ? 'owner' : collab?.role || 'viewer';
+                // Debug log if there's a mismatch
+                if (isOwner && collab) {
+                    logger.warn(`User ${userId} is both owner and collaborator of project ${p.id}. This shouldn't happen!`, {
+                        projectId: p.id,
+                        projectUserId: p.userId,
+                        collaboratorRole: collab.role
+                    });
+                }
                 return {
                     id: p.id,
                     userId: p.userId,
@@ -246,7 +253,6 @@ export class ProjectService {
                 }
             }
             let project;
-            let resultCollaborators = [];
             try {
                 project = await prisma.project.upsert({
                     where: { id },
@@ -268,7 +274,6 @@ export class ProjectService {
                         }
                     }
                 });
-                resultCollaborators = project.collaborators || [];
             }
             catch {
                 // Fallback if collaborators table doesn't exist
@@ -297,7 +302,8 @@ export class ProjectService {
                 createdAt: project.createdAt.getTime(),
                 shared: project.shared,
                 shareToken: project.shareToken ?? undefined,
-                collaborators: resultCollaborators
+                role: 'owner',
+                collaborators
             };
         }
         catch (e) {
@@ -335,6 +341,7 @@ export class ProjectService {
                 createdAt: project.createdAt.getTime(),
                 shared: project.shared,
                 shareToken: project.shareToken ?? undefined,
+                role: 'owner',
                 collaborators: project.collaborators
             };
         }
@@ -372,6 +379,7 @@ export class ProjectService {
                 createdAt: project.createdAt.getTime(),
                 shared: project.shared,
                 shareToken: project.shareToken ?? undefined,
+                role: 'owner',
                 collaborators: project.collaborators
             };
         }
@@ -386,10 +394,28 @@ export class ProjectService {
                 where: { id: projectId },
             });
             if (!project || project.userId !== ownerUserId) {
+                logger.warn(`Failed to add collaborator: project not found or not owner`, {
+                    projectId,
+                    ownerUserId,
+                    projectUserId: project?.userId
+                });
                 return false;
             }
             // Can't add owner as collaborator
             if (collaboratorUserId === ownerUserId) {
+                logger.warn(`Attempted to add owner as collaborator`, {
+                    projectId,
+                    userId: ownerUserId
+                });
+                return false;
+            }
+            // Extra safety: Check if collaborator is somehow the project owner
+            if (collaboratorUserId === project.userId) {
+                logger.warn(`Collaborator userId matches project owner`, {
+                    projectId,
+                    collaboratorUserId,
+                    projectUserId: project.userId
+                });
                 return false;
             }
             await prisma.projectCollaborator.upsert({
@@ -408,11 +434,38 @@ export class ProjectService {
                     role
                 }
             });
+            logger.info(`Added collaborator ${collaboratorUserId} with role ${role} to project ${projectId}`);
             return true;
         }
         catch (e) {
             logger.error('Failed to add collaborator', e);
             return false;
+        }
+    }
+    /**
+     * Clean up any corrupt data where owners are listed as collaborators
+     */
+    async cleanupCorruptCollaborators() {
+        try {
+            const projects = await prisma.project.findMany({
+                include: {
+                    collaborators: true
+                }
+            });
+            for (const project of projects) {
+                const ownerAsCollaborator = project.collaborators.find(c => c.userId === project.userId);
+                if (ownerAsCollaborator) {
+                    logger.warn(`Found owner as collaborator in project ${project.id}, cleaning up...`);
+                    await prisma.projectCollaborator.delete({
+                        where: {
+                            id: ownerAsCollaborator.id
+                        }
+                    });
+                }
+            }
+        }
+        catch (e) {
+            logger.error('Failed to cleanup corrupt collaborators', e);
         }
     }
     async removeCollaborator(projectId, ownerUserId, collaboratorUserId) {

@@ -21,18 +21,20 @@ import { useDrawingSocket } from '@/hooks/useSocket';
 import { useToast } from '@/hooks/use-toast';
 import { serializeProject, deserializeProject, saveEncryptedOffline, loadEncryptedOffline, listOfflineProjects } from '@/lib/utils';
 import { createProject, updateProject, getProject, listProjects } from '@/lib/api';
+import { announceToScreenReader } from '@/hooks/useAccessibility';
+import { FEATURES } from '@/config/features';
 
 const tools = [
-  { id: 'hand', icon: Hand, label: 'Hand' },
-  { id: 'move', icon: Move, label: 'Move' },
-  { id: 'pen', icon: Pen, label: 'Pen' },
-  { id: 'eraser', icon: Eraser, label: 'Eraser' },
-  { id: 'line', icon: Minus, label: 'Line' },
-  { id: 'rectangle', icon: Square, label: 'Rectangle' },
-  { id: 'ellipse', icon: Circle, label: 'Ellipse' },
-  { id: 'triangle', icon: Triangle, label: 'Triangle' },
-  { id: 'star', icon: Star, label: 'Star' },
-  { id: 'text', icon: Type, label: 'Text' },
+  { id: 'hand', icon: Hand, label: 'Hand', shortcut: 'H', ariaLabel: 'Pan tool (H)' },
+  { id: 'move', icon: Move, label: 'Move', shortcut: 'V', ariaLabel: 'Move tool (V)' },
+  { id: 'pen', icon: Pen, label: 'Pen', shortcut: 'P', ariaLabel: 'Pen tool (P)' },
+  { id: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E', ariaLabel: 'Eraser tool (E)' },
+  { id: 'line', icon: Minus, label: 'Line', shortcut: 'L', ariaLabel: 'Line tool (L)' },
+  { id: 'rectangle', icon: Square, label: 'Rectangle', shortcut: 'R', ariaLabel: 'Rectangle tool (R)' },
+  { id: 'ellipse', icon: Circle, label: 'Ellipse', shortcut: 'O', ariaLabel: 'Ellipse tool (O)' },
+  { id: 'triangle', icon: Triangle, label: 'Triangle', shortcut: 'T', ariaLabel: 'Triangle tool (T)' },
+  { id: 'star', icon: Star, label: 'Star', shortcut: 'S', ariaLabel: 'Star tool (S)' },
+  { id: 'text', icon: Type, label: 'Text', shortcut: 'X', ariaLabel: 'Text tool (X)' },
 ] as const;
 
 import { useProjectPermissions } from '@/hooks/useProjectPermissions';
@@ -177,6 +179,49 @@ export function DrawingToolbar() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [unsavedChanges, handleSaveProject, handleLoadProject, newProject]);
+
+  // Tool selection keyboard shortcuts
+  useEffect(() => {
+    const handleToolShortcut = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in input fields
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement).contentEditable === 'true'
+      ) {
+        return;
+      }
+
+      // Don't trigger if modifier keys are pressed (except Shift for constraints)
+      if (e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      const toolMap: Record<string, Tool> = {
+        'h': 'hand',
+        'v': 'move',
+        'p': 'pen',
+        'e': 'eraser',
+        'l': 'line',
+        'r': 'rectangle',
+        'o': 'ellipse',
+        't': 'triangle',
+        's': 'star',
+        'x': 'text',
+      };
+
+      const tool = toolMap[key];
+      if (tool && canDraw) {
+        e.preventDefault();
+        setTool(tool);
+        announceToScreenReader(`${tool} tool selected`);
+      }
+    };
+
+    window.addEventListener('keydown', handleToolShortcut);
+    return () => window.removeEventListener('keydown', handleToolShortcut);
+  }, [setTool, canDraw]);
 
   const [projectsModal, setProjectsModal] = useState(false);
 
@@ -374,21 +419,31 @@ export function DrawingToolbar() {
     >
       <div className="flex flex-wrap items-center gap-4 max-w-7xl mx-auto">
         {/* Tool Selection */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-white/10">
-          {tools.map(({ id, icon: Icon, label }) => (
+        <div 
+          className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-white/10"
+          role="toolbar"
+          aria-label="Drawing tools"
+        >
+          {tools.map(({ id, icon: Icon, label, shortcut, ariaLabel }) => (
             <Button
               key={id}
-              onClick={() => setTool(id as Tool)}
+              onClick={() => {
+                setTool(id as Tool);
+                announceToScreenReader(`${label} tool selected`);
+              }}
               variant={currentTool === id ? "default" : "ghost"}
               size="sm"
               className={cn(
-                "transition-all duration-200",
+                "transition-all duration-200 focus-visible-ring",
                 currentTool === id && "bg-blue-600 hover:bg-blue-700"
               )}
-              title={label}
+              title={`${label} (${shortcut})`}
+              aria-label={ariaLabel}
+              aria-pressed={currentTool === id}
             >
               <Icon className="w-4 h-4" />
               <span className="hidden md:inline ml-2">{label}</span>
+              <span className="sr-only">Keyboard shortcut: {shortcut}</span>
             </Button>
           ))}
         </div>
@@ -461,46 +516,48 @@ export function DrawingToolbar() {
           </Button>
         </div>
 
-        {/* Auto Shape toggle + settings */}
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">Auto Shape:</label>
-          <Button onClick={() => setAutoShape(!autoShape)} variant={autoShape ? 'default' : 'ghost'} size="sm" title={autoShape ? 'Auto-convert closed pen loops' : 'Draw normal strokes'}>
-            {autoShape ? 'On' : 'Off'}
-          </Button>
-          <details className="ml-1">
-            <summary className="cursor-pointer text-xs text-slate-500 dark:text-gray-400">Settings</summary>
-            <div className="mt-2 p-2 bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-md shadow-lg space-y-2 w-[260px]">
-              <div className="text-xs text-slate-500 dark:text-gray-400">Closure tolerance ({(safeT.closureFactor*100).toFixed(0)}% diag)</div>
-              <Slider value={[Math.round(safeT.closureFactor*100)]} onValueChange={([v]) => setAutoShapeThresholds({ closureFactor: v/100 })} min={5} max={60} step={1} />
+        {/* Auto Shape toggle + settings - Hidden when feature is disabled */}
+        {FEATURES.AUTO_SHAPE && (
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">Auto Shape:</label>
+            <Button onClick={() => setAutoShape(!autoShape)} variant={autoShape ? 'default' : 'ghost'} size="sm" title={autoShape ? 'Auto-convert closed pen loops' : 'Draw normal strokes'}>
+              {autoShape ? 'On' : 'Off'}
+            </Button>
+            <details className="ml-1">
+              <summary className="cursor-pointer text-xs text-slate-500 dark:text-gray-400">Settings</summary>
+              <div className="mt-2 p-2 bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-md shadow-lg space-y-2 w-[260px]">
+                <div className="text-xs text-slate-500 dark:text-gray-400">Closure tolerance ({(safeT.closureFactor*100).toFixed(0)}% diag)</div>
+                <Slider value={[Math.round(safeT.closureFactor*100)]} onValueChange={([v]) => setAutoShapeThresholds({ closureFactor: v/100 })} min={5} max={60} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Rectangle straight ratio ({Math.round(safeT.rectStraightRatio*100)}%)</div>
-              <Slider value={[Math.round(safeT.rectStraightRatio*100)]} onValueChange={([v]) => setAutoShapeThresholds({ rectStraightRatio: v/100 })} min={30} max={90} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Rectangle straight ratio ({Math.round(safeT.rectStraightRatio*100)}%)</div>
+                <Slider value={[Math.round(safeT.rectStraightRatio*100)]} onValueChange={([v]) => setAutoShapeThresholds({ rectStraightRatio: v/100 })} min={30} max={90} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Rectangle corners (≥{safeT.rectCornerMin})</div>
-              <Slider value={[safeT.rectCornerMin]} onValueChange={([v]) => setAutoShapeThresholds({ rectCornerMin: v })} min={1} max={4} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Rectangle corners (≥{safeT.rectCornerMin})</div>
+                <Slider value={[safeT.rectCornerMin]} onValueChange={([v]) => setAutoShapeThresholds({ rectCornerMin: v })} min={1} max={4} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Ellipse error (≤{Math.round(safeT.ellipseError*100)}%)</div>
-              <Slider value={[Math.round(safeT.ellipseError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ ellipseError: v/100 })} min={10} max={90} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Ellipse error (≤{Math.round(safeT.ellipseError*100)}%)</div>
+                <Slider value={[Math.round(safeT.ellipseError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ ellipseError: v/100 })} min={10} max={90} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Parabola error (≤{Math.round(safeT.parabolaError*100)}%)</div>
-              <Slider value={[Math.round(safeT.parabolaError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ parabolaError: v/100 })} min={10} max={90} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Parabola error (≤{Math.round(safeT.parabolaError*100)}%)</div>
+                <Slider value={[Math.round(safeT.parabolaError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ parabolaError: v/100 })} min={10} max={90} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Line error (≤{Math.round(safeT.lineError*100)}%)</div>
-              <Slider value={[Math.round(safeT.lineError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ lineError: v/100 })} min={5} max={60} step={1} />
-              <div className="text-xs text-slate-500 dark:text-gray-400">Winner margin (≥{Math.round(safeT.winnerMargin*100)}%)</div>
-              <Slider value={[Math.round(safeT.winnerMargin*100)]} onValueChange={([v]) => setAutoShapeThresholds({ winnerMargin: v/100 })} min={0} max={30} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Line error (≤{Math.round(safeT.lineError*100)}%)</div>
+                <Slider value={[Math.round(safeT.lineError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ lineError: v/100 })} min={5} max={60} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Winner margin (≥{Math.round(safeT.winnerMargin*100)}%)</div>
+                <Slider value={[Math.round(safeT.winnerMargin*100)]} onValueChange={([v]) => setAutoShapeThresholds({ winnerMargin: v/100 })} min={0} max={30} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Min size (≥{safeT.minSizePx}px)</div>
-              <Slider value={[safeT.minSizePx]} onValueChange={([v]) => setAutoShapeThresholds({ minSizePx: v })} min={6} max={40} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Min size (≥{safeT.minSizePx}px)</div>
+                <Slider value={[safeT.minSizePx]} onValueChange={([v]) => setAutoShapeThresholds({ minSizePx: v })} min={6} max={40} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Resample step ({safeT.resampleStep}px)</div>
-              <Slider value={[safeT.resampleStep]} onValueChange={([v]) => setAutoShapeThresholds({ resampleStep: v })} min={1} max={8} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">Resample step ({safeT.resampleStep}px)</div>
+                <Slider value={[safeT.resampleStep]} onValueChange={([v]) => setAutoShapeThresholds({ resampleStep: v })} min={1} max={8} step={1} />
 
-              <div className="text-xs text-slate-500 dark:text-gray-400">Parabola curvature (≥{safeT.minParabolaCurvature.toFixed(2)} rad)</div>
-              <Slider value={[Math.round(safeT.minParabolaCurvature*100)]} onValueChange={([v]) => setAutoShapeThresholds({ minParabolaCurvature: v/100 })} min={50} max={300} step={5} />
-            </div>
-          </details>
-        </div>
+                <div className="text-xs text-slate-500 dark:text-gray-400">Parabola curvature (≥{safeT.minParabolaCurvature.toFixed(2)} rad)</div>
+                <Slider value={[Math.round(safeT.minParabolaCurvature*100)]} onValueChange={([v]) => setAutoShapeThresholds({ minParabolaCurvature: v/100 })} min={50} max={300} step={5} />
+              </div>
+            </details>
+          </div>
+        )}
 
         {/* Divider */}
         <div className="h-8 w-px bg-slate-200 dark:bg-white/20" />

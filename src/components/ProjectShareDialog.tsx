@@ -32,7 +32,7 @@ interface ProjectShareDialogProps {
 }
 
 export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: controlledOpen, onOpenChange }: ProjectShareDialogProps) {
-  const { getToken } = useAuth();
+  const { getToken, userId } = useAuth();
   const { toast } = useToast();
   const [internalOpen, setInternalOpen] = useState(false);
   
@@ -82,16 +82,25 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
         await unshareProject(project.id, token);
         setIsShared(false);
         setShareUrl('');
-        toast({ title: 'Link disabled' });
+        toast({ title: 'Link disabled', description: 'Public link has been disabled' });
       } else {
         const result = await shareProject(project.id, token);
+        console.log('Share result:', result); // Debug log
         setIsShared(true);
         setShareUrl(result.shareUrl);
-        toast({ title: 'Sharing enabled' });
+        toast({ 
+          title: 'Sharing enabled', 
+          description: 'Public link is now active' 
+        });
       }
       onUpdate?.();
     } catch (e) {
-      toast({ title: 'Failed to update sharing', variant: 'destructive' });
+      console.error('Failed to update sharing:', e);
+      toast({ 
+        title: 'Failed to update sharing', 
+        description: e instanceof Error ? e.message : 'An error occurred',
+        variant: 'destructive' 
+      });
     } finally {
       setLoading(false);
     }
@@ -146,7 +155,21 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
     }
   };
 
-  const isOwner = project?.role === 'owner' || !project?.role;
+  // Check if user is owner by both role and userId match
+  const isOwnerByRole = project?.role === 'owner' || !project?.role;
+  const isOwnerByUserId = userId && project?.userId && userId === project.userId;
+  const isOwner = isOwnerByRole || isOwnerByUserId;
+  
+  // Debug log if there's a mismatch
+  if (project && isOwnerByUserId && !isOwnerByRole) {
+    console.warn('Role mismatch detected: userId indicates owner but role does not', {
+      projectId: project.id,
+      userId,
+      projectUserId: project.userId,
+      role: project.role
+    });
+  }
+  
   const isControlled = controlledOpen !== undefined;
 
   return (

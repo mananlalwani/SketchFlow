@@ -1,4 +1,5 @@
 import { localProjectsService } from './localProjects';
+import { NetworkError, parseHttpError } from './errorHandling';
 
 export interface ProjectListItem {
   id: string;
@@ -11,6 +12,7 @@ export interface ProjectListItem {
   folderId?: string | null;
   role?: 'owner' | 'editor' | 'viewer';
   collaborators?: { userId: string; role: string }[];
+  thumbnail?: string; // base64 JPEG data URL
 }
 
 export interface ProjectRecord<T = unknown> extends ProjectListItem {
@@ -62,16 +64,32 @@ async function getAuthHeadersWithToken(token: string | null): Promise<HeadersIni
 }
 
 async function http<T>(path: string, init?: RequestInit, token?: string | null): Promise<T> {
-  const headers = await getAuthHeadersWithToken(token || null);
-  const res = await fetch(API_BASE + path, {
-    headers: { ...headers, ...init?.headers },
-    credentials: 'include',
-    ...init,
-  });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+  try {
+    const headers = await getAuthHeadersWithToken(token || null);
+    const res = await fetch(API_BASE + path, {
+      headers: { ...headers, ...init?.headers },
+      credentials: 'include',
+      ...init,
+    });
+    
+    if (!res.ok) {
+      throw await parseHttpError(res);
+    }
+    
+    return res.json() as Promise<T>;
+  } catch (error) {
+    // Re-throw NetworkError as-is
+    if (error instanceof NetworkError) {
+      throw error;
+    }
+    
+    // Convert other errors to NetworkError
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new NetworkError('Network request failed. Check your internet connection.');
+    }
+    
+    throw error;
   }
-  return res.json() as Promise<T>;
 }
 
 async function httpWithRetry<T>(path: string, init: RequestInit | undefined, token?: string | null, attempts = 3): Promise<T> {
@@ -113,23 +131,34 @@ export async function getProject<T = unknown>(id: string, token?: string | null)
   return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, undefined, token);
 }
 
-export async function createProject<T = unknown>(title: string, data: T, token?: string | null): Promise<ProjectRecord<T>> {
+export async function createProject<T = unknown>(
+  title: string, 
+  data: T, 
+  token?: string | null,
+  thumbnail?: string | null
+): Promise<ProjectRecord<T>> {
   if (!token) {
     return localProjectsService.create(title, data) as Promise<ProjectRecord<T>>;
   }
   return httpWithRetry<ProjectRecord<T>>('/api/projects', {
     method: 'POST',
-    body: JSON.stringify({ title, data })
+    body: JSON.stringify({ title, data, thumbnail })
   }, token);
 }
 
-export async function updateProject<T = unknown>(id: string, title: string, data: T, token?: string | null): Promise<ProjectRecord<T>> {
+export async function updateProject<T = unknown>(
+  id: string, 
+  title: string, 
+  data: T, 
+  token?: string | null,
+  thumbnail?: string | null
+): Promise<ProjectRecord<T>> {
   if (!token) {
     return localProjectsService.save(id, title, data) as Promise<ProjectRecord<T>>;
   }
   return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ title, data })
+    body: JSON.stringify({ title, data, thumbnail })
   }, token);
 }
 

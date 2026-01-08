@@ -8,7 +8,7 @@ export interface ProjectRecord {
     shared?: boolean;
     shareToken?: string;
     folderId?: string | null;
-    role?: 'owner' | 'editor' | 'viewer';
+    role: 'owner' | 'editor' | 'viewer';
     collaborators?: {
         userId: string;
         role: string;
@@ -33,6 +33,10 @@ export declare class ProjectService {
     shareProject(id: string, userId: string): Promise<ProjectRecord | null>;
     unshareProject(id: string, userId: string): Promise<ProjectRecord | null>;
     addCollaborator(projectId: string, ownerUserId: string, collaboratorUserId: string, role?: 'editor' | 'viewer'): Promise<boolean>;
+    /**
+     * Clean up any corrupt data where owners are listed as collaborators
+     */
+    cleanupCorruptCollaborators(): Promise<void>;
     removeCollaborator(projectId: string, ownerUserId: string, collaboratorUserId: string): Promise<boolean>;
     getCollaborators(projectId: string, userId: string): Promise<{
         userId: string;

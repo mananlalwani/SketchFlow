@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { trackToolSelection, trackObjectCreated, trackFeatureUsage } from '../lib/analytics';
+import { FEATURES } from '../config/features';
 
 export type Tool = 'pen' | 'eraser' | 'line' | 'rectangle' | 'ellipse' | 'triangle' | 'star' | 'text' | 'eyedropper' | 'hand' | 'move' | 'image';
 
@@ -33,6 +34,10 @@ export interface DrawingObject {
   orientation?: 'up' | 'down' | 'left' | 'right';
   imageData?: string; // Base64 data URL for images
   properties?: Record<string, any>; // Shape-specific properties (e.g., arrow direction, star point count)
+  createdBy?: string; // User ID who created this object
+  createdAt?: number; // Timestamp when created
+  lastModifiedBy?: string; // User ID who last modified
+  lastModifiedAt?: number; // Timestamp of last modification
 }
 
 interface DrawingState {
@@ -43,6 +48,7 @@ interface DrawingState {
   needsFullRedraw: boolean;
   projectTitle: string;
   unsavedChanges: boolean;
+  saveStatus: 'saved' | 'syncing' | 'failed' | 'retrying';
   lastSavedAt?: number;
   currentProjectId?: string;
   projectRole?: 'owner' | 'editor' | 'viewer' | null;
@@ -103,6 +109,7 @@ interface DrawingState {
   setProjectTitle: (title: string) => void;
   markSaved: () => void;
   markDirty: () => void;
+  setSaveStatus: (status: 'saved' | 'syncing' | 'failed' | 'retrying') => void;
   newProject: () => void;
   setCurrentProject: (id: string | undefined) => void;
   setProjectRole: (role: 'owner' | 'editor' | 'viewer' | null) => void;
@@ -158,6 +165,7 @@ export const useDrawingStore = create<DrawingState>()(
         needsFullRedraw: false,
         projectTitle: 'Untitled',
         unsavedChanges: false,
+        saveStatus: 'saved',
         currentProjectId: undefined,
         brushSize: 4,
         brushColor: '#ffffff',
@@ -214,8 +222,9 @@ export const useDrawingStore = create<DrawingState>()(
         requestFullRedraw: () => set({ needsFullRedraw: true }),
         clearFullRedraw: () => set({ needsFullRedraw: false }),
         setProjectTitle: (title) => set({ projectTitle: title, unsavedChanges: true }),
-        markSaved: () => set({ unsavedChanges: false, lastSavedAt: Date.now() }),
+        markSaved: () => set({ unsavedChanges: false, lastSavedAt: Date.now(), saveStatus: 'saved' }),
         markDirty: () => set({ unsavedChanges: true }),
+        setSaveStatus: (status) => set({ saveStatus: status }),
         setProjectRole: (role) => set({ projectRole: role }),
         newProject: () => {
           set({ 
@@ -253,8 +262,15 @@ export const useDrawingStore = create<DrawingState>()(
         clearCanvas: () => {
           const state = get();
           trackFeatureUsage('clear_canvas', { objectCount: state.objects.length });
+          // Save current state to history before clearing
           state.saveHistory();
-          set({ objects: [], objectCount: 0, unsavedChanges: true });
+          // Clear objects and request full redraw
+          set({ 
+            objects: [], 
+            objectCount: 0, 
+            unsavedChanges: true, 
+            needsFullRedraw: true 
+          });
         },
         
         setConnectionStatus: (connected) => set({ isConnected: connected }),
@@ -345,18 +361,29 @@ export const useDrawingStore = create<DrawingState>()(
       }),
       {
         name: 'drawing-store',
-        partialize: (state) => ({
-          customColors: state.customColors,
-          brushSize: state.brushSize,
-          brushColor: state.brushColor,
-          brushOpacity: state.brushOpacity,
-          currentTool: state.currentTool,
-          eraserMode: state.eraserMode,
-          projectTitle: state.projectTitle,
-          shapeFilled: state.shapeFilled,
-          autoShape: state.autoShape,
-          autoShapeThresholds: state.autoShapeThresholds
-        })
+        partialize: (state) => {
+          const base = {
+            customColors: state.customColors,
+            brushSize: state.brushSize,
+            brushColor: state.brushColor,
+            brushOpacity: state.brushOpacity,
+            currentTool: state.currentTool,
+            eraserMode: state.eraserMode,
+            projectTitle: state.projectTitle,
+            shapeFilled: state.shapeFilled,
+          };
+          
+          // Only persist autoShape settings if feature is enabled
+          if (FEATURES.AUTO_SHAPE) {
+            return {
+              ...base,
+              autoShape: state.autoShape,
+              autoShapeThresholds: state.autoShapeThresholds
+            };
+          }
+          
+          return base;
+        }
       }
     ),
     { name: 'drawing-store' }
