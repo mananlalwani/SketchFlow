@@ -22,10 +22,10 @@ import { FEATURES } from '@/config/features';
 const WORLD_WIDTH = 51200;  // 20x 1440p width (2560 × 20)
 const WORLD_HEIGHT = 28800; // 20x 1440p height (1440 × 20)
 
-// Background colors for each theme (must match Layout.tsx bg colors)
+// Background colors for each theme (must match canvas wrapper bg colors in JSX)
 const BG_COLORS = {
-  dark: '#020617',  // slate-950
-  light: '#f8fafc'  // slate-50
+  dark: '#0a0a0a',
+  light: '#e0e0e0'
 } as const;
 
 /**
@@ -282,7 +282,7 @@ export function DrawingCanvas() {
   useEffect(() => {
     if (!workerRef.current) return;
     // Map theme to appropriate background color (must match BG_COLORS)
-    const bgColor = theme === 'dark' ? '#020617' : '#f8fafc';
+    const bgColor = theme === 'dark' ? '#0a0a0a' : '#e0e0e0';
     workerRef.current.postMessage({ type: 'theme', bgColor });
   }, [theme]);
 
@@ -564,8 +564,9 @@ export function DrawingCanvas() {
       const canvas = canvasRef.current;
       if (!canvas) return;
       
-      const centerX = viewX + (canvas.width / 2 / zoom);
-      const centerY = viewY + (canvas.height / 2 / zoom);
+      const rect = canvas.getBoundingClientRect();
+      const centerX = viewX + (rect.width / 2 / zoom);
+      const centerY = viewY + (rect.height / 2 / zoom);
       
       const imageObject: DrawingObject = {
         id: generateId(),
@@ -634,8 +635,9 @@ export function DrawingCanvas() {
         const canvas = canvasRef.current;
         if (!canvas) return;
         
-        const centerX = viewX + (canvas.width / 2 / zoom);
-        const centerY = viewY + (canvas.height / 2 / zoom);
+        const rect = canvas.getBoundingClientRect();
+        const centerX = viewX + (rect.width / 2 / zoom);
+        const centerY = viewY + (rect.height / 2 / zoom);
         
         const imageObject: DrawingObject = {
           id: generateId(),

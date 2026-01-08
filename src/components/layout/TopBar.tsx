@@ -6,15 +6,11 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { 
   Save, 
-  FolderOpen, 
-  FilePlus, 
   Trash2,
   Cloud,
-  CloudOff,
   Loader2,
   Share2,
   Download,
-  Image,
   AlertCircle
 } from 'lucide-react';
 import { 
@@ -48,7 +44,6 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     unsavedChanges,
     saveStatus,
     markSaved,
-    newProject,
     clearCanvas,
     requestFullRedraw,
     objects,
@@ -63,6 +58,11 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   const { isGuest } = useAuthStore();
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  const goToHome = useCallback(() => {
+    setCurrentProject(undefined);
+    clearCanvas();
+  }, [setCurrentProject, clearCanvas]);
 
   // Create a project-like object for the share dialog
   const currentProject = useMemo(() => {
@@ -134,17 +134,6 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     }
   };
 
-  const handleNew = () => {
-    if (!unsavedChanges || window.confirm('Discard changes?')) {
-      newProject();
-    }
-  };
-
-  const goToProjects = useCallback(() => {
-    setCurrentProject(undefined);
-    clearCanvas();
-  }, [setCurrentProject, clearCanvas]);
-
   const handleExportPNG = useCallback(async (quality: ExportQuality = '1x', format: 'png' | 'jpeg' | 'webp' = 'png') => {
     setIsExporting(true);
     try {
@@ -189,22 +178,19 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
       if ((e.ctrlKey || e.metaKey) && key === 's') {
         e.preventDefault();
         handleSave();
-      } else if ((e.ctrlKey || e.metaKey) && key === 'o') {
-        e.preventDefault();
-        goToProjects();
-      } else if ((e.ctrlKey || e.metaKey) && key === 'n') {
-        e.preventDefault();
-        handleNew();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleSave, handleNew, goToProjects]);
+  }, [handleSave]);
 
   return (
     <div className="h-14 border-b border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center px-4 justify-between z-30 relative transition-colors duration-200">
       <div className="flex items-center gap-4">
-        <div className="font-bold text-xl bg-gradient-to-r from-blue-500 to-purple-600 dark:from-blue-400 dark:to-purple-500 bg-clip-text text-transparent cursor-pointer" onClick={goToProjects}>
+        <div 
+          className="font-bold text-xl bg-gradient-to-r from-blue-500 to-purple-600 dark:from-blue-400 dark:to-purple-500 bg-clip-text text-transparent cursor-pointer"
+          onClick={goToHome}
+        >
           DrawApp
         </div>
         
@@ -250,26 +236,12 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
       <div className="flex items-center gap-2">
         {!hideProjectControls && (
           <>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-              onClick={goToProjects}
-            >
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Projects
-            </Button>
-
             <Button variant="ghost" size="sm" onClick={handleSave} className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white" disabled={isSaving}>
               <Save className="w-4 h-4 mr-2" />
               Save
             </Button>
             
             <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
-            
-            <Button variant="ghost" size="icon" onClick={handleNew} title="New Project" className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
-              <FilePlus className="w-4 h-4" />
-            </Button>
             <Button variant="ghost" size="icon" onClick={handleClear} title="Clear Canvas" className="text-slate-600 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-500/10">
               <Trash2 className="w-4 h-4" />
             </Button>

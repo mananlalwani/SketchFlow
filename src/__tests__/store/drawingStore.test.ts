@@ -240,9 +240,10 @@ describe('drawingStore', () => {
       setView(500, 600);
       resetView();
       
+      // resetView centers the view in the middle of the world canvas (2048 - 500, 2048 - 300)
       expect(useDrawingStore.getState().zoom).toBe(1);
-      expect(useDrawingStore.getState().viewX).toBe(0);
-      expect(useDrawingStore.getState().viewY).toBe(0);
+      expect(useDrawingStore.getState().viewX).toBe(1548);
+      expect(useDrawingStore.getState().viewY).toBe(1748);
     });
   });
 
