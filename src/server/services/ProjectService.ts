@@ -162,6 +162,15 @@ export class ProjectService {
         const collab = p.collaborators.find(c => c.userId === userId);
         const role = isOwner ? 'owner' : (collab?.role as 'editor' | 'viewer') || 'viewer';
         
+        // Debug log if there's a mismatch
+        if (isOwner && collab) {
+          logger.warn(`User ${userId} is both owner and collaborator of project ${p.id}. This shouldn't happen!`, {
+            projectId: p.id,
+            projectUserId: p.userId,
+            collaboratorRole: collab.role
+          });
+        }
+        
         return {
           id: p.id,
           userId: p.userId,
@@ -440,11 +449,30 @@ export class ProjectService {
       });
 
       if (!project || project.userId !== ownerUserId) {
+        logger.warn(`Failed to add collaborator: project not found or not owner`, {
+          projectId,
+          ownerUserId,
+          projectUserId: project?.userId
+        });
         return false;
       }
 
       // Can't add owner as collaborator
       if (collaboratorUserId === ownerUserId) {
+        logger.warn(`Attempted to add owner as collaborator`, {
+          projectId,
+          userId: ownerUserId
+        });
+        return false;
+      }
+      
+      // Extra safety: Check if collaborator is somehow the project owner
+      if (collaboratorUserId === project.userId) {
+        logger.warn(`Collaborator userId matches project owner`, {
+          projectId,
+          collaboratorUserId,
+          projectUserId: project.userId
+        });
         return false;
       }
 
@@ -465,10 +493,39 @@ export class ProjectService {
         }
       });
 
+      logger.info(`Added collaborator ${collaboratorUserId} with role ${role} to project ${projectId}`);
+      
       return true;
     } catch (e) {
       logger.error('Failed to add collaborator', e);
       return false;
+    }
+  }
+  
+  /**
+   * Clean up any corrupt data where owners are listed as collaborators
+   */
+  public async cleanupCorruptCollaborators(): Promise<void> {
+    try {
+      const projects = await prisma.project.findMany({
+        include: {
+          collaborators: true
+        }
+      });
+      
+      for (const project of projects) {
+        const ownerAsCollaborator = project.collaborators.find(c => c.userId === project.userId);
+        if (ownerAsCollaborator) {
+          logger.warn(`Found owner as collaborator in project ${project.id}, cleaning up...`);
+          await prisma.projectCollaborator.delete({
+            where: {
+              id: ownerAsCollaborator.id
+            }
+          });
+        }
+      }
+    } catch (e) {
+      logger.error('Failed to cleanup corrupt collaborators', e);
     }
   }
 

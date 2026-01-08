@@ -3,6 +3,7 @@ import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { ColorPicker } from '@/components/ColorPicker';
 import { cn } from '@/lib/utils';
+import { FEATURES } from '@/config/features';
 
 export function PropertiesPanel() {
   const {
@@ -207,17 +208,19 @@ export function PropertiesPanel() {
                   </Button>
                 </div>
                 
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-700 dark:text-slate-200">Auto Shape</span>
-                  <Button
-                    variant={autoShape ? "default" : "secondary"}
-                    size="sm"
-                    onClick={() => setAutoShape(!autoShape)}
-                    className={cn("w-16", autoShape && "bg-blue-600")}
-                  >
-                    {autoShape ? "On" : "Off"}
-                  </Button>
-                </div>
+                {FEATURES.AUTO_SHAPE && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700 dark:text-slate-200">Auto Shape</span>
+                    <Button
+                      variant={autoShape ? "default" : "secondary"}
+                      size="sm"
+                      onClick={() => setAutoShape(!autoShape)}
+                      className={cn("w-16", autoShape && "bg-blue-600")}
+                    >
+                      {autoShape ? "On" : "Off"}
+                    </Button>
+                  </div>
+                )}
               </>
             )}
           </div>

@@ -6,7 +6,7 @@ import { useFPSCounter } from '@/hooks/useFPSCounter';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from './ui/button';
 import { Square, Circle, Triangle, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
- 
+
 import { generateId, isIOS } from '@/lib/utils';
 import type { DrawingObject } from '@/store/drawingStore';
 import type { StrokeData, ShapeData } from '@/types/socket';
@@ -17,6 +17,7 @@ import { LiveCursors } from './LiveCursors';
 import { useLiveCursors } from '@/hooks/useLiveCursors';
 import { useProjectPermissions } from '@/hooks/useProjectPermissions';
 import { useToast } from '@/hooks/use-toast';
+import { FEATURES } from '@/config/features';
 
 const WORLD_WIDTH = 51200;  // 20x 1440p width (2560 × 20)
 const WORLD_HEIGHT = 28800; // 20x 1440p height (1440 × 20)
@@ -26,6 +27,43 @@ const BG_COLORS = {
   dark: '#020617',  // slate-950
   light: '#f8fafc'  // slate-50
 } as const;
+
+/**
+ * Constrains view coordinates to keep viewport within world boundaries
+ * @param viewX - Current view X position
+ * @param viewY - Current view Y position
+ * @param zoom - Current zoom level
+ * @param canvasWidth - Canvas width in pixels
+ * @param canvasHeight - Canvas height in pixels
+ * @returns Constrained view coordinates
+ */
+function constrainView(
+  viewX: number,
+  viewY: number,
+  zoom: number,
+  canvasWidth: number,
+  canvasHeight: number
+): { x: number; y: number } {
+  // Calculate the viewport size in world coordinates
+  const viewportWorldWidth = canvasWidth / zoom;
+  const viewportWorldHeight = canvasHeight / zoom;
+  
+  // Constrain X: viewport must stay within [0, WORLD_WIDTH]
+  // Min: 0 (left edge of world)
+  // Max: WORLD_WIDTH - viewportWorldWidth (right edge of world)
+  const minX = 0;
+  const maxX = Math.max(0, WORLD_WIDTH - viewportWorldWidth);
+  const constrainedX = Math.max(minX, Math.min(maxX, viewX));
+  
+  // Constrain Y: viewport must stay within [0, WORLD_HEIGHT]
+  // Min: 0 (top edge of world)
+  // Max: WORLD_HEIGHT - viewportWorldHeight (bottom edge of world)
+  const minY = 0;
+  const maxY = Math.max(0, WORLD_HEIGHT - viewportWorldHeight);
+  const constrainedY = Math.max(minY, Math.min(maxY, viewY));
+  
+  return { x: constrainedX, y: constrainedY };
+}
 
 export function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -349,18 +387,24 @@ export function DrawingCanvas() {
             const worldX = state.viewX + centerX / zoom;
             const worldY = state.viewY + centerY / zoom;
             
-            const newViewX = worldX - centerX / newZoom;
-            const newViewY = worldY - centerY / newZoom;
+            // Calculate new view position (zoom towards center)
+            const unconstrained = {
+              x: worldX - centerX / newZoom,
+              y: worldY - centerY / newZoom
+            };
+            
+            // Apply constraints to keep view within world boundaries
+            const constrained = constrainView(unconstrained.x, unconstrained.y, newZoom, rect.width, rect.height);
             
             state.setZoom(newZoom);
-            state.setView(newViewX, newViewY);
+            state.setView(constrained.x, constrained.y);
             
             const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
             workerRef.current?.postMessage({
               type: 'viewport',
               zoom: newZoom,
-              viewX: newViewX,
-              viewY: newViewY,
+              viewX: constrained.x,
+              viewY: constrained.y,
               canvasWidth: rect.width,
               canvasHeight: rect.height,
               dpr
@@ -380,18 +424,24 @@ export function DrawingCanvas() {
             const worldX = state.viewX + centerX / zoom;
             const worldY = state.viewY + centerY / zoom;
             
-            const newViewX = worldX - centerX / newZoom;
-            const newViewY = worldY - centerY / newZoom;
+            // Calculate new view position (zoom towards center)
+            const unconstrained = {
+              x: worldX - centerX / newZoom,
+              y: worldY - centerY / newZoom
+            };
+            
+            // Apply constraints to keep view within world boundaries
+            const constrained = constrainView(unconstrained.x, unconstrained.y, newZoom, rect.width, rect.height);
             
             state.setZoom(newZoom);
-            state.setView(newViewX, newViewY);
+            state.setView(constrained.x, constrained.y);
             
             const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
             workerRef.current?.postMessage({
               type: 'viewport',
               zoom: newZoom,
-              viewX: newViewX,
-              viewY: newViewY,
+              viewX: constrained.x,
+              viewY: constrained.y,
               canvasWidth: rect.width,
               canvasHeight: rect.height,
               dpr
@@ -1292,13 +1342,24 @@ export function DrawingCanvas() {
     
     // Handle panning first (before other operations)
     if (isPanning && panStart) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const rect = canvas.getBoundingClientRect();
       const deltaX = e.clientX - panStart.x;
       const deltaY = e.clientY - panStart.y;
       
       // Calculate new view position based on the ORIGINAL panStart values
       // This prevents accumulating errors from React state updates
-      const newViewX = Math.max(0, Math.min(WORLD_WIDTH - 100, panStart.viewX - deltaX / zoom));
-      const newViewY = Math.max(0, Math.min(WORLD_HEIGHT - 100, panStart.viewY - deltaY / zoom));
+      const unconstrained = {
+        x: panStart.viewX - deltaX / zoom,
+        y: panStart.viewY - deltaY / zoom
+      };
+      
+      // Apply constraints to keep view within world boundaries
+      const constrained = constrainView(unconstrained.x, unconstrained.y, zoom, rect.width, rect.height);
+      const newViewX = constrained.x;
+      const newViewY = constrained.y;
       
       // Store current pan position
       currentPanViewRef.current = { x: newViewX, y: newViewY };
@@ -1571,8 +1632,8 @@ export function DrawingCanvas() {
 
     if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
       if (currentStroke.length > 0) {
-        // Optionally convert to shape if autoShape enabled and tool is pen
-        if (autoShape && currentTool === 'pen') {
+        // Optionally convert to shape if autoShape enabled and tool is pen (feature must be enabled)
+        if (FEATURES.AUTO_SHAPE && autoShape && currentTool === 'pen') {
           const pathPoints: { x: number; y: number }[] = [];
           const firstSeg = currentStroke[0];
           pathPoints.push({ x: firstSeg.x0, y: firstSeg.y0 });
@@ -1843,19 +1904,24 @@ export function DrawingCanvas() {
       const worldX = viewX + mouseX / zoom;
       const worldY = viewY + mouseY / zoom;
       
-      // Align view to integer world pixels to reduce blur/halo
-      const newViewX = worldX - mouseX / newZoom;
-      const newViewY = worldY - mouseY / newZoom;
+      // Calculate new view position (zoom towards cursor)
+      const unconstrained = {
+        x: worldX - mouseX / newZoom,
+        y: worldY - mouseY / newZoom
+      };
+      
+      // Apply constraints to keep view within world boundaries
+      const constrained = constrainView(unconstrained.x, unconstrained.y, newZoom, rect.width, rect.height);
       
       setZoom(newZoom);
-      setView(newViewX, newViewY);
+      setView(constrained.x, constrained.y);
       // Push viewport immediately to worker for accurate blit
       const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
       workerRef.current?.postMessage({
         type: 'viewport',
         zoom: newZoom,
-        viewX: newViewX,
-        viewY: newViewY,
+        viewX: constrained.x,
+        viewY: constrained.y,
         canvasWidth: rect.width,
         canvasHeight: rect.height,
         dpr
@@ -1873,16 +1939,24 @@ export function DrawingCanvas() {
     const newZoom = Math.max(0.1, Math.min(5, zoom * factor));
     const worldX = viewX + centerX / zoom;
     const worldY = viewY + centerY / zoom;
-    const newViewX = worldX - centerX / newZoom;
-    const newViewY = worldY - centerY / newZoom;
+    
+    // Calculate new view position (zoom towards center)
+    const unconstrained = {
+      x: worldX - centerX / newZoom,
+      y: worldY - centerY / newZoom
+    };
+    
+    // Apply constraints to keep view within world boundaries
+    const constrained = constrainView(unconstrained.x, unconstrained.y, newZoom, rect.width, rect.height);
+    
     setZoom(newZoom);
-    setView(newViewX, newViewY);
+    setView(constrained.x, constrained.y);
     const dpr = isIOS() ? 1 : (window.devicePixelRatio || 1);
     workerRef.current?.postMessage({
       type: 'viewport',
       zoom: newZoom,
-      viewX: newViewX,
-      viewY: newViewY,
+      viewX: constrained.x,
+      viewY: constrained.y,
       canvasWidth: rect.width,
       canvasHeight: rect.height,
       dpr

@@ -369,3 +369,48 @@ canvas {
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
+
+/* Accessibility - Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Accessibility - Focus visible */
+.focus-visible-ring:focus-visible {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-900;
+}
+
+/* Accessibility - Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Accessibility - High contrast mode */
+@media (prefers-contrast: high) {
+  .theme-border {
+    @apply border-2;
+  }
+  
+  .tool-button {
+    @apply border-2;
+  }
+  
+  button:focus-visible {
+    @apply outline-4 outline-offset-2;
+  }
+}

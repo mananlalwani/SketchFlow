@@ -10,6 +10,7 @@ interface LocalProjectsDB extends DBSchema {
       data: unknown;
       createdAt: number;
       updatedAt: number;
+      thumbnail?: string;
     };
   };
 }
@@ -53,6 +54,7 @@ class LocalProjectsService {
           createdAt: p.createdAt,
           shared: false,
           role: 'owner' as const,
+          thumbnail: p.thumbnail,
         }))
         .sort((a, b) => b.updatedAt - a.updatedAt);
     } catch (error) {
@@ -83,6 +85,7 @@ class LocalProjectsService {
         createdAt: project.createdAt,
         shared: false,
         role: 'owner',
+        thumbnail: project.thumbnail,
       };
     } catch (error) {
       console.error('Failed to get local project:', error);
@@ -90,7 +93,7 @@ class LocalProjectsService {
     }
   }
 
-  async save(id: string, title: string, data: unknown): Promise<ProjectRecord> {
+  async save(id: string, title: string, data: unknown, thumbnail?: string): Promise<ProjectRecord> {
     try {
       const db = await this.initDB();
       const existing = await db.get(STORE_NAME, id);
@@ -101,6 +104,7 @@ class LocalProjectsService {
         data,
         createdAt: existing?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
+        thumbnail: thumbnail || existing?.thumbnail,
       };
       
       await db.put(STORE_NAME, project);
@@ -114,10 +118,11 @@ class LocalProjectsService {
         createdAt: project.createdAt,
         shared: false,
         role: 'owner',
+        thumbnail: project.thumbnail,
       };
     } catch (error) {
       console.error('Failed to save local project:', error);
-      return this.saveToLocalStorage(id, title, data);
+      return this.saveToLocalStorage(id, title, data, thumbnail);
     }
   }
 
@@ -160,6 +165,7 @@ class LocalProjectsService {
               createdAt: project.createdAt,
               shared: false,
               role: 'owner',
+              thumbnail: project.thumbnail,
             });
           }
         } catch (e) {
@@ -186,6 +192,7 @@ class LocalProjectsService {
         createdAt: project.createdAt,
         shared: false,
         role: 'owner',
+        thumbnail: project.thumbnail,
       };
     } catch (e) {
       console.error('Failed to get project from localStorage:', e);
@@ -193,7 +200,7 @@ class LocalProjectsService {
     }
   }
 
-  private saveToLocalStorage(id: string, title: string, data: unknown): ProjectRecord {
+  private saveToLocalStorage(id: string, title: string, data: unknown, thumbnail?: string): ProjectRecord {
     const existing = this.getFromLocalStorage(id);
     
     const project = {
@@ -202,6 +209,7 @@ class LocalProjectsService {
       data,
       createdAt: existing?.createdAt ?? Date.now(),
       updatedAt: Date.now(),
+      thumbnail: thumbnail || existing?.thumbnail,
     };
     
     localStorage.setItem(this.getLocalStorageKey(id), JSON.stringify(project));
@@ -215,6 +223,7 @@ class LocalProjectsService {
       createdAt: project.createdAt,
       shared: false,
       role: 'owner',
+      thumbnail: project.thumbnail,
     };
   }
 
@@ -294,6 +303,7 @@ class LocalProjectsService {
         createdAt: p.createdAt,
         shared: false,
         role: 'owner' as const,
+        thumbnail: p.thumbnail,
       }));
     } catch (error) {
       console.error('Failed to get all projects for migration:', error);

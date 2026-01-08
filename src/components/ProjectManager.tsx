@@ -185,11 +185,26 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           listProjects(token),
           listFolders(token).catch(() => [] as FolderRecord[])
         ]);
-        setProjects(projectList.filter(p => p && p.id).map(p => ({
-          ...p,
-          shared: p.shared ?? false,
-          role: p.role ?? 'owner'
-        })));
+        setProjects(projectList.filter(p => p && p.id).map(p => {
+          // Correct the role if it's wrong: if userId matches project userId, user is owner
+          let correctedRole = p.role ?? 'owner';
+          if (p.userId === userId) {
+            correctedRole = 'owner';
+            if (p.role && p.role !== 'owner') {
+              console.warn(`Corrected role for project ${p.id}: was ${p.role}, now owner`, {
+                projectId: p.id,
+                userId,
+                projectUserId: p.userId
+              });
+            }
+          }
+          
+          return {
+            ...p,
+            shared: p.shared ?? false,
+            role: correctedRole
+          };
+        }));
         setFolders(folderList);
       }
     } catch (e) {
@@ -1149,9 +1164,17 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 onClick={(e) => handleCardClick(project.id, e)}
                 className="group relative bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl p-4 cursor-pointer transition-all duration-200 flex flex-col gap-3 shadow-sm hover:shadow-md"
               >
-                {/* Thumbnail placeholder */}
-                <div className="aspect-video bg-slate-100 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-white/5 flex items-center justify-center mb-2 group-hover:border-blue-400/20 dark:group-hover:border-blue-500/20 transition-colors">
-                  <FileEdit className="w-8 h-8 text-slate-400 dark:text-slate-700 group-hover:text-slate-500 dark:group-hover:text-slate-600 transition-colors" />
+                {/* Thumbnail */}
+                <div className="aspect-video bg-slate-100 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-white/5 flex items-center justify-center mb-2 group-hover:border-blue-400/20 dark:group-hover:border-blue-500/20 transition-colors overflow-hidden">
+                  {project.thumbnail ? (
+                    <img 
+                      src={project.thumbnail} 
+                      alt={project.title} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <FileEdit className="w-8 h-8 text-slate-400 dark:text-slate-700 group-hover:text-slate-500 dark:group-hover:text-slate-600 transition-colors" />
+                  )}
                 </div>
 
                 <div className="flex items-start justify-between">

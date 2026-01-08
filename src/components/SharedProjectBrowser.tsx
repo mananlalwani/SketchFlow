@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/clerk-react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   listProjects, 
@@ -48,35 +48,55 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
     setObjects, 
     replaceHistory, 
     requestFullRedraw, 
-    setProjectTitle
+    setProjectTitle,
+    setCurrentProject
   } = useDrawingStore();
+
+  const loadSharedProject = useCallback(async (shareToken: string) => {
+    setLoadingProject(shareToken);
+    try {
+      const record = await getSharedProject<ReturnType<typeof serializeProject>>(shareToken);
+      console.log('Loaded shared project:', record.id, record.title, `(${record.data?.objects?.length || 0} objects)`);
+
+      // Set project title immediately for better UX
+      setProjectTitle(record.title || 'Shared Project');
+      setCurrentProject(record.id); // Set the current project ID for socket connections
+
+      // Clear current canvas and show loading state
+      setObjects([]);
+      requestFullRedraw();
+
+      // Deserialize objects (this can be heavy for large projects)
+      const objects = deserializeProject(record.data);
+
+      // Load objects and trigger redraw
+      setObjects(objects);
+      replaceHistory(objects);
+      requestFullRedraw();
+
+      toast({ title: 'Shared project loaded', description: `Viewing "${record.title}"` });
+      onProjectLoad?.();
+    } catch (e) {
+      console.error('Failed to load shared project:', e);
+      const errorMessage = e instanceof Error ? e.message : 'The shared project could not be found.';
+      toast({
+        title: 'Failed to load shared project',
+        description: errorMessage,
+        variant: 'destructive'
+      });
+    } finally {
+      setLoadingProject(null);
+    }
+  }, [setObjects, replaceHistory, setCurrentProject, requestFullRedraw, setProjectTitle, toast, onProjectLoad]);
 
   useEffect(() => {
     const shareToken = searchParams.get('share');
     if (shareToken) {
       loadSharedProject(shareToken);
     }
-  }, [searchParams]);
+  }, [searchParams, loadSharedProject]);
 
-  const loadSharedProject = async (shareToken: string) => {
-    setLoadingProject(shareToken);
-    try {
-      const record = await getSharedProject<ReturnType<typeof serializeProject>>(shareToken);
-      const objects = deserializeProject(record.data);
-      setObjects(objects);
-      replaceHistory(objects);
-      requestFullRedraw();
-      setProjectTitle(record.title || 'Shared Project');
-      toast({ title: 'Shared project loaded', description: `Viewing "${record.title}"` });
-      onProjectLoad?.();
-    } catch {
-      toast({ title: 'Failed to load shared project', description: 'The shared project could not be found.', variant: 'destructive' });
-    } finally {
-      setLoadingProject(null);
-    }
-  };
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
@@ -91,18 +111,18 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
       }));
       setProjects(sharedProjects);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load projects:', e);
       toast({ title: 'Failed to load projects', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, getToken, toast]);
 
   useEffect(() => {
     if (isLoaded && userId) {
       loadProjects();
     }
-  }, [isLoaded, userId]);
+  }, [isLoaded, userId, loadProjects]);
 
   const filteredProjects = useMemo(() => {
     let result = [...projects];
@@ -117,24 +137,32 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
     return result.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }, [projects, searchQuery]);
 
-  const handleViewProject = async (project: ProjectListItem) => {
+  const handleViewProject = useCallback(async (project: ProjectListItem) => {
     setLoadingProject(project.id);
     try {
       const token = await getToken();
       const record = await getProject<ReturnType<typeof serializeProject>>(project.id, token);
+      console.log('Loaded project:', record.id, record.title);
       const objects = deserializeProject(record.data);
       setObjects(objects);
       replaceHistory(objects);
+      setCurrentProject(record.id); // Set the current project ID for socket connections
       requestFullRedraw();
       setProjectTitle(record.title || 'Project');
       toast({ title: 'Project loaded', description: `Viewing "${record.title}"` });
       onProjectLoad?.();
-    } catch {
-      toast({ title: 'Failed to load project', variant: 'destructive' });
+    } catch (e) {
+      console.error('Failed to load project:', e);
+      const errorMessage = e instanceof Error ? e.message : 'Failed to load project';
+      toast({ 
+        title: 'Failed to load project', 
+        description: errorMessage,
+        variant: 'destructive' 
+      });
     } finally {
       setLoadingProject(null);
     }
-  };
+  }, [getToken, setObjects, replaceHistory, setCurrentProject, requestFullRedraw, setProjectTitle, toast, onProjectLoad]);
 
   if (!isLoaded) {
     return (

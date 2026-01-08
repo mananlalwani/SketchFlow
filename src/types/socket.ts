@@ -9,6 +9,8 @@ export interface StrokeData {
   blend?: string;
   timestamp?: number;
   groupId?: string;
+  createdBy?: string;  // User ID who created this stroke
+  createdAt?: number;  // Timestamp when created
 }
 
 export interface ShapeData {
@@ -29,6 +31,10 @@ export interface ShapeData {
   points?: { x: number; y: number }[];  // For custom triangles and other shapes with custom vertices
   properties?: Record<string, any>;  // For shape-specific properties (e.g., star point count)
   timestamp?: number;
+  createdBy?: string;  // User ID who created this shape
+  createdAt?: number;  // Timestamp when created
+  lastModifiedBy?: string;  // User ID who last modified
+  lastModifiedAt?: number;  // Timestamp of last modification
 }
 
 export interface CanvasSnapshot {
@@ -138,6 +144,8 @@ export interface ServerToClientEvents {
   'cursor:join': (cursor: CursorData) => void;
   'cursor:leave': (userId: string) => void;
   'cursors:all': (cursors: CursorData[]) => void;
+  'project:state': (data: { objects: any[]; timestamp: number }) => void;  // Full state sync for late joiners
+  'object:delete': (objectId: string, userId: string) => void;  // Object deletion event
 }
 
 export interface ClientToServerEvents {
@@ -149,6 +157,8 @@ export interface ClientToServerEvents {
   'cursor:move': (cursor: CursorData) => void;
   'room:join': (projectId: string) => void;
   'room:leave': () => void;
+  'project:request-state': () => void;  // Request full state from server
+  'object:delete': (objectId: string) => void;  // Delete an object
 }
 
 
