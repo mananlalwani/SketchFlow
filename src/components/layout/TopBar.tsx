@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useDrawingSocket } from '@/hooks/useSocket';
+import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { 
@@ -47,6 +48,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   const { emitClear } = useDrawingSocket();
   const { toast } = useToast();
   const { getToken, userId } = useAuth();
+  const { isGuest } = useAuthStore();
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -252,21 +254,23 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
 
             <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
 
-            {currentProject ? (
-              <ProjectShareDialog 
-                project={currentProject} 
-                triggerClassName="h-9 w-9 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10"
-              />
-            ) : (
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="h-9 w-9 text-slate-400 dark:text-slate-500"
-                title="Save project first to share"
-                disabled
-              >
-                <Share2 className="w-4 h-4" />
-              </Button>
+            {!isGuest && (
+              currentProject ? (
+                <ProjectShareDialog 
+                  project={currentProject} 
+                  triggerClassName="h-9 w-9 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10"
+                />
+              ) : (
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-9 w-9 text-slate-400 dark:text-slate-500"
+                  title="Save project first to share"
+                  disabled
+                >
+                  <Share2 className="w-4 h-4" />
+                </Button>
+              )
             )}
             <ShortcutsDialog mode="draw" />
             

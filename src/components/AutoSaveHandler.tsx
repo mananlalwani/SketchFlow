@@ -1,27 +1,34 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useAuth } from '@clerk/clerk-react';
+import { useAuthStore } from '@/store/authStore';
 import { updateProject } from '@/lib/api'; // Use barrel export if possible or direct path
 import { serializeProject } from '@/lib/utils';
 
 export function AutoSaveHandler() {
-  const { unsavedChanges, currentProjectId, objects, projectTitle, markSaved, lastSavedAt } = useDrawingStore();
+  const { unsavedChanges, currentProjectId, objects, projectTitle, markSaved } = useDrawingStore();
   const { getToken, userId } = useAuth();
+  const { isGuest } = useAuthStore();
   const saveTimeoutRef = useRef<number>();
 
   // Function to perform save
   const performSave = useCallback(async () => {
+    // For guests with a current project ID (local project), save to IndexedDB via API layer
+    if (isGuest && currentProjectId) {
+      try {
+        const payload = serializeProject(objects, 4096, 4096);
+        await updateProject(currentProjectId, projectTitle, payload, null); // API will route to local storage
+        markSaved();
+        console.debug('Auto-saved local project:', currentProjectId);
+      } catch (e) {
+        console.error('Local auto-save failed:', e);
+      }
+      return;
+    }
+    
+    // For authenticated users
     if (!currentProjectId || !userId) {
-        // If local/guest, maybe save to localStorage?
-        if (!currentProjectId && objects.length > 0) {
-             const payload = serializeProject(objects, 4096, 4096);
-             localStorage.setItem('local_work', JSON.stringify({
-                 title: projectTitle,
-                 data: payload,
-                 updatedAt: Date.now()
-             }));
-        }
-        return;
+      return;
     }
     
     try {
@@ -33,7 +40,7 @@ export function AutoSaveHandler() {
     } catch (e) {
       console.error('Auto-save failed:', e);
     }
-  }, [currentProjectId, userId, objects, projectTitle, getToken, markSaved]);
+  }, [currentProjectId, userId, isGuest, objects, projectTitle, getToken, markSaved]);
 
   // Debounced auto-save trigger
   useEffect(() => {

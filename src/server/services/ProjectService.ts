@@ -27,6 +27,49 @@ export interface FolderRecord {
 }
 
 export class ProjectService {
+  // Permission checking helper
+  public async checkPermission(
+    projectId: string, 
+    userId: string, 
+    action: 'view' | 'edit' | 'delete' | 'share' | 'manage'
+  ): Promise<boolean> {
+    try {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          collaborators: {
+            select: { userId: true, role: true }
+          }
+        }
+      });
+
+      if (!project) return false;
+
+      const isOwner = project.userId === userId;
+      const collaborator = project.collaborators.find(c => c.userId === userId);
+      const role = isOwner ? 'owner' : (collaborator?.role || null);
+
+      switch (action) {
+        case 'view':
+          return isOwner || !!collaborator || project.shared;
+        
+        case 'edit':
+          return isOwner || (collaborator?.role === 'editor');
+        
+        case 'delete':
+        case 'share':
+        case 'manage':
+          return isOwner;
+        
+        default:
+          return false;
+      }
+    } catch (e) {
+      logger.error('Permission check failed', e);
+      return false;
+    }
+  }
+
   public async list(userId: string): Promise<Omit<ProjectRecord, 'data'>[]> {
     try {
       // Try with collaborators first
@@ -240,11 +283,10 @@ export class ProjectService {
         });
       }
 
-      // Check if user can edit: must be owner or editor collaborator
+      // Check if user can edit using permission helper
       if (existing) {
-        const isOwner = existing.userId === userId;
-        const isEditor = collaborators.some(c => c.userId === userId && c.role === 'editor');
-        if (!isOwner && !isEditor) {
+        const canEdit = await this.checkPermission(id, userId, 'edit');
+        if (!canEdit) {
           throw new Error('No permission to edit this project');
         }
       }

@@ -13,6 +13,10 @@ import type { StrokeData, ShapeData } from '@/types/socket';
 import { detectShapes } from '@/lib/shapeDetectors';
 import { getImageFromClipboard, compressImage } from '@/lib/clipboard';
 import { ShortcutsDialog } from './ShortcutsDialog';
+import { LiveCursors } from './LiveCursors';
+import { useLiveCursors } from '@/hooks/useLiveCursors';
+import { useProjectPermissions } from '@/hooks/useProjectPermissions';
+import { useToast } from '@/hooks/use-toast';
 
 const WORLD_WIDTH = 51200;  // 20x 1440p width (2560 × 20)
 const WORLD_HEIGHT = 28800; // 20x 1440p height (1440 × 20)
@@ -48,6 +52,7 @@ export function DrawingCanvas() {
     setObjects,
     saveHistory,
     updatePerformanceStats,
+    currentProjectId,
     setZoom,
     setView,
     resetView,
@@ -55,6 +60,9 @@ export function DrawingCanvas() {
   } = useDrawingStore();
 
   const { emitStrokes, emitShape, emitSnapshot, emitClear, on } = useDrawingSocket();
+  const { cursors, emitCursor } = useLiveCursors(currentProjectId);
+  const { canEdit, canDraw, role } = useProjectPermissions();
+  const { toast } = useToast();
   const { updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
   const fps = useFPSCounter();
   const { theme } = useTheme();
@@ -992,6 +1000,16 @@ export function DrawingCanvas() {
 
   // Drawing handlers
   const startDrawing = useCallback((e: React.PointerEvent) => {
+    // Check if user has permission to draw
+    if (!canDraw && currentTool !== 'hand' && currentTool !== 'move') {
+      toast({
+        title: 'View Only',
+        description: 'You don\'t have permission to edit this project.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
     // Don't start drawing if text input is active
     if (textInputPos) return;
     
@@ -1262,6 +1280,16 @@ export function DrawingCanvas() {
   }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject, textInputPos]);
 
   const draw = useCallback((e: React.PointerEvent) => {
+    // Emit cursor position for live cursors
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const worldPos = screenToWorld(screenX, screenY);
+      emitCursor(worldPos.x, worldPos.y);
+    }
+    
     // Handle panning first (before other operations)
     if (isPanning && panStart) {
       const deltaX = e.clientX - panStart.x;
@@ -1927,6 +1955,18 @@ export function DrawingCanvas() {
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
         />
+        
+        {/* Live Cursors */}
+        {canvasRef.current && (
+          <LiveCursors
+            cursors={cursors}
+            zoom={zoom}
+            viewX={viewX}
+            viewY={viewY}
+            canvasWidth={canvasRef.current.getBoundingClientRect().width}
+            canvasHeight={canvasRef.current.getBoundingClientRect().height}
+          />
+        )}
         
         {/* World boundary indicator - shows the 4096x4096 drawable area */}
         {/* Drawn on top of canvas to show the boundary */}
