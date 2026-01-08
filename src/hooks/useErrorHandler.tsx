@@ -24,9 +24,11 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
       });
 
       const action = onRetry
-        ? <Button onClick={onRetry} size="sm" variant="outline">
-            Retry
-          </Button>
+        ? (
+            <Button onClick={onRetry} size="sm" variant="outline">
+              Retry
+            </Button>
+          )
         : suggestion
         ? <div className="text-xs text-slate-400 mt-1">{suggestion}</div>
         : undefined;

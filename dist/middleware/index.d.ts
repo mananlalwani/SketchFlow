@@ -10,7 +10,7 @@ export declare function requestLoggingMiddleware(req: Request, res: Response, ne
 /**
  * Security headers middleware (helmet-like)
  */
-export declare function securityHeadersMiddleware(_req: Request, res: Response, next: NextFunction): void;
+export declare function securityHeadersMiddleware(req: Request, res: Response, next: NextFunction): void;
 export declare function rateLimitMiddleware(options: {
     windowMs: number;
     maxRequests: number;

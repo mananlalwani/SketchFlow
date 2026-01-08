@@ -8,7 +8,7 @@ export interface ProjectRecord {
     shared?: boolean;
     shareToken?: string;
     folderId?: string | null;
-    role: 'owner' | 'editor' | 'viewer';
+    role?: 'owner' | 'editor' | 'viewer';
     collaborators?: {
         userId: string;
         role: string;

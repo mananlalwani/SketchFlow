@@ -127,8 +127,8 @@ let blitScheduled = false;
 let blitTimer: number | null = null;
 const BLIT_INTERVAL_MS = 1000 / 60; // ~60 FPS cap
 
-// Theme-aware background color (default dark - must match slate-950)
-let canvasBgColor = '#020617';
+// Theme-aware background color (default dark - must match canvas wrapper bg)
+let canvasBgColor = '#0a0a0a';
 let isLightMode = false;
 
 // Color contrast adjustment for theme switching
@@ -159,7 +159,7 @@ function getLuminance(r: number, g: number, b: number): number {
 
 // Known background colors that should never be adjusted - eraser strokes use these
 // Must match BG_COLORS in DrawingCanvas.tsx
-const BG_COLORS = ['#020617', '#f8fafc'];
+const BG_COLORS = ['#020617', '#f8fafc', '#0a0a0a', '#e0e0e0'];
 
 function isBackgroundColor(color: string): boolean {
   const normalized = color.toLowerCase();

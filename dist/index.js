@@ -558,9 +558,7 @@ class LiveDrawServer {
                     currentRoom = null;
                 }
             });
-            // Handle cursor movement with server-side throttling
-            const lastCursorUpdate = new Map();
-            const CURSOR_THROTTLE_MS = 100; // Server-side throttle: max 10 updates per second
+            // Handle cursor movement
             socket.on('cursor:move', (cursor) => {
                 if (!currentRoom)
                     return;
@@ -569,13 +567,6 @@ class LiveDrawServer {
                     typeof cursor.x !== 'number' || typeof cursor.y !== 'number') {
                     return;
                 }
-                // Server-side throttling: prevent too frequent updates per user
-                const now = Date.now();
-                const lastUpdate = lastCursorUpdate.get(cursor.userId) || 0;
-                if (now - lastUpdate < CURSOR_THROTTLE_MS) {
-                    return; // Skip this update
-                }
-                lastCursorUpdate.set(cursor.userId, now);
                 // Store current user ID
                 if (!currentUserId) {
                     currentUserId = cursor.userId;
@@ -593,7 +584,7 @@ class LiveDrawServer {
                         x: cursor.x,
                         y: cursor.y,
                         color: cursor.color,
-                        timestamp: now
+                        timestamp: Date.now()
                     });
                 }
                 // Broadcast to others in room
@@ -606,7 +597,6 @@ class LiveDrawServer {
                 if (currentRoom && currentUserId) {
                     if (roomCursors.has(currentRoom)) {
                         roomCursors.get(currentRoom)?.delete(currentUserId);
-                        // @ts-ignore - Server-side emit to clients
                         this.io.to(currentRoom).emit('cursor:leave', currentUserId);
                     }
                 }

@@ -12,6 +12,6 @@ export declare class AuthService {
     constructor(userService: UserService);
     private getTokenFromRequest;
     middleware(): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
-    optionalMiddleware(): (req: AuthenticatedRequest, _res: Response, next: NextFunction) => void;
+    optionalMiddleware(): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void;
 }
 //# sourceMappingURL=AuthService.d.ts.map

@@ -17,7 +17,9 @@ describe('utils', () => {
     });
 
     it('should handle conditional classes', () => {
-      expect(cn('base', false && 'hidden', true && 'visible')).toBe('base visible');
+      const show = true;
+      const hide = false;
+      expect(cn('base', hide && 'hidden', show && 'visible')).toBe('base visible');
     });
 
     it('should merge tailwind classes correctly', () => {

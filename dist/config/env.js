@@ -7,7 +7,7 @@ const envSchema = z.object({
     // Node environment
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     // Server configuration
-    PORT: z.coerce.number().default(3000),
+    PORT: z.string().transform(Number).default('3000'),
     HOST: z.string().default('0.0.0.0'),
     // Database (required)
     DATABASE_URL: z.string().url().startsWith('postgresql://'),

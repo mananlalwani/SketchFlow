@@ -16,6 +16,7 @@ export class ProjectService {
                 return false;
             const isOwner = project.userId === userId;
             const collaborator = project.collaborators.find(c => c.userId === userId);
+            const role = isOwner ? 'owner' : (collaborator?.role || null);
             switch (action) {
                 case 'view':
                     return isOwner || !!collaborator || project.shared;
@@ -83,7 +84,7 @@ export class ProjectService {
             }
             catch (e) {
                 // Collaborators table might not exist yet - fallback to simple query
-                logger.warn('Collaborators query failed, falling back to simple query', { error: e });
+                logger.warn('Collaborators query failed, falling back to simple query', e);
                 const projects = await prisma.project.findMany({
                     where: { userId },
                     select: {
@@ -110,7 +111,7 @@ export class ProjectService {
                 }));
             }
             // Combine and dedupe (in case user is both owner and collaborator somehow)
-            const allProjects = [...ownedProjects, ...(collaboratedProjects || [])];
+            const allProjects = [...ownedProjects, ...collaboratedProjects];
             const seen = new Set();
             const deduped = allProjects.filter(p => {
                 if (seen.has(p.id))
@@ -120,7 +121,7 @@ export class ProjectService {
             });
             return deduped.map(p => {
                 const isOwner = p.userId === userId;
-                const collab = p.collaborators?.find((c) => c.userId === userId);
+                const collab = p.collaborators.find(c => c.userId === userId);
                 const role = isOwner ? 'owner' : collab?.role || 'viewer';
                 // Debug log if there's a mismatch
                 if (isOwner && collab) {
@@ -253,6 +254,7 @@ export class ProjectService {
                 }
             }
             let project;
+            let resultCollaborators = [];
             try {
                 project = await prisma.project.upsert({
                     where: { id },
@@ -274,6 +276,7 @@ export class ProjectService {
                         }
                     }
                 });
+                resultCollaborators = project.collaborators || [];
             }
             catch {
                 // Fallback if collaborators table doesn't exist
@@ -302,8 +305,7 @@ export class ProjectService {
                 createdAt: project.createdAt.getTime(),
                 shared: project.shared,
                 shareToken: project.shareToken ?? undefined,
-                role: 'owner',
-                collaborators
+                collaborators: resultCollaborators
             };
         }
         catch (e) {
@@ -341,7 +343,6 @@ export class ProjectService {
                 createdAt: project.createdAt.getTime(),
                 shared: project.shared,
                 shareToken: project.shareToken ?? undefined,
-                role: 'owner',
                 collaborators: project.collaborators
             };
         }
@@ -379,7 +380,6 @@ export class ProjectService {
                 createdAt: project.createdAt.getTime(),
                 shared: project.shared,
                 shareToken: project.shareToken ?? undefined,
-                role: 'owner',
                 collaborators: project.collaborators
             };
         }

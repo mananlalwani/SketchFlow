@@ -38,7 +38,7 @@ export class AuthService {
         };
     }
     optionalMiddleware() {
-        return (req, _res, next) => {
+        return (req, res, next) => {
             const token = this.getTokenFromRequest(req);
             if (token) {
                 const user = this.userService.validateSession(token);
