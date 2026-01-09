@@ -99,7 +99,7 @@ export function DrawingCanvas() {
 
   const { emitStrokes, emitShape, emitSnapshot, emitClear, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId);
-  const { canEdit, canDraw, role } = useProjectPermissions();
+  const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
   const { updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
   const fps = useFPSCounter();
@@ -1329,7 +1329,7 @@ export function DrawingCanvas() {
         saveHistory();
       }
     }
-  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject, textInputPos]);
+  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject, textInputPos, canDraw, toast]);
 
   const draw = useCallback((e: React.PointerEvent) => {
     // Emit cursor position for live cursors
@@ -1596,7 +1596,7 @@ export function DrawingCanvas() {
       });
     }
     // Custom triangle uses click mode, not drag mode - handled in startDrawing
-  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, triangleMode, draggedObject, objects, theme]);
+  }, [isDrawing, lastPoint, startPoint, currentTool, eraserMode, screenToWorld, brushColor, brushSize, brushOpacity, enqueueWorkerStroke, constrainShape, isPanning, panStart, zoom, setView, triangleMode, draggedObject, objects, theme, emitCursor]);
 
   const stopDrawing = useCallback(() => {
     // Stop dragging

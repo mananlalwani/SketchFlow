@@ -33,6 +33,7 @@ export interface DrawingObject {
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
   imageData?: string; // Base64 data URL for images
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties?: Record<string, any>; // Shape-specific properties (e.g., arrow direction, star point count)
   createdBy?: string; // User ID who created this object
   createdAt?: number; // Timestamp when created

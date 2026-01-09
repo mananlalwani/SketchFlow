@@ -278,7 +278,7 @@ class LocalProjectsService {
           
           const project = await this.create(title, data);
           resolve(project);
-        } catch (error) {
+        } catch {
           reject(new Error('Failed to parse .draw file'));
         }
       };

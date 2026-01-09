@@ -9,6 +9,7 @@ export interface DetectionResult {
   confidence: number; // 0-1, higher = more confident
   shape: DetectedShape;
   error: number; // Average fitting error
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata?: Record<string, any>;
 }
 
@@ -19,6 +20,7 @@ export interface DetectedShape {
   center?: Point;
   orientation?: number; // Rotation angle in radians
   filled?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties?: Record<string, any>; // Shape-specific properties
 }
 

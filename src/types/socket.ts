@@ -29,6 +29,7 @@ export interface ShapeData {
   fontSize?: number;
   imageData?: string;
   points?: { x: number; y: number }[];  // For custom triangles and other shapes with custom vertices
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties?: Record<string, any>;  // For shape-specific properties (e.g., star point count)
   timestamp?: number;
   createdBy?: string;  // User ID who created this shape
@@ -144,6 +145,7 @@ export interface ServerToClientEvents {
   'cursor:join': (cursor: CursorData) => void;
   'cursor:leave': (userId: string) => void;
   'cursors:all': (cursors: CursorData[]) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   'project:state': (data: { objects: any[]; timestamp: number }) => void;  // Full state sync for late joiners
   'object:delete': (objectId: string, userId: string) => void;  // Object deletion event
 }

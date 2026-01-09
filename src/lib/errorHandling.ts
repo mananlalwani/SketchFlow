@@ -146,7 +146,7 @@ export function handleError(
 /**
  * Wrap async functions with automatic error handling
  */
-export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(
+export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
   options: ErrorHandlerOptions = {}
 ): T {
@@ -158,7 +158,9 @@ export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(
       
       // Re-throw with enhanced error
       const enhancedError = error instanceof Error ? error : new Error(String(error));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (enhancedError as any).userMessage = message;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (enhancedError as any).userSuggestion = suggestion;
       throw enhancedError;
     }

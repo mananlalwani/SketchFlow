@@ -133,7 +133,7 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
       await loadCollaborators();
       toast({ title: 'Collaborator added' });
       onUpdate?.();
-    } catch (e) {
+    } catch {
       toast({ title: 'Failed to add collaborator', description: 'User may not exist or is already added.', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -148,7 +148,7 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
       await loadCollaborators();
       toast({ title: 'Collaborator removed' });
       onUpdate?.();
-    } catch (e) {
+    } catch {
       toast({ title: 'Failed to remove collaborator', variant: 'destructive' });
     } finally {
       setLoading(false);

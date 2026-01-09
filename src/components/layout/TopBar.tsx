@@ -30,10 +30,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { FloatingAuthButton } from '@/components/AuthButton';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { ProjectShareDialog } from '@/components/ProjectShareDialog';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { SettingsDropdown } from '@/components/SettingsDropdown';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { useAuth } from '@clerk/clerk-react';
 
@@ -345,8 +344,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         
         <ConnectionStatus />
         <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
-        <ThemeToggle className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white" />
-        <FloatingAuthButton />
+        <SettingsDropdown />
       </div>
     </div>
   );

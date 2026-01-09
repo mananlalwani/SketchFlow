@@ -22,9 +22,10 @@ export function ViewerCanvas() {
     updatePerformanceStats,
     setZoom,
     setView,
-    resetView,
     currentProjectId,
   } = useDrawingStore();
+
+  const objectsLength = useDrawingStore(state => state.objects.length);
 
   const { on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId);
@@ -116,7 +117,7 @@ export function ViewerCanvas() {
       }));
       workerRef.current.postMessage({ type: 'load-objects', data: shapes });
     }
-  }, [useDrawingStore.getState().objects.length]);
+  }, [objectsLength]);
 
   // Also listen for redraw requests
   useEffect(() => {

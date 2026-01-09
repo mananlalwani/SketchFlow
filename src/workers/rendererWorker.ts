@@ -41,6 +41,7 @@ type Shape = {
   text?: string;
   fontSize?: number;
   imageData?: string; // Base64 data URL for images
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties?: Record<string, any>; // Shape-specific properties (e.g., star point count)
 };
 
@@ -464,6 +465,7 @@ function blit() {
         points?: { x: number; y: number }[];
         text?: string; fontSize?: number;
         imageData?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         properties?: Record<string, any>;
       };
       if (sh.type === 'image' && sh.imageData) {
@@ -525,6 +527,7 @@ function blit() {
         points?: { x: number; y: number }[];
         text?: string; fontSize?: number;
         imageData?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         properties?: Record<string, any>;
       };
       // Skip images - already rendered above
@@ -630,6 +633,7 @@ function blit() {
         const cy = sh.y + sh.height / 2;
         const outerRadius = Math.min(sh.width, sh.height) / 2;
         const innerRadius = outerRadius * 0.38;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pointCount = (sh as any).properties?.pointCount || 5;
         
         vectorSSCtx.beginPath();
@@ -721,6 +725,7 @@ function blit() {
       points?: { x: number; y: number }[];
       text?: string; fontSize?: number;
       imageData?: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       properties?: Record<string, any>;
     };
     if (sh.type === 'image' && sh.imageData && objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
@@ -783,6 +788,7 @@ function blit() {
       points?: { x: number; y: number }[];
       text?: string; fontSize?: number;
       imageData?: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       properties?: Record<string, any>;
     };
     // Skip images - already rendered above
@@ -899,6 +905,7 @@ function blit() {
       const cy = sh.y + sh.height / 2;
       const outerRadius = Math.min(sh.width, sh.height) / 2;
       const innerRadius = outerRadius * 0.38;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pointCount = (sh as any).properties?.pointCount || 5;
       
       screenCtx.beginPath();

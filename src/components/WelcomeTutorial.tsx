@@ -224,7 +224,7 @@ export function EmptyStateHint() {
     }, 1500);
     
     return () => clearTimeout(timer);
-  }, []);
+  }, [objectCount]);
 
   // When objects are added, mark as drawn and hide forever
   useEffect(() => {

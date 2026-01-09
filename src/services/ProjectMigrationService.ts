@@ -1,7 +1,6 @@
 // Service to handle migration of guest projects when user signs in
 import { localProjectsService } from '@/lib/localProjects';
 import { createProject } from '@/lib/api';
-import type { ProjectRecord } from '@/lib/api';
 
 export interface MigrationResult {
   success: boolean;

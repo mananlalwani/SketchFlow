@@ -62,7 +62,7 @@ export class StarDetector implements ShapeDetector {
     }
     
     // Create the detected shape
-    const shape = createDetectedShape('star' as any, stroke.boundingBox, {
+    const shape = createDetectedShape('star', stroke.boundingBox, {
       center: starCandidate.center,
       points: starCandidate.vertices,
       properties: {
