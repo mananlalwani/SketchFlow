@@ -47,7 +47,7 @@ export class ProjectService {
 
       const isOwner = project.userId === userId;
       const collaborator = project.collaborators.find(c => c.userId === userId);
-      const role = isOwner ? 'owner' : (collaborator?.role || null);
+      // const role = isOwner ? 'owner' : (collaborator?.role || null);
 
       switch (action) {
         case 'view':
@@ -277,14 +277,11 @@ export class ProjectService {
   public async save(id: string, userId: string, title: string, data: unknown): Promise<ProjectRecord> {
     try {
       let existing;
-      let collaborators: { userId: string; role: string }[] = [];
       
       try {
         existing = await prisma.project.findUnique({
-          where: { id },
-          include: { collaborators: true }
+          where: { id }
         });
-        collaborators = existing?.collaborators?.map(c => ({ userId: c.userId, role: c.role })) || [];
       } catch {
         // Fallback if collaborators table doesn't exist
         existing = await prisma.project.findUnique({

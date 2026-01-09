@@ -180,8 +180,8 @@ export function PropertiesPanel() {
               </div>
               <div className="p-3 bg-slate-100 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-white/5">
                 <p 
-                  className="text-center truncate text-slate-700 dark:text-slate-200" 
-                  style={{ fontSize: `${Math.min(fontSize, 32)}px`, lineHeight: 1.2 }}
+                  className="text-center truncate text-slate-700 dark:text-slate-200 text-preview" 
+                  style={{ fontSize: `${Math.min(fontSize, 32)}px` }}
                 >
                   Preview
                 </p>

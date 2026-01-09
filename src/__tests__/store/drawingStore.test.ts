@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useDrawingStore } from '@/store/drawingStore';
 
 describe('drawingStore', () => {
@@ -157,7 +157,7 @@ describe('drawingStore', () => {
     });
 
     it('should report canUndo and canRedo correctly', () => {
-      const { addObject, saveHistory, undo, canUndo, canRedo } = useDrawingStore.getState();
+      const { addObject, saveHistory, canUndo, canRedo } = useDrawingStore.getState();
       
       expect(canUndo()).toBe(false);
       expect(canRedo()).toBe(false);

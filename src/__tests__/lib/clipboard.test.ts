@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // These tests verify the clipboard utility logic
 // Full integration tests would need a real browser environment

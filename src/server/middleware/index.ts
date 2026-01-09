@@ -122,6 +122,7 @@ export function rateLimitMiddleware(options: {
 /**
  * Error handling middleware - consistent error responses
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function errorHandlerMiddleware(err: Error, req: Request, res: Response, _next: NextFunction): void {
   const traceContext = getTraceContext();
   

@@ -432,6 +432,7 @@ function renderStarToPDF(
   const cy = offsetY + (obj.y + obj.height / 2) * scale;
   const outerRadius = Math.min(obj.width, obj.height) / 2 * scale;
   const innerRadius = outerRadius * 0.38; // Standard 5-pointed star ratio
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const points = (obj as any).properties?.pointCount || 5;
   
   // Generate star vertices

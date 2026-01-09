@@ -115,6 +115,7 @@ export class TriangleDetector implements ShapeDetector {
     };
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private findBestTriangleFit(points: Point[], analysis: any): TriangleFit | null {
     // Try different approaches to find triangle vertices
     

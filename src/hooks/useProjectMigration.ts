@@ -5,7 +5,7 @@ import { projectMigrationService } from '@/services/ProjectMigrationService';
 import { useToast } from '@/hooks/use-toast';
 
 export function useProjectMigration() {
-  const { isAuthenticated, isGuest, guestId, getToken } = useAuthStore();
+  const { isAuthenticated, guestId, getToken } = useAuthStore();
   const { toast } = useToast();
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationComplete, setMigrationComplete] = useState(false);

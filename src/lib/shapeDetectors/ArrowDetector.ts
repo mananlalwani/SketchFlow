@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Arrow detection algorithm
  * 
@@ -68,7 +69,7 @@ export class ArrowDetector implements ShapeDetector {
     const orientation = Math.atan2(shaftVector.y, shaftVector.x);
     
     // Create the detected shape
-    const shape = createDetectedShape('arrow' as any, stroke.boundingBox, {
+    const shape = createDetectedShape('arrow', stroke.boundingBox, {
       points: [
         arrowCandidate.shaftStart,
         arrowCandidate.shaftEnd,
@@ -94,7 +95,7 @@ export class ArrowDetector implements ShapeDetector {
     };
   }
 
-  private findArrowPattern(points: Point[], _thresholds: DetectionThresholds): ArrowCandidate | null {
+  private findArrowPattern(points: Point[], thresholds: DetectionThresholds): ArrowCandidate | null {
     // Try detecting arrow at the end first (most common)
     const endArrow = this.detectArrowHead(points, 'end');
     if (endArrow && endArrow.confidence > 0.6) {

@@ -421,7 +421,8 @@ interface RectangleFit {
 interface EdgeSegment {
   start: Point;
   end: Point;
-  direction: { x: number; y: number; magnitude: number; normalized: { x: number; y: number; magnitude: number; normalized: any } };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  direction: { x: number; y: number; magnitude: number; normalized: any };
   coverage: number;
   length: number;
 }
