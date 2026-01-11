@@ -11,16 +11,20 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
-COPY prisma ./prisma/
+COPY apps/client/package.json ./apps/client/
+COPY apps/server/package.json ./apps/server/
+COPY apps/server/prisma ./apps/server/prisma/
 
-# Install all dependencies (including devDependencies for build)
-RUN pnpm install --frozen-lockfile
+# Install all dependencies
+RUN pnpm install
 
 # Copy source code
 COPY . .
 
 # Generate Prisma client
+WORKDIR /app/apps/server
 RUN pnpm db:generate
+WORKDIR /app
 
 # Build client and server
 RUN pnpm build
@@ -39,31 +43,32 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
-COPY prisma ./prisma/
+COPY apps/client/package.json ./apps/client/
+COPY apps/server/package.json ./apps/server/
+COPY apps/server/prisma ./apps/server/prisma/
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Install production dependencies
+RUN pnpm install --prod
 
 # Generate Prisma client in production stage
+WORKDIR /app/apps/server
 RUN pnpm db:generate
+WORKDIR /app
 
 # Copy built artifacts from builder
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/apps/client/dist ./apps/client/dist
+COPY --from=builder /app/apps/server/dist ./apps/server/dist
 
-# Set ownership to non-root user
+# Set ownership
 RUN chown -R livedraw:nodejs /app
 
 USER livedraw
 
-# Environment defaults
+# Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV HOST=0.0.0.0
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
-
-# Start the server
-CMD ["node", "dist/server.js"]
+# Start command
+CMD ["node", "apps/server/dist/index.js"]

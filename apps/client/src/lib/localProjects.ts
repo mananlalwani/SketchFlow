@@ -1,5 +1,18 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { ProjectRecord } from '@/server/services/ProjectService';
+
+export interface ProjectRecord {
+  id: string;
+  userId: string;
+  title: string;
+  updatedAt: number;
+  createdAt: number;
+  data: unknown;
+  shared?: boolean;
+  shareToken?: string;
+  folderId?: string | null;
+  role?: 'owner' | 'editor' | 'viewer';
+  collaborators?: { userId: string; role: string }[];
+}
 
 interface LocalProjectsDB extends DBSchema {
   projects: {

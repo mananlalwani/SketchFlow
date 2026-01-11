@@ -104,7 +104,7 @@ class LiveDrawServer {
     }));
 
     // Static files - serve the built client
-    const staticPath = path.join(__dirname, '../../dist');
+    const staticPath = path.join(__dirname, '../../client/dist');
     this.app.use(express.static(staticPath, {
       // Cache static assets aggressively in production
       maxAge: isProd ? '1y' : 0,
