@@ -30,7 +30,14 @@ A modern, real-time collaborative drawing application built with the latest tech
 - **Advanced error handling** and logging
 - **Performance monitoring**
 
-## 🛠️ Installation & Setup
+## � Project Structure
+
+This project is organized as a monorepo:
+- **apps/client**: React frontend application
+- **apps/server**: Node.js/Express backend service
+- **packages/**: Shared configuration and libraries
+
+## �🛠️ Installation & Setup
 
 ### Prerequisites
 - Node.js 18+ 

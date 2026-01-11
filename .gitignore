@@ -1,2 +1,6 @@
 node_modules
 /generated/prisma
+/apps/client/dist
+/apps/server/dist
+/apps/client/node_modules
+/apps/server/node_modules

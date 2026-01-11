@@ -9,8 +9,8 @@ export interface StrokeData {
   blend?: string;
   timestamp?: number;
   groupId?: string;
-  createdBy?: string;  // User ID who created this stroke
-  createdAt?: number;  // Timestamp when created
+  createdBy?: string;
+  createdAt?: number;
 }
 
 export interface ShapeData {
@@ -28,14 +28,14 @@ export interface ShapeData {
   text?: string;
   fontSize?: number;
   imageData?: string;
-  points?: { x: number; y: number }[];  // For custom triangles and other shapes with custom vertices
+  points?: { x: number; y: number }[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  properties?: Record<string, any>;  // For shape-specific properties (e.g., star point count)
+  properties?: Record<string, any>;
   timestamp?: number;
-  createdBy?: string;  // User ID who created this shape
-  createdAt?: number;  // Timestamp when created
-  lastModifiedBy?: string;  // User ID who last modified
-  lastModifiedAt?: number;  // Timestamp of last modification
+  createdBy?: string;
+  createdAt?: number;
+  lastModifiedBy?: string;
+  lastModifiedAt?: number;
 }
 
 export interface CanvasSnapshot {
@@ -54,7 +54,7 @@ export interface CursorData {
   timestamp?: number;
 }
 
-// Project file format for import/export
+// Project file format
 export type ProjectVersion = '1.0.0';
 
 export interface ProjectStroke {
@@ -146,8 +146,8 @@ export interface ServerToClientEvents {
   'cursor:leave': (userId: string) => void;
   'cursors:all': (cursors: CursorData[]) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  'project:state': (data: { objects: any[]; timestamp: number }) => void;  // Full state sync for late joiners
-  'object:delete': (objectId: string, userId: string) => void;  // Object deletion event
+  'project:state': (data: { objects: any[]; timestamp: number }) => void;
+  'object:delete': (objectId: string, userId: string) => void;
 }
 
 export interface ClientToServerEvents {
@@ -159,8 +159,15 @@ export interface ClientToServerEvents {
   'cursor:move': (cursor: CursorData) => void;
   'room:join': (projectId: string) => void;
   'room:leave': () => void;
-  'project:request-state': () => void;  // Request full state from server
-  'object:delete': (objectId: string) => void;  // Delete an object
+  'project:request-state': () => void;
+  'object:delete': (objectId: string) => void;
 }
 
+export interface InterServerEvents {
+  ping: () => void;
+}
 
+export interface SocketData {
+  userId?: string;
+  userName?: string;
+}

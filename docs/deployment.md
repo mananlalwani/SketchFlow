@@ -5,7 +5,8 @@
 1. Go to [Cloudflare Pages](https://pages.cloudflare.com)
 2. Connect your GitHub repository
 3. Configure build settings:
-   - **Build command**: `pnpm build:client`
+   - **Root directory**: `apps/client`
+   - **Build command**: `pnpm build`
    - **Build output**: `dist`
 4. Add environment variable:
    - `VITE_CLERK_PUBLISHABLE_KEY` = your Clerk publishable key
