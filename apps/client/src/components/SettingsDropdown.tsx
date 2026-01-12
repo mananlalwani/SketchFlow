@@ -163,8 +163,8 @@ export function SettingsDropdown() {
       <Dialog open={showAbout} onOpenChange={setShowAbout}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-              DrawApp
+            <DialogTitle className="text-xl font-bold text-blue-600 dark:text-blue-400">
+              SketchFlow
             </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-4 pt-2">

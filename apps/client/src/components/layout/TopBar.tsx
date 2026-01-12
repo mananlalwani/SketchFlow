@@ -34,7 +34,8 @@ import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { ProjectShareDialog } from '@/components/ProjectShareDialog';
 import { SettingsDropdown } from '@/components/SettingsDropdown';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth, SignInButton, SignUpButton, useClerk } from '@clerk/clerk-react';
+import { User } from 'lucide-react';
 
 export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean }) {
   const {
@@ -54,7 +55,8 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   const { emitClear } = useDrawingSocket();
   const { toast } = useToast();
   const { getToken, userId } = useAuth();
-  const { isGuest } = useAuthStore();
+  const { isGuest, isAuthenticated, isLoading } = useAuthStore();
+  const clerk = useClerk();
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -187,10 +189,10 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     <div className="h-14 border-b border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center px-4 justify-between z-30 relative transition-colors duration-200">
       <div className="flex items-center gap-4">
         <div 
-          className="font-bold text-xl bg-gradient-to-r from-blue-500 to-purple-600 dark:from-blue-400 dark:to-purple-500 bg-clip-text text-transparent cursor-pointer"
+          className="font-bold text-xl text-blue-600 dark:text-blue-400 cursor-pointer"
           onClick={goToHome}
         >
-          DrawApp
+          SketchFlow
         </div>
         
         {!hideProjectControls && (
@@ -342,6 +344,33 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
           </>
         )}
         
+
+        
+        {/* Auth Buttons */}
+        {!isLoading && !isAuthenticated && clerk.loaded && (
+          <>
+            <SignInButton mode="modal">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+              >
+                <User className="w-4 h-4 mr-2" />
+                Sign In
+              </Button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Sign Up
+              </Button>
+            </SignUpButton>
+
+          </>
+        )}
+
         <ConnectionStatus />
         <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
         <SettingsDropdown />

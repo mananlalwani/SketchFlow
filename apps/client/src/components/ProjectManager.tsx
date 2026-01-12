@@ -795,7 +795,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       {/* Guest Mode Banner - Dismissable */}
       {isGuest && !guestBannerDismissed && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b border-blue-200 dark:border-blue-800/50 px-6 py-3">
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
                 <Info className="w-5 h-5 text-white" />

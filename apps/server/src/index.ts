@@ -40,13 +40,13 @@ import {
   rateLimitMiddleware,
   errorHandlerMiddleware,
 } from './middleware/index.js';
-import type { 
-  StrokeData, 
+import type {
+  StrokeData,
   ShapeData,
   CanvasSnapshot,
   CursorData,
-  ClientToServerEvents, 
-  ServerToClientEvents 
+  ClientToServerEvents,
+  ServerToClientEvents
 } from './types/socket.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,14 +70,15 @@ class LiveDrawServer {
   constructor() {
 
     // Configure CORS origins for Socket.IO
-    const corsOrigins = isProd && env.CORS_ORIGINS.length > 0 
-      ? env.CORS_ORIGINS 
-      : '*';
+    // In development, allow all origins with credentials (reflective origin)
+    const corsOrigins = isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0
+      ? env.CORS_ORIGINS
+      : true;
 
     this.io = new SocketIOServer(this.server, {
-      cors: { 
+      cors: {
         origin: corsOrigins,
-        credentials: true 
+        credentials: true
       },
       maxHttpBufferSize: 10 * 1024 * 1024, // 10MB for better performance
       pingTimeout: 20000,
@@ -96,14 +97,16 @@ class LiveDrawServer {
   }
 
   private setupMiddleware(): void {
-        // CORS middleware (must be before all routes/static)
-        const corsOrigins = isProd && env.CORS_ORIGINS.length > 0 
-          ? env.CORS_ORIGINS 
-          : '*';
-        this.app.use(cors({
-          origin: corsOrigins,
-          credentials: true,
-        }));
+    // CORS middleware (must be before all routes/static)
+    // In development, allow all origins with credentials (reflective origin)
+    const corsOrigins = isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0
+      ? env.CORS_ORIGINS
+      : true;
+
+    this.app.use(cors({
+      origin: corsOrigins,
+      credentials: true,
+    }));
     // Request ID for correlation (must be first)
     this.app.use(requestIdMiddleware);
 
@@ -154,8 +157,8 @@ class LiveDrawServer {
   private setupRoutes(): void {
     // Health check - basic liveness
     this.app.get('/api/health', (_req, res) => {
-      res.json({ 
-        status: 'ok', 
+      res.json({
+        status: 'ok',
         timestamp: new Date().toISOString(),
         connections: this.drawingService.getConnectionCount(),
       });
@@ -183,7 +186,7 @@ class LiveDrawServer {
         return;
       }
 
-      res.json({ 
+      res.json({
         status: 'ok',
         database: 'connected',
         connections: this.drawingService.getConnectionCount(),
@@ -281,7 +284,7 @@ class LiveDrawServer {
         if (!shared) {
           return res.status(404).json({ error: 'Project not found' });
         }
-        res.json({ 
+        res.json({
           shareToken: shared.shareToken,
           shareUrl: `${req.protocol}://${req.get('host')}/view?share=${shared.shareToken}`
         });
@@ -308,7 +311,7 @@ class LiveDrawServer {
       try {
         const userId = req.auth!.userId!;
         const collaborators = await this.projectService.getCollaborators(req.params.id, userId);
-        
+
         // Enrich with email addresses from Clerk
         const enrichedCollaborators = await Promise.all(
           collaborators.map(async (c) => {
@@ -323,7 +326,7 @@ class LiveDrawServer {
             }
           })
         );
-        
+
         res.json(enrichedCollaborators);
       } catch {
         res.status(500).json({ error: 'Failed to get collaborators' });
@@ -334,11 +337,11 @@ class LiveDrawServer {
       try {
         const userId = req.auth!.userId!;
         const { email, role } = req.body || {};
-        
+
         if (!email) {
           return res.status(400).json({ error: 'Email is required' });
         }
-        
+
         // Look up user by email using Clerk
         let collaboratorUserId: string | null = null;
         try {
@@ -351,18 +354,18 @@ class LiveDrawServer {
         } catch (e) {
           logger.error('Failed to look up user by email', e);
         }
-        
+
         if (!collaboratorUserId) {
           return res.status(404).json({ error: 'User not found with that email' });
         }
-        
+
         // Extra safety check: prevent adding yourself
         if (collaboratorUserId === userId) {
           return res.status(400).json({ error: 'Cannot add yourself as a collaborator' });
         }
-        
+
         logger.info(`Adding collaborator ${collaboratorUserId} to project ${req.params.id} by owner ${userId}`);
-        
+
         const added = await this.projectService.addCollaborator(req.params.id, userId, collaboratorUserId, role || 'editor');
         if (!added) {
           return res.status(404).json({ error: 'Project not found or unauthorized' });
@@ -463,23 +466,23 @@ class LiveDrawServer {
   private setupSocketHandlers(): void {
     // Track active cursors per room
     const roomCursors = new Map<string, Map<string, { userId: string; username: string; x: number; y: number; color: string; timestamp: number }>>();
-    
+
     // Generate color for user
     const getUserColor = (userId: string): string => {
       const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
       const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       return colors[hash % colors.length];
     };
-    
+
     this.io.on('connection', (socket) => {
       const clientId = socket.id;
       let currentRoom: string | null = null;
       let currentUserId: string | null = null;
-      
+
       logger.info(`Client connected: ${clientId}`);
-      
+
       this.drawingService.addConnection(clientId);
-      
+
       // Broadcast updated connection count to all clients
       this.io.emit('connection:count', this.drawingService.getConnectionCount());
 
@@ -492,7 +495,7 @@ class LiveDrawServer {
       // Helper to check if user can edit in current room
       const canUserEdit = async (): Promise<boolean> => {
         if (!currentRoom || !currentUserId) return false;
-        
+
         // Check permission
         const canEdit = await this.projectService.checkPermission(currentRoom, currentUserId, 'edit');
         return canEdit;
@@ -528,7 +531,7 @@ class LiveDrawServer {
       // Handle batch strokes
       socket.on('draw:strokes', async (strokes: StrokeData[]) => {
         if (!Array.isArray(strokes) || strokes.length === 0) return;
-        
+
         // Check edit permission
         if (currentRoom && currentUserId) {
           const canEdit = await canUserEdit();
@@ -537,11 +540,11 @@ class LiveDrawServer {
             return;
           }
         }
-        
+
         const validStrokes = strokes
           .slice(0, 100) // Limit batch size
           .filter(s => this.isValidStroke(s));
-        
+
         if (validStrokes.length === 0) return;
 
         try {
@@ -612,7 +615,7 @@ class LiveDrawServer {
             return;
           }
         }
-        
+
         try {
           this.drawingService.clearCanvas();
           // Only broadcast to clients in the same room/project
@@ -636,7 +639,7 @@ class LiveDrawServer {
             this.io.to(currentRoom).emit('cursor:leave', currentUserId);
           }
         }
-        
+
         // Join new room
         currentRoom = projectId;
         socket.join(projectId);
@@ -648,17 +651,17 @@ class LiveDrawServer {
         if (!roomCursors.has(projectId)) {
           roomCursors.set(projectId, new Map());
         }
-        
+
         // Send all existing cursors in room to new joiner
         const cursorsInRoom = roomCursors.get(projectId);
         if (cursorsInRoom) {
           const allCursors = Array.from(cursorsInRoom.values());
           socket.emit('cursors:all', allCursors);
         }
-        
+
         logger.info(`Client ${clientId} joined room: ${projectId}`);
       });
-      
+
       // Handle room leave
       socket.on('room:leave', () => {
         if (currentRoom && currentUserId) {
@@ -671,27 +674,27 @@ class LiveDrawServer {
           currentRoom = null;
         }
       });
-      
+
       // Handle cursor movement
       socket.on('cursor:move', (cursor: CursorData) => {
         if (!currentRoom) return;
-        
+
         // Validate cursor data
-        if (!cursor || typeof cursor.userId !== 'string' || 
-            typeof cursor.x !== 'number' || typeof cursor.y !== 'number') {
+        if (!cursor || typeof cursor.userId !== 'string' ||
+          typeof cursor.x !== 'number' || typeof cursor.y !== 'number') {
           return;
         }
-        
+
         // Store current user ID
         if (!currentUserId) {
           currentUserId = cursor.userId;
         }
-        
+
         // Ensure color is set
         if (!cursor.color) {
           cursor.color = getUserColor(cursor.userId);
         }
-        
+
         // Update cursor in room
         const roomCursorMap = roomCursors.get(currentRoom);
         if (roomCursorMap) {
@@ -704,7 +707,7 @@ class LiveDrawServer {
             timestamp: Date.now()
           });
         }
-        
+
         // Broadcast to others in room
         socket.to(currentRoom).emit('cursor:move', cursor);
       });
@@ -712,7 +715,7 @@ class LiveDrawServer {
       // Handle disconnection
       socket.on('disconnect', (reason) => {
         this.drawingService.removeConnection(clientId);
-        
+
         // Clean up cursor from current room
         if (currentRoom && currentUserId) {
           if (roomCursors.has(currentRoom)) {
@@ -720,7 +723,7 @@ class LiveDrawServer {
             this.io.to(currentRoom).emit('cursor:leave', currentUserId);
           }
         }
-        
+
         // Broadcast updated connection count to all remaining clients
         this.io.emit('connection:count', this.drawingService.getConnectionCount());
         logger.info(`Client disconnected: ${clientId}, reason: ${reason}`);
@@ -786,11 +789,11 @@ class LiveDrawServer {
     const { networkInterfaces } = await import('os');
     const interfaces = networkInterfaces();
     const ips: string[] = [];
-    
+
     for (const name of Object.keys(interfaces)) {
       const interface_ = interfaces[name];
       if (!interface_) continue;
-      
+
       for (const net of interface_) {
         if (net.family === 'IPv4' && !net.internal) {
           ips.push(net.address);
@@ -804,14 +807,14 @@ class LiveDrawServer {
     return new Promise((resolve) => {
       this.server.listen(env.PORT, env.HOST, async () => {
         const ips = await this.getLocalIPs();
-        
+
         logger.info('Live Draw Server Started', {
           port: env.PORT,
           host: env.HOST,
           environment: env.NODE_ENV,
           maxConnections: this.drawingService.getMaxConnections(),
         });
-        
+
         logger.info(`Server running on:`);
         logger.info(`   - http://localhost:${env.PORT}`);
         ips.forEach(ip => logger.info(`   - http://${ip}:${env.PORT}`));
@@ -825,11 +828,11 @@ class LiveDrawServer {
         } catch (e) {
           logger.warn('Failed to parse CORS_ORIGINS for logging', { error: String(e) });
         }
-        
+
         // Clean up any corrupt collaborator data on startup
         logger.info('Running collaborator data cleanup...');
         await this.projectService.cleanupCorruptCollaborators();
-        
+
         resolve();
       });
     });
@@ -854,7 +857,7 @@ class LiveDrawServer {
 
     // Disconnect Prisma
     await disconnectPrisma();
-    
+
     logger.info('Graceful shutdown complete');
   }
 }
@@ -865,7 +868,7 @@ const server = new LiveDrawServer();
 // Graceful shutdown handlers
 async function handleShutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}, shutting down gracefully...`);
-  
+
   try {
     await server.stop();
     process.exit(0);
