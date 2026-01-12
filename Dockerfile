@@ -25,8 +25,12 @@ RUN pnpm install --frozen-lockfile
 COPY apps/server ./apps/server
 COPY packages/shared ./packages/shared
 
-# Build shared package
+
+# Build shared package (must be before server build and prune)
 RUN pnpm --filter @live-draw/shared build
+
+# Ensure dist exists before prune
+RUN test -d /app/packages/shared/dist
 
 # Generate Prisma client (single target)
 RUN pnpm --filter @live-draw/server db:generate
@@ -34,7 +38,8 @@ RUN pnpm --filter @live-draw/server db:generate
 # Build server
 RUN pnpm --filter @live-draw/server build
 
-# Prune to production dependencies only
+
+# Prune to production dependencies only (after all builds)
 RUN CI=true pnpm prune --prod
 
 # Remove unnecessary files from node_modules
