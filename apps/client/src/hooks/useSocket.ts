@@ -12,12 +12,27 @@ type Env = {
     DEV?: boolean;
     VITE_SOCKET_BASE_URL?: string;
     VITE_SERVER_PORT?: string;
+    VITE_WS_URL?: string;
+    VITE_API_URL?: string;
   };
 };
 
 const socketEnv = import.meta as unknown as Env;
 
 const resolveSocketBaseUrl = () => {
+  // Prefer VITE_WS_URL, then VITE_API_URL, then VITE_SOCKET_BASE_URL, then fallback
+  const wsUrl = (import.meta.env && import.meta.env.VITE_WS_URL) || socketEnv.env?.VITE_WS_URL;
+  if (wsUrl) {
+    console.log('[Socket] Using VITE_WS_URL:', wsUrl.replace(/\/$/, ''));
+    return wsUrl.replace(/\/$/, '');
+  }
+
+  const apiUrl = (import.meta.env && import.meta.env.VITE_API_URL) || socketEnv.env?.VITE_API_URL;
+  if (apiUrl) {
+    console.log('[Socket] Using VITE_API_URL:', apiUrl.replace(/\/$/, ''));
+    return apiUrl.replace(/\/$/, '');
+  }
+
   const override = socketEnv.env?.VITE_SOCKET_BASE_URL;
   if (override) {
     console.log('[Socket] Using VITE_SOCKET_BASE_URL:', override.replace(/\/$/, ''));
