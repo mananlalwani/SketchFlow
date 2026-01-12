@@ -3,6 +3,7 @@ import 'dotenv/config';
 // OpenTelemetry must be initialized before other app imports for auto-instrumentation
 import './otel.js';
 import express from 'express';
+import cors from 'cors';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
@@ -49,7 +50,8 @@ class LiveDrawServer {
   private isShuttingDown = false;
 
   constructor() {
-    // Configure CORS origins
+
+    // Configure CORS origins for Socket.IO
     const corsOrigins = isProd && env.CORS_ORIGINS.length > 0 
       ? env.CORS_ORIGINS 
       : '*';
@@ -76,6 +78,14 @@ class LiveDrawServer {
   }
 
   private setupMiddleware(): void {
+        // CORS middleware (must be before all routes/static)
+        const corsOrigins = isProd && env.CORS_ORIGINS.length > 0 
+          ? env.CORS_ORIGINS 
+          : '*';
+        this.app.use(cors({
+          origin: corsOrigins,
+          credentials: true,
+        }));
     // Request ID for correlation (must be first)
     this.app.use(requestIdMiddleware);
 
