@@ -30,12 +30,21 @@ export interface FolderRecord {
   projectCount?: number;
 }
 
-type Env = { env?: { DEV?: boolean; VITE_API_BASE_URL?: string; VITE_SERVER_PORT?: string } };
+
+type Env = {
+  env?: {
+    DEV?: boolean;
+    VITE_API_BASE_URL?: string;
+    VITE_SERVER_PORT?: string;
+    VITE_API_URL?: string;
+  };
+};
 const apiEnv = import.meta as unknown as Env;
 
 const resolveApiBase = () => {
   // Prefer VITE_API_URL, then VITE_API_BASE_URL, then fallback
-  const envApiUrl = (import.meta.env && import.meta.env.VITE_API_URL) || apiEnv.env?.VITE_API_URL;
+  // Use optional chaining and fallback for VITE_API_URL
+  const envApiUrl = (import.meta.env?.VITE_API_URL) || apiEnv.env?.VITE_API_URL;
   if (envApiUrl) return envApiUrl.replace(/\/$/, '');
 
   const override = apiEnv.env?.VITE_API_BASE_URL;
