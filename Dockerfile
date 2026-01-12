@@ -45,9 +45,9 @@ RUN pnpm --filter @live-draw/server build
 RUN CI=true pnpm prune --prod
 
 # Remove unnecessary files from node_modules
-RUN find node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.map" -o -name "LICENSE*" -o -name "CHANGELOG*" -o -name "*.d.ts" \) -delete 2>/dev/null || true
-RUN find node_modules -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
-RUN rm -rf node_modules/.pnpm/@swc* node_modules/.pnpm/typescript* 2>/dev/null || true
+# RUN find node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.map" -o -name "LICENSE*" -o -name "CHANGELOG*" -o -name "*.d.ts" \) -delete 2>/dev/null || true
+# RUN find node_modules -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
+# RUN rm -rf node_modules/.pnpm/@swc* node_modules/.pnpm/typescript* 2>/dev/null || true
 
 # --- Production Stage ---
 FROM node:20-alpine AS runner
