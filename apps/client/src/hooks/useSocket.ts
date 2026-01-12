@@ -93,7 +93,8 @@ class SocketManager {
     ...args: Parameters<ClientToServerEvents[T]>
   ) {
     if (this.socket?.connected) {
-      this.socket.emit(event, ...args);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.socket as any).emit(event, ...args);
     }
   }
 

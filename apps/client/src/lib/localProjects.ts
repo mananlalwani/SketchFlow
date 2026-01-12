@@ -12,6 +12,7 @@ export interface ProjectRecord {
   folderId?: string | null;
   role?: 'owner' | 'editor' | 'viewer';
   collaborators?: { userId: string; role: string }[];
+  thumbnail?: string;
 }
 
 interface LocalProjectsDB extends DBSchema {
@@ -44,7 +45,8 @@ class LocalProjectsService {
       upgrade(db) {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-          store.createIndex('updatedAt', 'updatedAt');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (store as any).createIndex('updatedAt', 'updatedAt');
         }
       },
     });
@@ -56,10 +58,11 @@ class LocalProjectsService {
   async list(): Promise<Omit<ProjectRecord, 'data'>[]> {
     try {
       const db = await this.initDB();
-      const projects = await db.getAllFromIndex(STORE_NAME, 'updatedAt');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const projects = await (db as any).getAllFromIndex(STORE_NAME, 'updatedAt');
       
       return projects
-        .map(p => ({
+        .map((p: { id: string; title: string; updatedAt: number; createdAt: number; thumbnail?: string }) => ({
           id: p.id,
           userId: 'guest',
           title: p.title,
@@ -69,7 +72,7 @@ class LocalProjectsService {
           role: 'owner' as const,
           thumbnail: p.thumbnail,
         }))
-        .sort((a, b) => b.updatedAt - a.updatedAt);
+        .sort((a: { updatedAt: number }, b: { updatedAt: number }) => b.updatedAt - a.updatedAt);
     } catch (error) {
       console.error('Failed to list local projects from IndexedDB:', error);
       try {
