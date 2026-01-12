@@ -4,5 +4,4 @@ node_modules
 /apps/server/dist
 /apps/client/node_modules
 /apps/server/node_modules
-/packages/shared/dist
 /packages/shared/node_modules

@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1
+# NOTE: To avoid caching issues with build artifacts, always build with:
+#   docker build --no-cache -t your-image-name .
 # Production Dockerfile for Live Draw Server (API only)
 
 # --- Build Stage ---
