@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Production Dockerfile for Live Draw Sync
+# Production Dockerfile for Live Draw Server (API only)
 
 # --- Build Stage ---
 FROM node:20-alpine AS builder
@@ -9,21 +9,18 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy package files
+# Copy package files (server + shared only)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/client/package.json ./apps/client/
 COPY apps/server/package.json ./apps/server/
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/server/prisma ./apps/server/prisma/
 
-# Install all dependencies
+# Install dependencies
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
-COPY . .
-
-# Copy env files for build (contains VITE_CLERK_PUBLISHABLE_KEY needed by Vite)
-COPY apps/client/.env ./apps/client/.env
+COPY apps/server ./apps/server
+COPY packages/shared ./packages/shared
 
 # Build shared package first
 RUN pnpm --filter @live-draw/shared build
@@ -33,8 +30,7 @@ WORKDIR /app/apps/server
 RUN pnpm db:generate
 WORKDIR /app
 
-# Build client and server
-RUN pnpm --filter @live-draw/client build
+# Build server
 RUN pnpm --filter @live-draw/server build
 
 # --- Production Stage ---
@@ -51,7 +47,6 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/client/package.json ./apps/client/
 COPY apps/server/package.json ./apps/server/
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/server/prisma ./apps/server/prisma/
@@ -66,7 +61,6 @@ WORKDIR /app
 
 # Copy built artifacts from builder
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
-COPY --from=builder /app/apps/client/dist ./apps/client/dist
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
 
 # Set ownership
