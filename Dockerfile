@@ -77,6 +77,8 @@ USER livedraw
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
+# Production CORS defaults (can be overridden by runtime env vars)
+ENV CORS_ORIGINS="https://draw.mananlalwani.com,https://d6dd93bc.live-test-364.pages.dev"
 
 EXPOSE 3000
 
