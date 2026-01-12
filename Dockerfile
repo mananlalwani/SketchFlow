@@ -6,10 +6,6 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Build argument for Clerk publishable key (needed at build time for Vite)
-ARG VITE_CLERK_PUBLISHABLE_KEY
-ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
-
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
@@ -25,6 +21,9 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
+
+# Copy env files for build (contains VITE_CLERK_PUBLISHABLE_KEY needed by Vite)
+COPY apps/client/.env ./apps/client/.env
 
 # Build shared package first
 RUN pnpm --filter @live-draw/shared build
