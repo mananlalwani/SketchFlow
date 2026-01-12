@@ -19,11 +19,15 @@ const socketEnv = import.meta as unknown as Env;
 
 const resolveSocketBaseUrl = () => {
   const override = socketEnv.env?.VITE_SOCKET_BASE_URL;
-  if (override) return override.replace(/\/$/, '');
+  if (override) {
+    console.log('[Socket] Using VITE_SOCKET_BASE_URL:', override.replace(/\/$/, ''));
+    return override.replace(/\/$/, '');
+  }
 
   const fallbackPort = socketEnv.env?.VITE_SERVER_PORT || '3000';
 
   if (typeof window === 'undefined') {
+    console.log('[Socket] Using SSR fallback URL:', `http://localhost:${fallbackPort}`);
     return `http://localhost:${fallbackPort}`;
   }
 
@@ -31,9 +35,12 @@ const resolveSocketBaseUrl = () => {
   const desiredPort = socketEnv.env?.VITE_SERVER_PORT;
 
   if (desiredPort && desiredPort !== window.location.port) {
-    return `${window.location.protocol}//${window.location.hostname}:${desiredPort}`;
+    const url = `${window.location.protocol}//${window.location.hostname}:${desiredPort}`;
+    console.log('[Socket] Using desired port URL:', url);
+    return url;
   }
 
+  console.log('[Socket] Using current origin for socket:', currentOrigin);
   return currentOrigin;
 };
 
