@@ -23,7 +23,7 @@ RUN pnpm --filter @live-draw/server build
 
 # Deploy server (isolated production build)
 # This installs prod dependencies into /app/deploy
-RUN pnpm --filter @live-draw/server --prod deploy /app/deploy
+RUN pnpm --filter @live-draw/server --prod deploy --legacy /app/deploy
 
 # Verify and copy artifacts if needed
 # pnpm deploy might not copy ignored build artifacts like dist, so we copy them explicitly
