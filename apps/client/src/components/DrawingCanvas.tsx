@@ -9,7 +9,7 @@ import { Square, Circle, Triangle, ZoomIn, ZoomOut, RotateCcw } from 'lucide-rea
 
 import { generateId, isIOS } from '@/lib/utils';
 import type { DrawingObject } from '@/store/drawingStore';
-import type { StrokeData, ShapeData } from '@/types/socket';
+import type { StrokeData, ShapeData, CanvasSnapshot } from '@/types/socket';
 import { detectShapes } from '@/lib/shapeDetectors';
 import { getImageFromClipboard, compressImage } from '@/lib/clipboard';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -98,7 +98,7 @@ export function DrawingCanvas() {
   } = useDrawingStore();
 
   const { emitStrokes, emitShape, emitSnapshot, emitClear, on } = useDrawingSocket();
-  const { cursors, emitCursor } = useLiveCursors(currentProjectId);
+  const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
   const { updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
@@ -714,7 +714,7 @@ export function DrawingCanvas() {
       workerRef.current?.postMessage({ type: 'shape', data: shape });
     });
 
-    const unsubscribeSnapshot = on('canvas:snapshot', (snapshot) => {
+    const unsubscribeSnapshot = on('canvas:snapshot', (snapshot: CanvasSnapshot) => {
       if (!snapshot?.dataUrl) return;
       // Avoid heavy image decode on iOS; skip seeding and let strokes replay
       if (isIOS()) return;

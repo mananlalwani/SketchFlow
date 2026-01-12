@@ -5,7 +5,7 @@ import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
 import { useTheme } from '@/contexts/ThemeContext';
 import { isIOS } from '@/lib/utils';
 import { useFPSCounter } from '@/hooks/useFPSCounter';
-import type { StrokeData, ShapeData } from '@/types/socket';
+import type { StrokeData, ShapeData, CanvasSnapshot } from '@/types/socket';
 import { LiveCursors } from './LiveCursors';
 import { useLiveCursors } from '@/hooks/useLiveCursors';
 
@@ -28,7 +28,7 @@ export function ViewerCanvas() {
   const objectsLength = useDrawingStore(state => state.objects.length);
 
   const { on } = useDrawingSocket();
-  const { cursors, emitCursor } = useLiveCursors(currentProjectId);
+  const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
   const { metrics, updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
   const liveFps = useFPSCounter();
   const { theme } = useTheme();
@@ -112,41 +112,41 @@ export function ViewerCanvas() {
         text: obj.text,
         fontSize: obj.fontSize,
         filled: obj.filled,
-        triangleType: obj.triangleType,
+        orientation: obj.orientation,
         imageData: obj.imageData
       }));
       workerRef.current.postMessage({ type: 'load-objects', data: shapes });
     }
   }, [objectsLength]);
 
-  // Also listen for redraw requests
+  // Also listen for needsFullRedraw flag
   useEffect(() => {
-    const unsubscribe = useDrawingStore.subscribe(
-      (state) => state.fullRedrawRequested,
-      (requested) => {
-        if (requested && workerRef.current) {
-          const objects = useDrawingStore.getState().objects;
-          const shapes = objects.map(obj => ({
-            id: obj.id,
-            type: obj.type,
-            x: obj.x,
-            y: obj.y,
-            width: obj.width,
-            height: obj.height,
-            color: obj.color,
-            size: obj.size,
-            alpha: obj.alpha,
-            points: obj.points,
-            text: obj.text,
-            fontSize: obj.fontSize,
-            filled: obj.filled,
-            triangleType: obj.triangleType,
-            imageData: obj.imageData
-          }));
-          workerRef.current.postMessage({ type: 'load-objects', data: shapes });
-        }
+    let prevNeedsRedraw = useDrawingStore.getState().needsFullRedraw;
+    const unsubscribe = useDrawingStore.subscribe((state) => {
+      const needsRedraw = state.needsFullRedraw;
+      if (needsRedraw && needsRedraw !== prevNeedsRedraw && workerRef.current) {
+        const objects = useDrawingStore.getState().objects;
+        const shapes = objects.map(obj => ({
+          id: obj.id,
+          type: obj.type,
+          x: obj.x,
+          y: obj.y,
+          width: obj.width,
+          height: obj.height,
+          color: obj.color,
+          size: obj.size,
+          alpha: obj.alpha,
+          points: obj.points,
+          text: obj.text,
+          fontSize: obj.fontSize,
+          filled: obj.filled,
+          orientation: obj.orientation,
+          imageData: obj.imageData
+        }));
+        workerRef.current.postMessage({ type: 'load-objects', data: shapes });
       }
-    );
+      prevNeedsRedraw = needsRedraw;
+    });
     return () => unsubscribe();
   }, []);
 
@@ -194,7 +194,7 @@ export function ViewerCanvas() {
       workerRef.current?.postMessage({ type: 'shape', data: shape });
     });
 
-    const unsubscribeSnapshot = on('canvas:snapshot', (snapshot) => {
+    const unsubscribeSnapshot = on('canvas:snapshot', (snapshot: CanvasSnapshot) => {
       if (!snapshot?.dataUrl) return;
       if (isIOS()) return;
       

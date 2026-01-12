@@ -213,7 +213,7 @@ export function deserializeProject(file: ProjectFile | { objects?: unknown[] } |
     console.warn('Unknown project version:', file.version, 'attempting to load anyway');
   }
   
-  return (file as ProjectFile).objects.map((o) => {
+  return (file as ProjectFile).objects.map((o: ProjectObject) => {
     if (o.type === 'stroke') {
       return {
         id: o.id,

@@ -684,12 +684,8 @@ function blit() {
           vectorSSCtx.lineTo(wing2.x, wing2.y);
           vectorSSCtx.stroke();
         }
-      } else if (sh.type === 'image' && sh.imageData) {
-        const bitmap = imageBitmapCache.get(sh.imageData);
-        if (bitmap) {
-          vectorSSCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
-        }
       }
+      // Note: images are handled separately above (before this loop skips them with continue)
       vectorSSCtx.restore();
     }
 
@@ -956,12 +952,8 @@ function blit() {
         screenCtx.lineTo(wing2.x, wing2.y);
         screenCtx.stroke();
       }
-    } else if (sh.type === 'image' && sh.imageData) {
-      const bitmap = imageBitmapCache.get(sh.imageData);
-      if (bitmap) {
-        screenCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
-      }
     }
+    // Note: images are handled separately above (before this loop skips them with continue)
     screenCtx.restore();
   }
 

@@ -476,6 +476,11 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         
+        const x = obj.x ?? 0;
+        const y = obj.y ?? 0;
+        const width = obj.width ?? 0;
+        const height = obj.height ?? 0;
+        
         if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
           ctx.beginPath();
           ctx.moveTo(obj.points[0].x, obj.points[0].y);
@@ -485,18 +490,18 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           ctx.stroke();
         } else if (obj.type === 'line') {
           ctx.beginPath();
-          ctx.moveTo(obj.x, obj.y);
-          ctx.lineTo(obj.x + obj.width, obj.y + obj.height);
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + width, y + height);
           ctx.stroke();
         } else if (obj.type === 'rectangle') {
           if (obj.filled) {
-            ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+            ctx.fillRect(x, y, width, height);
           } else {
-            ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+            ctx.strokeRect(x, y, width, height);
           }
         } else if (obj.type === 'ellipse') {
           ctx.beginPath();
-          ctx.ellipse(obj.x + obj.width/2, obj.y + obj.height/2, Math.abs(obj.width/2), Math.abs(obj.height/2), 0, 0, Math.PI * 2);
+          ctx.ellipse(x + width/2, y + height/2, Math.abs(width/2), Math.abs(height/2), 0, 0, Math.PI * 2);
           if (obj.filled) {
             ctx.fill();
           } else {
@@ -504,7 +509,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           }
         } else if (obj.type === 'text' && obj.text) {
           ctx.font = `${obj.fontSize || 24}px sans-serif`;
-          ctx.fillText(obj.text, obj.x, obj.y);
+          ctx.fillText(obj.text, x, y);
         }
         ctx.restore();
       }
@@ -545,6 +550,11 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         
+        const x = obj.x ?? 0;
+        const y = obj.y ?? 0;
+        const width = obj.width ?? 0;
+        const height = obj.height ?? 0;
+        
         if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
           ctx.beginPath();
           ctx.moveTo(obj.points[0].x, obj.points[0].y);
@@ -554,18 +564,18 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           ctx.stroke();
         } else if (obj.type === 'line') {
           ctx.beginPath();
-          ctx.moveTo(obj.x, obj.y);
-          ctx.lineTo(obj.x + obj.width, obj.y + obj.height);
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + width, y + height);
           ctx.stroke();
         } else if (obj.type === 'rectangle') {
           if (obj.filled) {
-            ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+            ctx.fillRect(x, y, width, height);
           } else {
-            ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+            ctx.strokeRect(x, y, width, height);
           }
         } else if (obj.type === 'ellipse') {
           ctx.beginPath();
-          ctx.ellipse(obj.x + obj.width/2, obj.y + obj.height/2, Math.abs(obj.width/2), Math.abs(obj.height/2), 0, 0, Math.PI * 2);
+          ctx.ellipse(x + width/2, y + height/2, Math.abs(width/2), Math.abs(height/2), 0, 0, Math.PI * 2);
           if (obj.filled) {
             ctx.fill();
           } else {
@@ -573,7 +583,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           }
         } else if (obj.type === 'text' && obj.text) {
           ctx.font = `${obj.fontSize || 24}px sans-serif`;
-          ctx.fillText(obj.text, obj.x, obj.y);
+          ctx.fillText(obj.text, x, y);
         }
         ctx.restore();
       }
@@ -696,7 +706,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           
-          await page.render({ canvasContext: ctx, viewport }).promise;
+          await page.render({ canvasContext: ctx, viewport, canvas }).promise;
           
           // Convert to data URL
           const imageData = canvas.toDataURL('image/png');
