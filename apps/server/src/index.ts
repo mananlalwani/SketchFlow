@@ -24,7 +24,8 @@ import {
 import type { 
   StrokeData, 
   ShapeData,
-  CanvasSnapshot, 
+  CanvasSnapshot,
+  CursorData,
   ClientToServerEvents, 
   ServerToClientEvents 
 } from './types/socket.js';
@@ -488,7 +489,9 @@ class LiveDrawServer {
         try {
           this.drawingService.addStroke(stroke);
           // Only broadcast to other clients in the same room/project
-          socket.to(currentRoom).emit('draw:stroke', stroke);
+          if (currentRoom) {
+            socket.to(currentRoom).emit('draw:stroke', stroke);
+          }
         } catch (error) {
           logger.error(`Error processing stroke from ${clientId}:`, error);
         }
@@ -516,7 +519,9 @@ class LiveDrawServer {
         try {
           this.drawingService.addStrokes(validStrokes);
           // Only broadcast to other clients in the same room/project
-          socket.to(currentRoom).emit('draw:strokes', validStrokes);
+          if (currentRoom) {
+            socket.to(currentRoom).emit('draw:strokes', validStrokes);
+          }
         } catch (error) {
           logger.error(`Error processing strokes batch from ${clientId}:`, error);
         }
@@ -541,7 +546,9 @@ class LiveDrawServer {
         try {
           this.drawingService.addShape(shape);
           // Only broadcast to other clients in the same room/project
-          socket.to(currentRoom).emit('draw:shape', shape);
+          if (currentRoom) {
+            socket.to(currentRoom).emit('draw:shape', shape);
+          }
         } catch (error) {
           logger.error(`Error processing shape from ${clientId}:`, error);
         }
@@ -558,7 +565,9 @@ class LiveDrawServer {
           this.drawingService.updateSnapshot(snapshot);
           // Throttled broadcast to prevent spam - only to room
           this.drawingService.broadcastSnapshotThrottled(() => {
-            socket.to(currentRoom).emit('canvas:snapshot', snapshot);
+            if (currentRoom) {
+              socket.to(currentRoom).emit('canvas:snapshot', snapshot);
+            }
           });
         } catch (error) {
           logger.error(`Error processing snapshot from ${clientId}:`, error);
@@ -579,7 +588,9 @@ class LiveDrawServer {
         try {
           this.drawingService.clearCanvas();
           // Only broadcast to clients in the same room/project
-          socket.to(currentRoom).emit('canvas:clear');
+          if (currentRoom) {
+            socket.to(currentRoom).emit('canvas:clear');
+          }
           logger.info(`Canvas cleared by ${clientId} in room ${currentRoom}`);
         } catch (error) {
           logger.error(`Error clearing canvas from ${clientId}:`, error);
@@ -634,7 +645,7 @@ class LiveDrawServer {
       });
       
       // Handle cursor movement
-      socket.on('cursor:move', (cursor) => {
+      socket.on('cursor:move', (cursor: CursorData) => {
         if (!currentRoom) return;
         
         // Validate cursor data
