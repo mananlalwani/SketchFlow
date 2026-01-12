@@ -1,5 +1,23 @@
-// Load environment variables first
-import 'dotenv/config';
+// Load environment variables in development only (gracefully skip if dotenv missing in production image)
+import fs from 'fs';
+
+if (process.env.NODE_ENV !== 'production') {
+  const dotenvPath = process.cwd() + '/node_modules/dotenv';
+  if (fs.existsSync(dotenvPath)) {
+    try {
+      // Top-level await is supported on Node 20+ and TypeScript targeting ES2022+ compiles this correctly
+      await import('dotenv/config');
+    } catch (e) {
+      // It's OK if dotenv fails to load — env vars should be provided by the runtime in production
+      // eslint-disable-next-line no-console
+      console.warn('dotenv not loaded (continuing without .env):', String(e));
+    }
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn('dotenv package not found in node_modules — skipping loading .env');
+  }
+}
+
 // OpenTelemetry must be initialized before other app imports for auto-instrumentation
 import './otel.js';
 import express from 'express';
