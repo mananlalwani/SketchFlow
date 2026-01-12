@@ -3,16 +3,12 @@
   "version": "2.0.0",
   "type": "module",
   "description": "Modern live drawing canvas with real-time collaboration using React, TypeScript, and WebSocket",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w @live-draw/server\" \"npm run dev -w @live-draw/client\"",
-    "build": "npm run build -w @live-draw/client && npm run build -w @live-draw/server",
-    "start": "npm run start -w @live-draw/server",
-    "test": "npm run test -w @live-draw/client",
-    "lint": "npm run lint -w @live-draw/client"
+    "dev": "concurrently \"pnpm --filter @live-draw/server dev\" \"pnpm --filter @live-draw/client dev\"",
+    "build": "pnpm --filter @live-draw/shared build && pnpm --filter @live-draw/client build && pnpm --filter @live-draw/server build",
+    "start": "pnpm --filter @live-draw/server start",
+    "test": "pnpm --filter @live-draw/client test",
+    "lint": "pnpm --filter @live-draw/client lint"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
