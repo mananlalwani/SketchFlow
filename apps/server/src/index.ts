@@ -797,6 +797,16 @@ class LiveDrawServer {
         logger.info(`Server running on:`);
         logger.info(`   - http://localhost:${env.PORT}`);
         ips.forEach(ip => logger.info(`   - http://${ip}:${env.PORT}`));
+
+        // Log configured CORS origins for verification in production
+        try {
+          const corsInfo = Array.isArray(env.CORS_ORIGINS) && env.CORS_ORIGINS.length > 0
+            ? env.CORS_ORIGINS
+            : (process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean) : ['*']);
+          logger.info('Configured CORS origins', { corsOrigins: corsInfo });
+        } catch (e) {
+          logger.warn('Failed to parse CORS_ORIGINS for logging', { error: String(e) });
+        }
         
         // Clean up any corrupt collaborator data on startup
         logger.info('Running collaborator data cleanup...');
