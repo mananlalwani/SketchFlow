@@ -35,7 +35,7 @@ RUN pnpm --filter @live-draw/server db:generate
 RUN pnpm --filter @live-draw/server build
 
 # Prune to production dependencies only
-RUN pnpm prune --prod
+RUN CI=true pnpm prune --prod
 
 # Remove unnecessary files from node_modules
 RUN find node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.map" -o -name "LICENSE*" -o -name "CHANGELOG*" -o -name "*.d.ts" \) -delete 2>/dev/null || true
