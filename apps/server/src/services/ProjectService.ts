@@ -72,9 +72,22 @@ export class ProjectService {
 
   public async list(userId: string): Promise<Omit<ProjectRecord, 'data'>[]> {
     try {
+      // Define the type for project results
+      type ProjectWithCollaborators = {
+        id: string;
+        userId: string;
+        title: string;
+        updatedAt: Date;
+        createdAt: Date;
+        shared: boolean;
+        shareToken: string | null;
+        folderId: string | null;
+        collaborators: { userId: string; role: string }[];
+      };
+
       // Try with collaborators first
-      let ownedProjects;
-      let collaboratedProjects: typeof ownedProjects = [];
+      let ownedProjects: ProjectWithCollaborators[] = [];
+      let collaboratedProjects: ProjectWithCollaborators[] = [];
       
       try {
         // Get projects owned by user
@@ -118,9 +131,9 @@ export class ProjectService {
           },
           orderBy: { updatedAt: 'desc' },
         });
-      } catch (e) {
+      } catch (e: unknown) {
         // Collaborators table might not exist yet - fallback to simple query
-        logger.warn('Collaborators query failed, falling back to simple query', e);
+        logger.warn('Collaborators query failed, falling back to simple query', { error: e instanceof Error ? e.message : String(e) });
         const projects = await prisma.project.findMany({
           where: { userId },
           select: {
@@ -159,8 +172,8 @@ export class ProjectService {
 
       return deduped.map(p => {
         const isOwner = p.userId === userId;
-        const collab = p.collaborators.find(c => c.userId === userId);
-        const role = isOwner ? 'owner' : (collab?.role as 'editor' | 'viewer') || 'viewer';
+        const collab = p.collaborators.find((c: { userId: string; role: string }) => c.userId === userId);
+        const role: 'owner' | 'editor' | 'viewer' = isOwner ? 'owner' : (collab?.role as 'editor' | 'viewer') || 'viewer';
         
         // Debug log if there's a mismatch
         if (isOwner && collab) {
@@ -179,7 +192,7 @@ export class ProjectService {
           createdAt: p.createdAt.getTime(),
           shared: p.shared,
           shareToken: p.shareToken ?? undefined,
-          folderId: (p as { folderId?: string | null }).folderId ?? null,
+          folderId: p.folderId ?? null,
           role,
           collaborators: p.collaborators
         };

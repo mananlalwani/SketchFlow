@@ -56,7 +56,7 @@ export class AuthService {
   }
 
   public optionalMiddleware() {
-    return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    return (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
       const token = this.getTokenFromRequest(req);
       
       if (token) {
