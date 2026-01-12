@@ -21,15 +21,20 @@ const socketEnv = import.meta as unknown as Env;
 
 const resolveSocketBaseUrl = () => {
   // Prefer VITE_WS_URL, then VITE_API_URL, then VITE_SOCKET_BASE_URL, then fallback
+
   const wsUrl = (import.meta.env && import.meta.env.VITE_WS_URL) || socketEnv.env?.VITE_WS_URL;
   if (wsUrl) {
-    console.log('[Socket] Using VITE_WS_URL:', wsUrl.replace(/\/$/, ''));
+    const msg = '[Socket] Using VITE_WS_URL: ' + wsUrl.replace(/\/$/, '');
+    alert(msg);
+    console.log(msg);
     return wsUrl.replace(/\/$/, '');
   }
 
   const apiUrl = (import.meta.env && import.meta.env.VITE_API_URL) || socketEnv.env?.VITE_API_URL;
   if (apiUrl) {
-    console.log('[Socket] Using VITE_API_URL:', apiUrl.replace(/\/$/, ''));
+    const msg = '[Socket] Using VITE_API_URL: ' + apiUrl.replace(/\/$/, '');
+    alert(msg);
+    console.log(msg);
     return apiUrl.replace(/\/$/, '');
   }
 
