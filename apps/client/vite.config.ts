@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'Live Draw Sync',
-        short_name: 'LiveDraw',
-        description: 'Real-time collaborative drawing application',
+        name: 'SketchFlow',
+        short_name: 'SketchFlow',
+        description: 'Real-time collaborative whiteboard',
         theme_color: '#1f2937',
         background_color: '#0f172a',
         display: 'standalone',

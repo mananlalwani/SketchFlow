@@ -26,7 +26,7 @@ interface TutorialStep {
 
 const tutorialSteps: TutorialStep[] = [
   {
-    title: 'Welcome to Live Draw!',
+    title: 'Welcome to SketchFlow!',
     description: 'A collaborative canvas for drawing, sketching, and brainstorming in real-time.',
     icon: <Sparkles className="w-8 h-8 text-blue-500" />,
   },
@@ -167,7 +167,7 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
 
               <Button
                 onClick={handleNext}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {isLastStep ? (
                   <>
