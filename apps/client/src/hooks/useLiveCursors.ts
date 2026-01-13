@@ -6,24 +6,27 @@ import type { CursorData } from '@/types/socket';
 export function useLiveCursors(projectId: string | null) {
   const [cursors, setCursors] = useState<Map<string, CursorData>>(new Map());
   const { emit, on, isConnected } = useSocket();
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, isGuest, guestId } = useAuthStore();
   const lastEmitTime = useRef<number>(0);
   const THROTTLE_MS = 33; // ~30fps
+  const allowGuestSocket = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('share');
+  const canUseRealtime = isAuthenticated || (isGuest && allowGuestSocket);
+  const selfCursorId = isAuthenticated ? user?.id : guestId;
 
   // Join room when project changes
   useEffect(() => {
-    if (!isAuthenticated || !isConnected || !projectId) return;
+    if (!canUseRealtime || !isConnected || !projectId) return;
 
     emit('room:join', projectId);
 
     return () => {
       emit('room:leave');
     };
-  }, [projectId, isAuthenticated, isConnected, emit]);
+  }, [projectId, canUseRealtime, isConnected, emit]);
 
   // Listen for cursor events
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!canUseRealtime) return;
 
     const unsubscribeMove = on('cursor:move', (cursor: CursorData) => {
       setCursors(prev => {
@@ -59,19 +62,20 @@ export function useLiveCursors(projectId: string | null) {
       unsubscribeLeave();
       unsubscribeAll();
     };
-  }, [on, isAuthenticated]);
+  }, [on, canUseRealtime]);
 
   // Emit cursor position (throttled)
   const emitCursor = useCallback((x: number, y: number) => {
-    if (!isAuthenticated || !isConnected || !user || !projectId) return;
+    if (!canUseRealtime || !isConnected || !projectId) return;
+    if (!selfCursorId) return;
 
     const now = Date.now();
     if (now - lastEmitTime.current < THROTTLE_MS) return;
     lastEmitTime.current = now;
 
     const cursorData: CursorData = {
-      userId: user.id,
-      username: user.username,
+      userId: selfCursorId,
+      username: user?.username || 'Guest',
       x,
       y,
       color: '', // Server will assign
@@ -79,10 +83,10 @@ export function useLiveCursors(projectId: string | null) {
     };
 
     emit('cursor:move', cursorData);
-  }, [isAuthenticated, isConnected, user, projectId, emit]);
+  }, [canUseRealtime, isConnected, projectId, emit, selfCursorId, user?.username]);
 
   return {
-    cursors: Array.from(cursors.values()).filter(c => c.userId !== user?.id), // Exclude own cursor
+    cursors: Array.from(cursors.values()).filter(c => c.userId !== selfCursorId), // Exclude own cursor
     emitCursor,
   };
 }
