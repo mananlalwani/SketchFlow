@@ -47,6 +47,10 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
   const [newCollabEmail, setNewCollabEmail] = useState('');
   const [newCollabRole, setNewCollabRole] = useState<'editor' | 'viewer'>('editor');
 
+  const buildShareUrl = useCallback((shareToken: string) => {
+    return `${window.location.origin}/draw?share=${shareToken}`;
+  }, []);
+
   const loadCollaborators = useCallback(async () => {
     if (!open || !project?.id) return;
     try {
@@ -62,13 +66,13 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
     if (open && project) {
       setIsShared(project.shared || false);
       if (project.shareToken) {
-        setShareUrl(`${window.location.origin}/draw?share=${project.shareToken}`);
+        setShareUrl(buildShareUrl(project.shareToken));
       } else {
         setShareUrl('');
       }
       loadCollaborators();
     }
-  }, [open, project, loadCollaborators]);
+  }, [open, project, loadCollaborators, buildShareUrl]);
 
   if (!project) {
     return null;
@@ -87,7 +91,7 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
         const result = await shareProject(project.id, token);
         console.log('Share result:', result); // Debug log
         setIsShared(true);
-        setShareUrl(result.shareUrl);
+        setShareUrl(buildShareUrl(result.shareToken));
         toast({ 
           title: 'Sharing enabled', 
           description: 'Public link is now active' 
