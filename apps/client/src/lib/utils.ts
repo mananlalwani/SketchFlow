@@ -15,7 +15,7 @@ export function isIOS() {
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 }
 
-export function serializeProject(objects: any[], width: number, height: number) {
+export function serializeProject(objects: unknown[], width: number, height: number) {
   return JSON.stringify({
     version: 1,
     objects,
@@ -25,7 +25,7 @@ export function serializeProject(objects: any[], width: number, height: number) 
   });
 }
 
-export function deserializeProject(data: string | any) {
+export function deserializeProject(data: string | unknown) {
   try {
     const parsed = typeof data === 'string' ? JSON.parse(data) : data;
     return Array.isArray(parsed) ? parsed : (parsed?.objects || []);
