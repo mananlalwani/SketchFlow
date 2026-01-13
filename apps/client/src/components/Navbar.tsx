@@ -11,7 +11,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 
 export function Navbar() {
   const location = useLocation();
-  const { isConnected, objectCount, fps } = useDrawingStore();
+  const { isConnected } = useDrawingStore();
   const { user, isAuthenticated, isLoading, isGuest } = useAuthStore();
   const { reconnect } = useSocket();
   const clerk = useClerk();
@@ -248,18 +248,6 @@ export function Navbar() {
               </Button>
             </div>
           )}
-        </div>
-
-        {/* Performance stats on navbar */}
-        <div className="hidden lg:flex items-center space-x-6 text-xs">
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-lg">
-            <span className="text-slate-500 dark:text-gray-400">FPS:</span>
-            <span className="font-mono font-bold text-blue-600 dark:text-blue-300">{fps}</span>
-          </div>
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 rounded-lg">
-            <span className="text-slate-500 dark:text-gray-400">Objects:</span>
-            <span className="font-mono font-bold text-blue-600 dark:text-blue-300">{objectCount}</span>
-          </div>
         </div>
       </div>
     </nav>
