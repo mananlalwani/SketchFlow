@@ -34,7 +34,7 @@ export function deserializeProject(data: string | unknown) {
     return [];
   }
 }
-export async function saveEncryptedOffline(key: string, data: any) {
+export async function saveEncryptedOffline(key: string, data: unknown) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
@@ -49,7 +49,7 @@ export async function loadEncryptedOffline<T>(key: string): Promise<T | null> {
 }
 
 export async function listOfflineProjects() {
-  const projects: any[] = [];
+  const projects: unknown[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key?.startsWith('project:')) {
@@ -63,5 +63,5 @@ export async function listOfflineProjects() {
       }
     }
   }
-  return projects;
+  return projects as import('./api').ProjectListItem[];
 }
