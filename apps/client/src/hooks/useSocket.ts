@@ -191,10 +191,14 @@ export const useSocket = () => {
   const [connectionCount, setConnectionCount] = useState(1);
   const wasConnectedRef = React.useRef(false);
   const { isGuest } = useAuthStore();
+  const allowGuestSocket = React.useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).has('share');
+  }, []);
 
   useEffect(() => {
     // Don't connect socket for guests
-    if (isGuest) {
+    if (isGuest && !allowGuestSocket) {
       setIsConnected(false);
       return;
     }
@@ -232,34 +236,38 @@ export const useSocket = () => {
         socket.off('connection:count');
       }
     };
-  }, [isGuest]);
+  }, [isGuest, allowGuestSocket]);
 
   const emit = useCallback(<T extends keyof ClientToServerEvents>(
     event: T,
     ...args: Parameters<ClientToServerEvents[T]>
   ) => {
     // Don't emit for guests
-    if (isGuest) return;
+    if (isGuest && !allowGuestSocket) return;
+    if (isGuest && allowGuestSocket) {
+      const allowedEvents: Array<keyof ClientToServerEvents> = ['room:join', 'room:leave', 'cursor:move'];
+      if (!allowedEvents.includes(event)) return;
+    }
     socketManager.emit(event, ...args);
-  }, [isGuest]);
+  }, [isGuest, allowGuestSocket]);
 
   const on = useCallback(<T extends keyof ServerToClientEvents>(
     event: T,
     callback: ServerToClientEvents[T]
   ) => {
     // Mock listener for guests - never calls callback
-    if (isGuest) {
+    if (isGuest && !allowGuestSocket) {
       return () => { }; // Return no-op cleanup
     }
     socketManager.on(event, callback);
     return () => socketManager.off(event, callback);
-  }, [isGuest]);
+  }, [isGuest, allowGuestSocket]);
 
   const reconnect = useCallback(() => {
     // Don't reconnect for guests
-    if (isGuest) return;
+    if (isGuest && !allowGuestSocket) return;
     socketManager.reconnect();
-  }, [isGuest]);
+  }, [isGuest, allowGuestSocket]);
 
   return {
     isConnected,
