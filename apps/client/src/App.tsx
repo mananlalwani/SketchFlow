@@ -1,13 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { DrawingCanvas } from '@/components/DrawingCanvas';
-import { ViewerCanvas } from '@/components/ViewerCanvas';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useSocket } from '@/hooks/useSocket';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
-import { ViewerLayout } from '@/components/layout/ViewerLayout';
 import { AutoSaveHandler } from '@/components/AutoSaveHandler';
 import { ProjectManager } from '@/components/ProjectManager';
 import { useAuth } from '@clerk/clerk-react';
@@ -160,16 +158,6 @@ function App() {
           <Route 
             path="/draw" 
             element={<EditorRoute />} 
-          />
-          
-          {/* Viewer Route - Wrapped in ViewerLayout */}
-          <Route 
-            path="/view" 
-            element={
-               <ViewerLayout>
-                 <ViewerCanvas />
-               </ViewerLayout>
-            } 
           />
           
           <Route path="*" element={<Navigate to="/draw" replace />} />
