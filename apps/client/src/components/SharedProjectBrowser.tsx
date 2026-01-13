@@ -203,7 +203,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
                 const match = input.match(/[?&]share=([^&]+)/);
                 const token = match ? match[1] : input;
                 if (token) {
-                  navigate(`/view?share=${token}`);
+                  navigate(`/draw?share=${token}`);
                   loadSharedProject(token);
                 }
               }
@@ -218,7 +218,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
                 const match = input.value.match(/[?&]share=([^&]+)/);
                 const token = match ? match[1] : input.value.trim();
                 if (token) {
-                  navigate(`/view?share=${token}`);
+                  navigate(`/draw?share=${token}`);
                   loadSharedProject(token);
                 }
               }

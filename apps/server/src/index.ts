@@ -286,7 +286,7 @@ class LiveDrawServer {
         }
         res.json({
           shareToken: shared.shareToken,
-          shareUrl: `${req.protocol}://${req.get('host')}/view?share=${shared.shareToken}`
+          shareUrl: `${env.CLIENT_URL || (req.protocol + '://' + req.get('host'))}/draw?share=${shared.shareToken}`
         });
       } catch {
         res.status(500).json({ error: 'Failed to share project' });

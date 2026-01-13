@@ -27,6 +27,9 @@ const envSchema = z.object({
     return val.split(',').map(origin => origin.trim()).filter(Boolean);
   }),
 
+  // Client URL for sharing links (fallback to request host if not set)
+  CLIENT_URL: z.string().url().optional(),
+
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOG_FORMAT: z.enum(['pretty', 'json']).default('pretty'),

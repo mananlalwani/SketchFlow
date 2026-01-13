@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { DrawingCanvas } from '@/components/DrawingCanvas';
 import { ViewerCanvas } from '@/components/ViewerCanvas';
@@ -14,17 +14,70 @@ import { useAuth } from '@clerk/clerk-react';
 import { deserializeProject } from '@/lib/utils';
 import { useProjectMigration } from '@/hooks/useProjectMigration';
 import { WelcomeTutorial, EmptyStateHint } from '@/components/WelcomeTutorial';
+import { getSharedProject } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 function EditorRoute() {
-  // Helper to restore last session on load if nothing loaded
-  const { objectCount, currentProjectId, setObjects, replaceHistory, setProjectTitle, requestFullRedraw } = useDrawingStore();
+  const { 
+    objectCount, 
+    currentProjectId, 
+    setObjects, 
+    replaceHistory, 
+    setProjectTitle, 
+    requestFullRedraw, 
+    setCurrentProject,
+    setProjectRole,
+    projectRole
+  } = useDrawingStore();
   const { userId, isLoaded } = useAuth();
   const [initialized, setInitialized] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [searchParams] = useSearchParams();
+  const shareToken = searchParams.get('share');
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!isLoaded) return;
     
+    // If we have a share token, prioritize loading that
+    if (shareToken) {
+      // If we are already displaying this project, don't reload
+      // We can't easily check the shareToken against currentProjectId without extra state,
+      // but we can check if we just loaded it.
+      const loadShared = async () => {
+        try {
+          const record = await getSharedProject<string>(shareToken);
+          
+          // Skip if this project is already loaded
+          if (currentProjectId === record.id) {
+            setInitialized(true);
+            return;
+          }
+
+          const objects = deserializeProject(record.data);
+          
+          setObjects(objects);
+          replaceHistory(objects);
+          setProjectTitle(record.title || 'Shared Project');
+          setCurrentProject(record.id); 
+          setProjectRole(record.role || 'viewer');
+          requestFullRedraw();
+          
+          setInitialized(true);
+        } catch (e) {
+          console.error('Failed to load shared project', e);
+          toast({ 
+            title: 'Failed to load shared project', 
+            description: 'The project may no longer be available.',
+            variant: 'destructive' 
+          });
+          setInitialized(true);
+        }
+      };
+      loadShared();
+      return;
+    }
+
     const localWork = localStorage.getItem('local_work');
 
     // If we have a current project already, we are good.
@@ -53,7 +106,7 @@ function EditorRoute() {
     // If we have a last project ID and are logged in, we might want to load it (handled by user usually, or auto-load?)
     // For now, let's just show the welcome screen if no active project
     setInitialized(true);
-  }, [isLoaded, userId, currentProjectId, setObjects, replaceHistory, setProjectTitle, requestFullRedraw]);
+  }, [isLoaded, userId, currentProjectId, setObjects, replaceHistory, setProjectTitle, requestFullRedraw, shareToken, initialized, setCurrentProject, toast]);
 
   // Show tutorial on first visit
   useEffect(() => {
@@ -77,7 +130,7 @@ function EditorRoute() {
   }
 
   return (
-    <Layout>
+    <Layout hideDrawingTools={projectRole === 'viewer'}>
       <AutoSaveHandler />
       <DrawingCanvas />
       {!showTutorial && <EmptyStateHint />}

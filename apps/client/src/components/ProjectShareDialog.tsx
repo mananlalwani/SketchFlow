@@ -62,7 +62,7 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
     if (open && project) {
       setIsShared(project.shared || false);
       if (project.shareToken) {
-        setShareUrl(`${window.location.origin}/view?share=${project.shareToken}`);
+        setShareUrl(`${window.location.origin}/draw?share=${project.shareToken}`);
       } else {
         setShareUrl('');
       }
