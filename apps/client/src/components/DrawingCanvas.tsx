@@ -2089,18 +2089,6 @@ export function DrawingCanvas() {
           >
             <RotateCcw className="w-4 h-4" />
           </Button>
-          
-          {/* FPS Counter - visible in dev mode */}
-          {import.meta.env.DEV && (
-            <div 
-              className={`px-2 py-1 glass rounded text-xs font-mono ${
-                fps >= 55 ? 'text-green-500' : fps >= 30 ? 'text-yellow-500' : 'text-red-500'
-              }`}
-              title="Frames per second"
-            >
-              {fps} FPS
-            </div>
-          )}
         </div>
         
         {/* Shape preview overlay */}
