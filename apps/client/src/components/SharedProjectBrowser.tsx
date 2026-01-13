@@ -55,8 +55,10 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
   const loadSharedProject = useCallback(async (shareToken: string) => {
     setLoadingProject(shareToken);
     try {
-      const record = await getSharedProject<ReturnType<typeof serializeProject>>(shareToken);
-      console.log('Loaded shared project:', record.id, record.title, `(${record.data?.objects?.length || 0} objects)`);
+      const record = await getSharedProject<string>(shareToken);
+      // Data is a serialized string, so we deserialize it to count objects
+      const projectData = deserializeProject(record.data);
+      console.log('Loaded shared project:', record.id, record.title, `(${Array.isArray(projectData) ? projectData.length : 0} objects)`);
 
       // Set project title immediately for better UX
       setProjectTitle(record.title || 'Shared Project');

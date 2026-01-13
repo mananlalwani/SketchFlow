@@ -313,8 +313,8 @@ export function DrawingToolbar() {
         ]);
         if (!mounted) return;
         const merged = [
-          ...server.map(s => ({ id: s.id, title: s.title, source: 'server' as const, updatedAt: s.updatedAt })),
-          ...offline.map(o => ({ id: o.id, title: `${o.title} (offline)`, source: 'offline' as const, updatedAt: o.updatedAt }))
+          ...server.map((s: any) => ({ id: s.id, title: s.title, source: 'server' as const, updatedAt: s.updatedAt })),
+          ...offline.map((o: any) => ({ id: o.id, title: `${o.title} (offline)`, source: 'offline' as const, updatedAt: o.updatedAt }))
         ].sort((a, b) => b.updatedAt - a.updatedAt);
         setItems(merged);
       })();
