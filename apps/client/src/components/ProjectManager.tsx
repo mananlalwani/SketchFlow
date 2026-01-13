@@ -820,10 +820,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           </div>
         </div>
       )}
-      
+
       <div className="flex flex-1 overflow-hidden">
-      {/* Folder Sidebar */}
-      <div className="w-56 border-r border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-900/30 flex flex-col shrink-0 transition-colors duration-200">
+        {/* Folder Sidebar */}
+        <div className="w-56 border-r border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-900/30 flex flex-col shrink-0 transition-colors duration-200">
         <div className="p-3 border-b border-slate-200 dark:border-white/10">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{isGuest ? 'Local Projects' : 'Folders'}</span>

@@ -372,7 +372,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         )}
 
         <ConnectionStatus />
-        <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
+        <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
         <SettingsDropdown />
       </div>
     </div>

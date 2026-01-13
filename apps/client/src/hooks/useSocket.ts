@@ -24,30 +24,30 @@ const resolveSocketBaseUrl = () => {
 
   const wsUrl = (import.meta.env && import.meta.env.VITE_WS_URL) || socketEnv.env?.VITE_WS_URL;
   if (wsUrl) {
-    const msg = '[Socket] Using VITE_WS_URL: ' + wsUrl.replace(/\/$/, '');
-    alert(msg);
-    console.log(msg);
+    // const msg = '[Socket] Using VITE_WS_URL: ' + wsUrl.replace(/\/$/, '');
+    // alert(msg);
+    // console.log(msg);
     return wsUrl.replace(/\/$/, '');
   }
 
   const apiUrl = (import.meta.env && import.meta.env.VITE_API_URL) || socketEnv.env?.VITE_API_URL;
   if (apiUrl) {
-    const msg = '[Socket] Using VITE_API_URL: ' + apiUrl.replace(/\/$/, '');
-    alert(msg);
-    console.log(msg);
+    // const msg = '[Socket] Using VITE_API_URL: ' + apiUrl.replace(/\/$/, '');
+    // alert(msg);
+    // console.log(msg);
     return apiUrl.replace(/\/$/, '');
   }
 
   const override = socketEnv.env?.VITE_SOCKET_BASE_URL;
   if (override) {
-    console.log('[Socket] Using VITE_SOCKET_BASE_URL:', override.replace(/\/$/, ''));
+    // console.log('[Socket] Using VITE_SOCKET_BASE_URL:', override.replace(/\/$/, ''));
     return override.replace(/\/$/, '');
   }
 
   const fallbackPort = socketEnv.env?.VITE_SERVER_PORT || '3000';
 
   if (typeof window === 'undefined') {
-    console.log('[Socket] Using SSR fallback URL:', `http://localhost:${fallbackPort}`);
+    // console.log('[Socket] Using SSR fallback URL:', `http://localhost:${fallbackPort}`);
     return `http://localhost:${fallbackPort}`;
   }
 
@@ -56,11 +56,11 @@ const resolveSocketBaseUrl = () => {
 
   if (desiredPort && desiredPort !== window.location.port) {
     const url = `${window.location.protocol}//${window.location.hostname}:${desiredPort}`;
-    console.log('[Socket] Using desired port URL:', url);
+    // console.log('[Socket] Using desired port URL:', url);
     return url;
   }
 
-  console.log('[Socket] Using current origin for socket:', currentOrigin);
+  // console.log('[Socket] Using current origin for socket:', currentOrigin);
   return currentOrigin;
 };
 
@@ -200,7 +200,7 @@ export const useSocket = () => {
     }
 
     const socket = socketManager.connect();
-    
+
     const unsubscribeConnect = socketManager.subscribe('connect', (data: unknown) => {
       const connected = data as boolean;
       const wasConnected = wasConnectedRef.current;
@@ -210,7 +210,7 @@ export const useSocket = () => {
         setConnectionError(null);
       }
     });
-    
+
     const unsubscribeError = socketManager.subscribe('error', (data: unknown) => {
       const error = data as Error;
       setConnectionError(error);
@@ -249,7 +249,7 @@ export const useSocket = () => {
   ) => {
     // Mock listener for guests - never calls callback
     if (isGuest) {
-      return () => {}; // Return no-op cleanup
+      return () => { }; // Return no-op cleanup
     }
     socketManager.on(event, callback);
     return () => socketManager.off(event, callback);
