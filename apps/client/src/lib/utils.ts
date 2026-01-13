@@ -34,3 +34,34 @@ export function deserializeProject(data: string | unknown) {
     return [];
   }
 }
+export async function saveEncryptedOffline(key: string, data: any) {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+export async function loadEncryptedOffline<T>(key: string): Promise<T | null> {
+  const item = localStorage.getItem(key);
+  if (!item) return null;
+  try {
+    return JSON.parse(item) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function listOfflineProjects() {
+  const projects: any[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith('project:')) {
+      const item = localStorage.getItem(key);
+      if (item) {
+        try {
+          projects.push(JSON.parse(item));
+        } catch {
+          // Ignore invalid JSON
+        }
+      }
+    }
+  }
+  return projects;
+}
