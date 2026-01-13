@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 import { useDrawingSocket } from '@/hooks/useSocket';
 import { useToast } from '@/hooks/use-toast';
 import { serializeProject, deserializeProject, saveEncryptedOffline, loadEncryptedOffline, listOfflineProjects } from '@/lib/utils';
-import { createProject, updateProject, getProject, listProjects } from '@/lib/api';
+import { createProject, updateProject, getProject, listProjects, type ProjectListItem } from '@/lib/api';
 import { announceToScreenReader } from '@/hooks/useAccessibility';
 import { FEATURES } from '@/config/features';
 
@@ -313,8 +313,8 @@ export function DrawingToolbar() {
         ]);
         if (!mounted) return;
         const merged = [
-          ...server.map((s: any) => ({ id: s.id, title: s.title, source: 'server' as const, updatedAt: s.updatedAt })),
-          ...offline.map((o: any) => ({ id: o.id, title: `${o.title} (offline)`, source: 'offline' as const, updatedAt: o.updatedAt }))
+          ...server.map((s: ProjectListItem) => ({ id: s.id, title: s.title, source: 'server' as const, updatedAt: s.updatedAt })),
+          ...offline.map((o: ProjectListItem) => ({ id: o.id, title: `${o.title} (offline)`, source: 'offline' as const, updatedAt: o.updatedAt }))
         ].sort((a, b) => b.updatedAt - a.updatedAt);
         setItems(merged);
       })();
