@@ -304,12 +304,17 @@ export const useDrawingSocket = () => {
     emit('canvas:clear');
   }, [emit]);
 
+  const emitProjectState = useCallback((objects: unknown[]) => {
+    emit('project:state', { objects, timestamp: Date.now() });
+  }, [emit]);
+
   return {
     emitStroke,
     emitStrokes,
     emitShape,
     emitSnapshot,
     emitClear,
+    emitProjectState,
     on
   };
 };
