@@ -88,6 +88,7 @@ export function DrawingCanvas() {
     addObject,
     removeObject,
     setObjects,
+    replaceHistory,
     saveHistory,
     updatePerformanceStats,
     currentProjectId,
@@ -97,7 +98,7 @@ export function DrawingCanvas() {
     autoShape
   } = useDrawingStore();
 
-  const { emitStrokes, emitShape, emitSnapshot, emitClear, on } = useDrawingSocket();
+  const { emitStrokes, emitShape, emitSnapshot, emitClear, emitProjectState, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
@@ -143,6 +144,12 @@ export function DrawingCanvas() {
   const workerStrokeQueueRef = useRef<StrokeData[]>([]);
   const workerFlushScheduledRef = useRef(false);
   const strokeGroupRef = useRef<string | null>(null);
+
+  const buildStrokePoints = useCallback((strokes: StrokeData[]) => {
+    if (strokes.length === 0) return [];
+    const first = strokes[0];
+    return [{ x: first.x0, y: first.y0 }, ...strokes.map(s => ({ x: s.x1, y: s.y1 }))];
+  }, []);
 
   // Initialize world canvas redraw
   useEffect(() => {
@@ -774,14 +781,22 @@ export function DrawingCanvas() {
       }
     });
 
+    const unsubscribeProjectState = on('project:state', (data: { objects: unknown[] }) => {
+      const objects = data.objects as DrawingObject[];
+      setObjects(objects);
+      replaceHistory(objects);
+      requestFullRedraw();
+    });
+
     return () => {
       unsubscribeStroke();
       unsubscribeStrokes();
       unsubscribeShape();
       unsubscribeSnapshot();
       unsubscribeClear();
+      unsubscribeProjectState();
     };
-  }, [on, emitShape, emitStrokes]);
+  }, [on, emitShape, emitStrokes, replaceHistory, requestFullRedraw, setObjects]);
 
   // kept for potential direct debug draws; unused in production path
 
@@ -1239,6 +1254,7 @@ export function DrawingCanvas() {
             }
           }
         }
+        emitProjectState(remaining);
       }
       return;
     }
@@ -1329,7 +1345,7 @@ export function DrawingCanvas() {
         saveHistory();
       }
     }
-  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, setDraggedObject, textInputPos, canDraw, toast]);
+  }, [currentTool, eraserMode, screenToWorld, saveHistory, findHitObjectIdAt, removeObject, objects, viewX, viewY, isSpacePan, triangleVertices, triangleMode, brushColor, brushSize, brushOpacity, addObject, emitShape, emitProjectState, setDraggedObject, textInputPos, canDraw, toast]);
 
   const draw = useCallback((e: React.PointerEvent) => {
     // Emit cursor position for live cursors
@@ -1603,7 +1619,34 @@ export function DrawingCanvas() {
     if (draggedObject) {
       // Apply the final dragged objects to state
       if (draggedObjectsRef.current) {
-        setObjects(draggedObjectsRef.current);
+        const updatedObjects = draggedObjectsRef.current;
+        setObjects(updatedObjects);
+        const updatedObj = updatedObjects.find(o => o.id === draggedObject.id);
+        if (updatedObj) {
+          if (updatedObj.type === 'stroke') {
+            emitProjectState(updatedObjects);
+          } else if (updatedObj.x !== undefined && updatedObj.y !== undefined) {
+            emitShape({
+              id: updatedObj.id,
+              type: updatedObj.type,
+              x: updatedObj.x,
+              y: updatedObj.y,
+              width: updatedObj.width ?? 0,
+              height: updatedObj.height ?? 0,
+              color: updatedObj.color,
+              size: updatedObj.size,
+              alpha: updatedObj.alpha ?? 1,
+              filled: updatedObj.filled,
+              orientation: (updatedObj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
+              text: updatedObj.text,
+              fontSize: updatedObj.fontSize,
+              imageData: updatedObj.imageData,
+              points: updatedObj.points,
+              properties: updatedObj.properties,
+              timestamp: Date.now()
+            });
+          }
+        }
         draggedObjectsRef.current = null;
       }
       setDraggedObject(null);
@@ -1702,12 +1745,12 @@ export function DrawingCanvas() {
             const drawingObject = {
               id: generateId(),
               type: 'stroke' as const,
-              points: currentStroke.map(s => ({ x: s.x1, y: s.y1 })),
-              color: brushColor,
-              size: brushSize,
-              alpha: brushOpacity
-            };
-            addObject(drawingObject);
+            points: buildStrokePoints(currentStroke),
+            color: brushColor,
+            size: brushSize,
+            alpha: brushOpacity
+          };
+          addObject(drawingObject);
             // Stroke already emitted incrementally
           }
         } else {
@@ -1715,7 +1758,7 @@ export function DrawingCanvas() {
           const drawingObject = {
             id: generateId(),
             type: 'stroke' as const,
-            points: currentStroke.map(s => ({ x: s.x1, y: s.y1 })),
+            points: buildStrokePoints(currentStroke),
             color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
             size: brushSize,
             alpha: brushOpacity
@@ -1886,7 +1929,7 @@ export function DrawingCanvas() {
         }
       }, 100);
     }
-  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, flushWorkerStrokes, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices, draggedObject, isPanning, isSpacePan, setView, requestFullRedraw, starPoints, theme, setObjects]);
+  }, [isDrawing, currentStroke, currentTool, eraserMode, brushColor, brushSize, brushOpacity, addObject, startPoint, previewShape, emitShape, emitSnapshot, flushWorkerStrokes, autoShape, detectShapeFromStroke, triangleMode, calculateTriangleVertices, draggedObject, isPanning, isSpacePan, setView, requestFullRedraw, starPoints, theme, setObjects, emitProjectState, buildStrokePoints]);
 
 
   // Zoom and pan handlers

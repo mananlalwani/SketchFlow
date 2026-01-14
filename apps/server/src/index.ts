@@ -628,6 +628,11 @@ class LiveDrawServer {
         }
       });
 
+      socket.on('project:state', (data: { objects: unknown[]; timestamp: number }) => {
+        if (!currentRoom) return;
+        socket.to(currentRoom).emit('project:state', data);
+      });
+
       // Handle room join
       socket.on('room:join', (projectId: string) => {
         // Leave previous room if any
