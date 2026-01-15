@@ -185,13 +185,6 @@ export async function deleteProject(id: string, token?: string | null): Promise<
   }, token);
 }
 
-export async function getProject<T = unknown>(id: string, token?: string | null): Promise<ProjectRecord<T>> {
-  if (!token) {
-    throw new Error('Project details require authentication.');
-  }
-  return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, undefined, token);
-}
-
 export async function shareProject(id: string, token?: string | null): Promise<{ shareToken: string; shareUrl: string }> {
   if (!token) {
     throw new Error('Sharing is not available in guest mode. Please sign in to share projects.');
