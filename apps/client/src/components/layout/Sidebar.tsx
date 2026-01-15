@@ -34,7 +34,6 @@ export function Sidebar() {
 
   const handleToolClick = (id: string) => {
     if (id === 'image') {
-      // For image tool, trigger the file input in DrawingCanvas
       const fileInput = document.getElementById('image-upload-input') as HTMLInputElement;
       fileInput?.click();
     } else {

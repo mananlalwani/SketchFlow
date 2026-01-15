@@ -29,17 +29,14 @@ export function ClerkThemeWrapper({ children }: ClerkThemeWrapperProps) {
           borderRadius: '0.5rem',
         },
         elements: {
-          // Root elements
           rootBox: isDark ? 'bg-slate-900' : 'bg-white',
           card: isDark 
             ? 'bg-slate-900 border-slate-700 shadow-xl' 
             : 'bg-white border-slate-200 shadow-lg',
           
-          // Header
           headerTitle: isDark ? 'text-slate-100' : 'text-slate-900',
           headerSubtitle: isDark ? 'text-slate-400' : 'text-slate-500',
           
-          // Social buttons
           socialButtonsBlockButton: isDark 
             ? 'bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-700' 
             : 'bg-slate-50 border-slate-200 text-slate-900 hover:bg-slate-100',
@@ -48,26 +45,21 @@ export function ClerkThemeWrapper({ children }: ClerkThemeWrapperProps) {
             ? 'bg-white/90 rounded p-0.5' 
             : '',
           
-          // Divider
           dividerLine: isDark ? 'bg-slate-700' : 'bg-slate-200',
           dividerText: isDark ? 'text-slate-400' : 'text-slate-500',
           
-          // Form elements
           formFieldLabel: isDark ? 'text-slate-300' : 'text-slate-700',
           formFieldInput: isDark 
             ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' 
             : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400',
           formFieldInputShowPasswordButton: isDark ? 'text-slate-400' : 'text-slate-500',
           
-          // Buttons
           formButtonPrimary: 'bg-blue-600 hover:bg-blue-500 text-white',
           
-          // Footer
           footer: isDark ? 'bg-slate-900' : 'bg-white',
           footerActionLink: 'text-blue-500 hover:text-blue-400',
           footerActionText: isDark ? 'text-slate-400' : 'text-slate-500',
           
-          // User button
           userButtonBox: 'focus:shadow-none',
           userButtonTrigger: 'focus:shadow-none',
           userButtonPopoverCard: isDark 
@@ -80,20 +72,16 @@ export function ClerkThemeWrapper({ children }: ClerkThemeWrapperProps) {
           userButtonPopoverActionButtonIcon: isDark ? 'text-slate-400' : 'text-slate-500',
           userButtonPopoverFooter: isDark ? 'border-slate-700' : 'border-slate-200',
           
-          // User profile
           userPreviewMainIdentifier: isDark ? 'text-slate-100' : 'text-slate-900',
           userPreviewSecondaryIdentifier: isDark ? 'text-slate-400' : 'text-slate-500',
           
-          // Modal/Overlay
           modalBackdrop: 'bg-black/50 backdrop-blur-sm',
           modalContent: isDark 
             ? 'bg-slate-900 border-slate-700' 
             : 'bg-white border-slate-200',
             
-          // Alerts
           alertText: isDark ? 'text-slate-300' : 'text-slate-700',
           
-          // Identity preview
           identityPreviewText: isDark ? 'text-slate-100' : 'text-slate-900',
           identityPreviewEditButton: isDark ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700',
         }

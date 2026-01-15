@@ -40,7 +40,6 @@ export function ColorPicker() {
 
   return (
     <div className="relative flex items-center gap-2">
-      {/* Current Color Display */}
       <Button
         onClick={() => setIsExpanded(!isExpanded)}
         variant="glass"
@@ -55,7 +54,6 @@ export function ColorPicker() {
         <Palette className="w-4 h-4" />
       </Button>
 
-      {/* Color Palette */}
       {isExpanded && (
         <div
           className="absolute left-0 top-full mt-3 p-5 z-50 animate-fade-in min-w-[300px] shadow-2xl rounded-2xl bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/20"
@@ -101,7 +99,6 @@ export function ColorPicker() {
             ))}
           </div>
 
-          {/* Add Custom Color */}
           <div className="flex items-center gap-2 pt-3 border-t border-slate-200 dark:border-white/10">
             {showColorInput ? (
               <div className="flex items-center gap-2 w-full">
