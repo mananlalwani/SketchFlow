@@ -1,6 +1,6 @@
 # Live Draw Sync 🎨
 
-A modern, real-time collaborative drawing application built with the latest technologies. Draw on one device (iPad) and view live updates on another (PC) with seamless synchronization.
+A modern real-time collaborative drawing app. Draw on one device (iPad) and view live updates on another (desktop) with seamless synchronization.
 
 ## ✨ Features
 
@@ -12,13 +12,13 @@ A modern, real-time collaborative drawing application built with the latest tech
 - **Progressive Web App**: Installable on mobile devices with offline capabilities
 - **Cross-platform**: Works on iPad, desktop, and mobile browsers
 
-## 🚀 Technologies Used
+## 🚀 Tech Stack
 
 ### Frontend
 - **React 18** with TypeScript
-- **Vite** for fast development and building
+- **Vite** for fast development and builds
 - **Tailwind CSS** for modern styling
-- **Radix UI** components for accessibility
+- **Radix UI** primitives for accessibility
 - **Zustand** for state management
 - **Socket.IO Client** for real-time communication
 - **PWA** support with service worker
@@ -27,21 +27,23 @@ A modern, real-time collaborative drawing application built with the latest tech
 - **Node.js** with TypeScript
 - **Express.js** with modern middleware
 - **Socket.IO** for WebSocket communication
+- **Prisma + PostgreSQL** for data layer
+- **Clerk** for authentication
 - **Advanced error handling** and logging
 - **Performance monitoring**
 
-## � Project Structure
+## 🧱 Project Structure
 
 This project is organized as a monorepo:
 - **apps/client**: React frontend application
 - **apps/server**: Node.js/Express backend service
-- **packages/**: Shared configuration and libraries
+- **packages/shared**: Shared types and helpers
 
-## �🛠️ Installation & Setup
+## 🛠️ Installation & Setup
 
 ### Prerequisites
 - Node.js 18+ 
-- npm or pnpm
+- pnpm 9+
 
 ### Quick Start
 
@@ -53,12 +55,12 @@ cd live_test
 
 2. **Install dependencies**
 ```bash
-npm install
+pnpm install
 ```
 
 3. **Start development servers**
 ```bash
-npm run dev
+pnpm dev
 ```
 
 This will start:
@@ -73,10 +75,10 @@ This will start:
 
 ```bash
 # Build the application
-npm run build
+pnpm build
 
 # Start production server
-npm start
+pnpm start
 ```
 
 ## 📱 Usage
@@ -95,36 +97,6 @@ npm start
 - **Pan & Zoom**: Navigate large canvases smoothly
 - **Go to Content**: Auto-center on drawing content
 - **Performance Stats**: Monitor FPS and connection status
-
-## 🎨 Key Improvements from Original
-
-### Architecture
-- ✅ **TypeScript** throughout for type safety
-- ✅ **Modern React** with hooks and functional components  
-- ✅ **Component-based** modular architecture
-- ✅ **State management** with Zustand
-- ✅ **Build tools** with Vite for fast development
-
-### Performance
-- ✅ **Hardware acceleration** for smooth rendering
-- ✅ **Optimized canvas operations** with efficient drawing
-- ✅ **Frame rate monitoring** and adaptive performance
-- ✅ **Memory management** with object pooling
-- ✅ **Throttled network updates** to prevent spam
-
-### User Experience
-- ✅ **Modern UI/UX** with glass morphism design
-- ✅ **Mobile responsive** toolbar and controls
-- ✅ **Touch optimized** for iPad drawing
-- ✅ **Real-time feedback** with immediate visual updates
-- ✅ **PWA support** for app-like experience
-
-### Developer Experience
-- ✅ **Hot reload** development with Vite
-- ✅ **TypeScript** for better code quality
-- ✅ **ESLint** configuration for consistent code
-- ✅ **Modular structure** for maintainability
-- ✅ **Error handling** and logging throughout
 
 ## 🔧 Configuration
 
@@ -159,13 +131,20 @@ NODE_ENV=development
 
 2. **Run Prisma migrations**:
 ```bash
-pnpm prisma migrate dev --name init
+pnpm --filter @live-draw/server db:migrate
 ```
 
 3. **Generate Prisma Client** (if needed):
 ```bash
-pnpm prisma generate
+pnpm --filter @live-draw/server db:generate
 ```
+
+### Useful Scripts
+- `pnpm dev` - start client and server concurrently
+- `pnpm build` - build shared, client, and server
+- `pnpm start` - run the production server
+- `pnpm test` - run client tests (Vitest)
+- `pnpm --filter @live-draw/server db:studio` - open Prisma Studio
 
 ### Customization
 - **Canvas Size**: Modify `WORLD_WIDTH` and `WORLD_HEIGHT` in canvas components
@@ -200,10 +179,10 @@ docker run -p 3000:3000 live-draw-sync
 ### Manual Deployment
 ```bash
 # Build for production
-npm run build
+pnpm build
 
 # Start server
-npm start
+pnpm start
 ```
 
 ## 🤝 Contributing
@@ -224,7 +203,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - React and TypeScript communities
 - Radix UI for accessible components
 - Tailwind CSS for utility-first styling
-
 
 
 
