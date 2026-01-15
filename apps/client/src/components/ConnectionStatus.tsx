@@ -6,7 +6,6 @@ export function ConnectionStatus() {
   const { isConnected, connectionError, reconnect } = useSocket();
   const { isGuest } = useAuthStore();
 
-  // Don't show connection status for guests
   if (isGuest) {
     return null;
   }

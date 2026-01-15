@@ -20,6 +20,7 @@ import {
   getCollaborators, 
   addCollaboratorByEmail, 
   removeCollaborator,
+  getProject,
   type ProjectListItem 
 } from '@/lib/api';
 
@@ -62,6 +63,23 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
     }
   }, [project?.id, getToken, open]);
 
+  const refreshShareInfo = useCallback(async () => {
+    if (!open || !project?.id) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const record = await getProject(project.id, token);
+      setIsShared(record.shared || false);
+      if (record.shareToken) {
+        setShareUrl(buildShareUrl(record.shareToken));
+      } else {
+        setShareUrl('');
+      }
+    } catch (e) {
+      console.error('Failed to refresh share status', e);
+    }
+  }, [open, project?.id, getToken, buildShareUrl]);
+
   useEffect(() => {
     if (open && project) {
       setIsShared(project.shared || false);
@@ -71,8 +89,9 @@ export function ProjectShareDialog({ project, onUpdate, triggerClassName, open: 
         setShareUrl('');
       }
       loadCollaborators();
+      refreshShareInfo();
     }
-  }, [open, project, loadCollaborators, buildShareUrl]);
+  }, [open, project, loadCollaborators, buildShareUrl, refreshShareInfo]);
 
   if (!project) {
     return null;
