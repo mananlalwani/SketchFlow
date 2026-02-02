@@ -5,35 +5,34 @@ services:
   # PostgreSQL database
   db:
     image: postgres:16-alpine
-    container_name: livedraw-db
+    container_name: sketchflow-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: livedraw
-      POSTGRES_PASSWORD: livedraw_dev_password
-      POSTGRES_DB: livedraw
+      POSTGRES_USER: sketchflow
+      POSTGRES_PASSWORD: sketchflow_dev_password
+      POSTGRES_DB: sketchflow
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U livedraw -d livedraw"]
+      test: [ "CMD-SHELL", "pg_isready -U sketchflow -d sketchflow" ]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Live Draw application (uncomment for full local stack)
+  # SketchFlow application (uncomment for full local stack)
   # app:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile
-  #   container_name: livedraw-app
+  #   container_name: sketchflow-app
   #   restart: unless-stopped
   #   depends_on:
   #     db:
   #       condition: service_healthy
   #   environment:
   #     NODE_ENV: production
-  #     DATABASE_URL: postgresql://livedraw:livedraw_dev_password@db:5432/livedraw
+  #     DATABASE_URL: postgresql://sketchflow:sketchflow_dev_password@db:5432/sketchflow
   #     CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
   #     CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
   #     CORS_ORIGINS: http://localhost:3000

@@ -59,7 +59,7 @@ export interface AuthenticatedRequest extends express.Request {
   };
 }
 
-class LiveDrawServer {
+class SketchFlowServer {
   private app = express();
   private server = createServer(this.app);
   private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
@@ -813,7 +813,7 @@ class LiveDrawServer {
       this.server.listen(env.PORT, env.HOST, async () => {
         const ips = await this.getLocalIPs();
 
-        logger.info('Live Draw Server Started', {
+        logger.info('SketchFlow Server Started', {
           port: env.PORT,
           host: env.HOST,
           environment: env.NODE_ENV,
@@ -868,7 +868,7 @@ class LiveDrawServer {
 }
 
 // Start server
-const server = new LiveDrawServer();
+const server = new SketchFlowServer();
 
 // Graceful shutdown handlers
 async function handleShutdown(signal: string): Promise<void> {

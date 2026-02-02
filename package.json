@@ -1,14 +1,14 @@
 {
-  "name": "live-draw-sync",
+  "name": "sketchflow",
   "version": "2.0.0",
   "type": "module",
-  "description": "Modern live drawing canvas with real-time collaboration using React, TypeScript, and WebSocket",
+  "description": "Modern SketchFlow canvas with real-time collaboration using React, TypeScript, and WebSocket",
   "scripts": {
-    "dev": "concurrently \"pnpm --filter @live-draw/server dev\" \"pnpm --filter @live-draw/client dev\"",
-    "build": "pnpm --filter @live-draw/shared build && pnpm --filter @live-draw/client build && pnpm --filter @live-draw/server build",
-    "start": "pnpm --filter @live-draw/server start",
-    "test": "pnpm --filter @live-draw/client test",
-    "lint": "pnpm --filter @live-draw/client lint"
+    "dev": "concurrently \"pnpm --filter @sketchflow/server dev\" \"pnpm --filter @sketchflow/client dev\"",
+    "build": "pnpm --filter @sketchflow/shared build && pnpm --filter @sketchflow/client build && pnpm --filter @sketchflow/server build",
+    "start": "pnpm --filter @sketchflow/server start",
+    "test": "pnpm --filter @sketchflow/client test",
+    "lint": "pnpm --filter @sketchflow/client lint"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

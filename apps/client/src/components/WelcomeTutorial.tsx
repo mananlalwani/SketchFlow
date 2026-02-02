@@ -54,7 +54,7 @@ const tutorialSteps: TutorialStep[] = [
   },
 ];
 
-const TUTORIAL_COMPLETED_KEY = 'live-draw-tutorial-completed';
+const TUTORIAL_COMPLETED_KEY = 'sketchflow-tutorial-completed';
 
 interface WelcomeTutorialProps {
   onComplete: () => void;
@@ -197,7 +197,7 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
   );
 }
 
-const HAS_DRAWN_KEY = 'live-draw-has-drawn';
+const HAS_DRAWN_KEY = 'sketchflow-has-drawn';
 
 /**
  * Empty state hint for when canvas is empty

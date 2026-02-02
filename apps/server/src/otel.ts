@@ -24,7 +24,7 @@ const isOtelEnabled = !!(
 function getOtlpConfig(): { endpoint: string; headers: Record<string, string> } {
   // If using Honeycomb convenience vars
   if (process.env.HONEYCOMB_API_KEY) {
-    const dataset = process.env.HONEYCOMB_DATASET || 'live-draw';
+    const dataset = process.env.HONEYCOMB_DATASET || 'sketchflow';
     return {
       endpoint: 'https://api.honeycomb.io:443',
       headers: {
@@ -57,7 +57,7 @@ let sdk: NodeSDK | null = null;
 if (isOtelEnabled) {
   const { endpoint, headers } = getOtlpConfig();
 
-  const serviceName = process.env.OTEL_SERVICE_NAME || 'live-draw-server';
+  const serviceName = process.env.OTEL_SERVICE_NAME || 'sketchflow-server';
   const serviceVersion = process.env.OTEL_SERVICE_VERSION || process.env.npm_package_version || '1.0.0';
   const environment = process.env.NODE_ENV || 'development';
 

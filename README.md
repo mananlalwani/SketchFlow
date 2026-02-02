@@ -1,211 +1,137 @@
-# Live Draw Sync 🎨
+# SketchFlow 🎨
 
-A modern real-time collaborative drawing app. Draw on one device (iPad) and view live updates on another (desktop) with seamless synchronization.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+
+A modern, high-performance real-time collaborative whiteboard application. Built with a focus on speed, reliability, and a premium user experience, **SketchFlow** allows multiple users to draw, sketch, and brainstorm together on a shared infinite canvas with sub-millisecond latency.
+
+Features seamless synchronization across devices, including iPad/tablet support with pressure sensitivity.
 
 ## ✨ Features
 
-- **Real-time Collaboration**: Draw on one device and see updates instantly on all connected devices
-- **Modern UI**: Beautiful, responsive interface built with React and Tailwind CSS
-- **Touch Optimized**: Perfect for iPad drawing with pressure sensitivity support
-- **Advanced Drawing Tools**: Pen, eraser, shapes, text, and color picker
-- **Performance Optimized**: Hardware acceleration, efficient rendering, and smooth 60+ FPS
-- **Progressive Web App**: Installable on mobile devices with offline capabilities
-- **Cross-platform**: Works on iPad, desktop, and mobile browsers
+- **⚡ Real-time Collaboration**: WebSocket-based synchronization ensuring instant updates for all connected users.
+- **🖌️ Advanced Drawing Engine**:
+  - Pressure-sensitive plotting for tablets/iPads.
+  - Smooth rendering with standard and high-DPI support.
+  - Tools: Pen, Eraser, Shapes (Line, Rectangle, Ellipse).
+  - Customizable stroke sizes and colors.
+- **👥 Multi-User Presence**: See other users' cursors and actions in real-time.
+- **📱 PWA Support**: Fully installable Progressive Web App with offline capabilities and standalone mode.
+- **🚀 High Performance**: 
+  - Optimized for 60+ FPS rendering.
+  - Efficient update batching and object pooling.
+  - Hardware acceleration.
+- **🔒 Secure**: Authentication and user management powered by Clerk.
 
-## 🚀 Tech Stack
+## 🛠 Tech Stack
 
-### Frontend
-- **React 18** with TypeScript
-- **Vite** for fast development and builds
-- **Tailwind CSS** for modern styling
-- **Radix UI** primitives for accessibility
-- **Zustand** for state management
-- **Socket.IO Client** for real-time communication
-- **PWA** support with service worker
+This project is a monorepo managed with `pnpm` workspaces.
 
-### Backend
-- **Node.js** with TypeScript
-- **Express.js** with modern middleware
-- **Socket.IO** for WebSocket communication
-- **Prisma + PostgreSQL** for data layer
-- **Clerk** for authentication
-- **Advanced error handling** and logging
-- **Performance monitoring**
+### **Apps**
 
-## 🧱 Project Structure
+#### **Client** (`apps/client`)
+- **Framework**: [React 18](https://react.dev/) + [Vite](https://vitejs.dev/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [Radix UI](https://www.radix-ui.com/)
+- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
+- **Real-time**: [Socket.IO Client](https://socket.io/)
+- **PWA**: [Vite PWA](https://vite-pwa-org.netlify.app/)
 
-This project is organized as a monorepo:
-- **apps/client**: React frontend application
-- **apps/server**: Node.js/Express backend service
-- **packages/shared**: Shared types and helpers
+#### **Server** (`apps/server`)
+- **Runtime**: [Node.js](https://nodejs.org/)
+- **Framework**: [Express](https://expressjs.com/)
+- **Real-time**: [Socket.IO](https://socket.io/)
+- **Database**: [PostgreSQL](https://www.postgresql.org/) + [Prisma](https://www.prisma.io/)
+- **Observability**: [OpenTelemetry](https://opentelemetry.io/)
+- **Auth**: [Clerk SDK](https://clerk.com/)
 
-## 🛠️ Installation & Setup
+### **Packages**
+
+- **Shared** (`packages/shared`): Common TypeScript types, utility functions, and constants shared between client and server.
+
+## 🏗️ Architecture Overview
+
+1.  **Monorepo**: Code is split into `client`, `server`, and `shared` packages for better modularity and type safety.
+2.  **WebSocket Event Flow**:
+    - Clients emit `draw:stroke` or `draw:shape` events.
+    - Server validates data (coordinates, types, permissions).
+    - Valid updates are broadcast to other clients in the same room.
+    - Cursor movements (`cursor:move`) are throttled and broadcast for live presence.
+3.  **Persistence**: Project metadata and permissions are stored in PostgreSQL via Prisma. Drawing data can be snapshotted or stored as event logs (depending on implementation specifics).
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+ 
-- pnpm 9+
 
-### Quick Start
+- **Node.js**: v18+
+- **pnpm**: v9+
+- **PostgreSQL**: (Local or Cloud)
 
-1. **Clone the repository**
-```bash
-git clone <your-repo-url>
-cd live_test
-```
+### Environment Setup
 
-2. **Install dependencies**
-```bash
-pnpm install
-```
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/my-org/sketchflow.git
+    cd sketchflow
+    ```
 
-3. **Start development servers**
+2.  **Install dependencies**:
+    ```bash
+    pnpm install
+    ```
+
+3.  **Environment Variables**:
+    Create a `.env` file in the root directory:
+
+    ```env
+    # Authentication (Clerk)
+    VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+    CLERK_SECRET_KEY=sk_test_...
+
+    # Database
+    DATABASE_URL="postgresql://user:password@localhost:5432/live_draw?schema=public"
+
+    # Server Config
+    PORT=3000
+    NODE_ENV=development
+    ```
+
+### Development
+
+Start both client and server in development mode:
+
 ```bash
 pnpm dev
 ```
 
-This will start:
-- Frontend dev server on `http://localhost:5173`
-- Backend server on `http://localhost:3000`
+- **Frontend**: `http://localhost:5173`
+- **Backend**: `http://localhost:3000`
 
-4. **Open in browser**
-- Drawing interface: `http://localhost:5173/draw`
-- Viewer interface: `http://localhost:5173/view`
+### Database Management
 
-### Production Build
+Run Prisma migrations to set up your database schema:
 
 ```bash
-# Build the application
-pnpm build
-
-# Start production server
-pnpm start
-```
-
-## 📱 Usage
-
-### Drawing Interface (`/draw`)
-- **iPad/Touch Optimized**: Perfect for drawing with touch devices
-- **Tool Selection**: Pen, eraser, line, rectangle, ellipse, text
-- **Brush Settings**: Adjustable size and opacity
-- **Color Picker**: Custom colors with easy selection
-- **Undo/Redo**: Full history support
-- **Export**: Save your drawings
-- **Real-time Sync**: All strokes are broadcast live
-
-### Viewer Interface (`/view`)
-- **Live Updates**: See drawings appear in real-time
-- **Pan & Zoom**: Navigate large canvases smoothly
-- **Go to Content**: Auto-center on drawing content
-- **Performance Stats**: Monitor FPS and connection status
-
-## 🔧 Configuration
-
-### Environment Variables
-Create a `.env` file in the root directory:
-
-```env
-# Clerk Authentication
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-
-# Database (PostgreSQL)
-# Example for local PostgreSQL:
-# DATABASE_URL="postgresql://user:password@localhost:5432/live_draw?schema=public"
-# Example for Neon (serverless PostgreSQL):
-# DATABASE_URL="postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/live_draw?sslmode=require"
-# Example for Supabase:
-# DATABASE_URL="postgresql://postgres:password@db.xxx.supabase.co:5432/postgres"
-DATABASE_URL="postgresql://user:password@localhost:5432/live_draw?schema=public"
-
-# Server Configuration
-PORT=3000
-HOST=0.0.0.0
-NODE_ENV=development
-```
-
-### Database Setup
-
-1. **Set up PostgreSQL database**:
-   - Local: Install PostgreSQL and create a database
-   - Cloud: Use [Neon](https://neon.tech), [Supabase](https://supabase.com), or [Railway](https://railway.app)
-
-2. **Run Prisma migrations**:
-```bash
+# Apply migrations
 pnpm --filter @live-draw/server db:migrate
+
+# Open Prisma Studio (Database GUI)
+pnpm --filter @live-draw/server db:studio
 ```
 
-3. **Generate Prisma Client** (if needed):
+## 🐳 Docker Support
+
+Run the application using Docker for an isolated environment.
+
 ```bash
-pnpm --filter @live-draw/server db:generate
+# Build the image
+docker build -t sketchflow .
+
+# Run the container
+docker run -p 3000:3000 -e DATABASE_URL=... -e CLERK_SECRET_KEY=... sketchflow
 ```
 
-### Useful Scripts
-- `pnpm dev` - start client and server concurrently
-- `pnpm build` - build shared, client, and server
-- `pnpm start` - run the production server
-- `pnpm test` - run client tests (Vitest)
-- `pnpm --filter @live-draw/server db:studio` - open Prisma Studio
-
-### Customization
-- **Canvas Size**: Modify `WORLD_WIDTH` and `WORLD_HEIGHT` in canvas components
-- **Performance**: Adjust frame rate limits and batch sizes
-- **UI Theme**: Customize colors in `tailwind.config.js`
-- **Tools**: Add new drawing tools in the toolbar component
-
-## 📊 Performance Features
-
-- **60+ FPS** smooth rendering with hardware acceleration
-- **Efficient WebSocket** communication with batching
-- **Memory optimization** with object pooling
-- **Browser-specific optimizations** for Chrome, Safari, Firefox
-- **Adaptive throttling** based on device performance
-
-## 🌐 PWA Features
-
-- **Offline capable** with service worker caching
-- **Installable** on mobile devices and desktop
-- **App-like experience** with standalone display
-- **Background sync** for offline drawing (coming soon)
-
-## 🚀 Deployment
-
-### Docker (Recommended)
-```bash
-# Build and run with Docker
-docker build -t live-draw-sync .
-docker run -p 3000:3000 live-draw-sync
-```
-
-### Manual Deployment
-```bash
-# Build for production
-pnpm build
-
-# Start server
-pnpm start
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
+## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Original drawing application architecture
-- React and TypeScript communities
-- Radix UI for accessible components
-- Tailwind CSS for utility-first styling
-
-
-
-
-
-

@@ -13,17 +13,17 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 
 # Build shared package
-RUN pnpm --filter @live-draw/shared build
+RUN pnpm --filter @sketchflow/shared build
 
 # Generate Prisma client (for build)
-RUN pnpm --filter @live-draw/server db:generate
+RUN pnpm --filter @sketchflow/server db:generate
 
 # Build server
-RUN pnpm --filter @live-draw/server build
+RUN pnpm --filter @sketchflow/server build
 
 # Deploy server (isolated production build)
 # This installs prod dependencies into /app/deploy
-RUN pnpm --filter @live-draw/server --prod deploy --legacy /app/deploy
+RUN pnpm --filter @sketchflow/server --prod deploy --legacy /app/deploy
 
 # Verify and copy artifacts if needed
 # pnpm deploy might not copy ignored build artifacts like dist, so we copy them explicitly
@@ -41,17 +41,17 @@ WORKDIR /app
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 livedraw
+    adduser --system --uid 1001 sketchflow
 
 # Copy the deployed application from builder
-COPY --from=builder --chown=livedraw:nodejs /app/deploy .
+COPY --from=builder --chown=sketchflow:nodejs /app/deploy .
 
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
 
 # Set ownership
-USER livedraw
+USER sketchflow
 
 EXPOSE 3000
 

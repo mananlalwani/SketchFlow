@@ -17,9 +17,6 @@ importers:
       '@clerk/clerk-react':
         specifier: ^5.56.0
         version: 5.59.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@live-draw/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -77,6 +74,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.0.7
         version: 1.2.8(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@sketchflow/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -207,9 +207,6 @@ importers:
       '@clerk/express':
         specifier: ^1.7.50
         version: 1.7.62(express@4.22.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@live-draw/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -243,6 +240,9 @@ importers:
       '@prisma/client':
         specifier: ^7.0.0
         version: 7.2.0(prisma@7.2.0(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(typescript@5.9.3)
+      '@sketchflow/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
