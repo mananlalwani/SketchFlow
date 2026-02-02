@@ -1,5 +1,5 @@
 {
-  "name": "@live-draw/server",
+  "name": "@sketchflow/server",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@clerk/express": "^1.7.50",
-    "@live-draw/shared": "workspace:*",
+    "@sketchflow/shared": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.208.0",
     "@opentelemetry/auto-instrumentations-node": "^0.67.3",

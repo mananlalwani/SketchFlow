@@ -83,6 +83,7 @@ export interface ClientToServerEvents {
   'room:leave': () => void;
   'project:request-state': () => void;
   'object:delete': (objectId: string) => void;
+  'project:state': (data: { objects: unknown[]; timestamp: number }) => void;
 }
 
 

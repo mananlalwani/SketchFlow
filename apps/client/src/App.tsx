@@ -109,7 +109,7 @@ function EditorRoute() {
   // Show tutorial on first visit
   useEffect(() => {
     if (initialized && currentProjectId && objectCount === 0) {
-      const tutorialCompleted = localStorage.getItem('live-draw-tutorial-completed');
+      const tutorialCompleted = localStorage.getItem('sketchflow-tutorial-completed');
       if (!tutorialCompleted) {
         setShowTutorial(true);
       }

@@ -1,5 +1,5 @@
 {
-  "name": "@live-draw/client",
+  "name": "@sketchflow/client",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.56.0",
-    "@live-draw/shared": "workspace:*",
+    "@sketchflow/shared": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-zone": "^2.2.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",

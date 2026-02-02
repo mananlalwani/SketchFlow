@@ -29,7 +29,7 @@ interface LocalProjectsDB extends DBSchema {
   };
 }
 
-const DB_NAME = 'LiveDrawLocalProjects';
+const DB_NAME = 'SketchFlowLocalProjects';
 const DB_VERSION = 1;
 const STORE_NAME = 'projects';
 
@@ -60,7 +60,7 @@ class LocalProjectsService {
       const db = await this.initDB();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const projects = await (db as any).getAllFromIndex(STORE_NAME, 'updatedAt');
-      
+
       return projects
         .map((p: { id: string; title: string; updatedAt: number; createdAt: number; thumbnail?: string }) => ({
           id: p.id,
@@ -89,9 +89,9 @@ class LocalProjectsService {
     try {
       const db = await this.initDB();
       const project = await db.get(STORE_NAME, id);
-      
+
       if (!project) return null;
-      
+
       return {
         id: project.id,
         userId: 'guest',
@@ -113,7 +113,7 @@ class LocalProjectsService {
     try {
       const db = await this.initDB();
       const existing = await db.get(STORE_NAME, id);
-      
+
       const project = {
         id,
         title,
@@ -122,9 +122,9 @@ class LocalProjectsService {
         updatedAt: Date.now(),
         thumbnail: thumbnail || existing?.thumbnail,
       };
-      
+
       await db.put(STORE_NAME, project);
-      
+
       return {
         id: project.id,
         userId: 'guest',
@@ -165,7 +165,7 @@ class LocalProjectsService {
 
   private listFromLocalStorage(): Omit<ProjectRecord, 'data'>[] {
     const projects: Omit<ProjectRecord, 'data'>[] = [];
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('local-project-')) {
@@ -189,7 +189,7 @@ class LocalProjectsService {
         }
       }
     }
-    
+
     return projects.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
@@ -197,7 +197,7 @@ class LocalProjectsService {
     try {
       const data = localStorage.getItem(this.getLocalStorageKey(id));
       if (!data) return null;
-      
+
       const project = JSON.parse(data);
       return {
         id: project.id,
@@ -218,7 +218,7 @@ class LocalProjectsService {
 
   private saveToLocalStorage(id: string, title: string, data: unknown, thumbnail?: string): ProjectRecord {
     const existing = this.getFromLocalStorage(id);
-    
+
     const project = {
       id,
       title,
@@ -227,9 +227,9 @@ class LocalProjectsService {
       updatedAt: Date.now(),
       thumbnail: thumbnail || existing?.thumbnail,
     };
-    
+
     localStorage.setItem(this.getLocalStorageKey(id), JSON.stringify(project));
-    
+
     return {
       id: project.id,
       userId: 'guest',
@@ -264,11 +264,11 @@ class LocalProjectsService {
       },
       data: project.data,
     };
-    
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
       type: 'application/json',
     });
-    
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -283,22 +283,22 @@ class LocalProjectsService {
   async importProject(file: File): Promise<ProjectRecord> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      
+
       reader.onload = async (e) => {
         try {
           const content = e.target?.result as string;
           const imported = JSON.parse(content);
-          
+
           const title = imported.meta?.title || file.name.replace('.draw', '');
           const data = imported.data || {};
-          
+
           const project = await this.create(title, data);
           resolve(project);
         } catch {
           reject(new Error('Failed to parse .draw file'));
         }
       };
-      
+
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsText(file);
     });
@@ -309,7 +309,7 @@ class LocalProjectsService {
     try {
       const db = await this.initDB();
       const projects = await db.getAll(STORE_NAME);
-      
+
       return projects.map(p => ({
         id: p.id,
         userId: 'guest',
@@ -323,7 +323,7 @@ class LocalProjectsService {
       }));
     } catch (error) {
       console.error('Failed to get all projects for migration:', error);
-      
+
       // Fallback to localStorage
       const projects: ProjectRecord[] = [];
       for (let i = 0; i < localStorage.length; i++) {
@@ -342,7 +342,7 @@ class LocalProjectsService {
     try {
       const db = await this.initDB();
       await db.clear(STORE_NAME);
-      
+
       // Also clear localStorage
       const keys: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
