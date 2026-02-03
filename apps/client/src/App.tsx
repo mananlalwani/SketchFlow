@@ -104,7 +104,7 @@ function EditorRoute() {
     // If we have a last project ID and are logged in, we might want to load it (handled by user usually, or auto-load?)
     // For now, let's just show the welcome screen if no active project
     setInitialized(true);
-  }, [isLoaded, userId, currentProjectId, setObjects, replaceHistory, setProjectTitle, setProjectRole, requestFullRedraw, shareToken, initialized, setCurrentProject, toast]);
+  }, [isLoaded, userId, currentProjectId, setObjects, replaceHistory, setProjectTitle, setProjectRole, requestFullRedraw, shareToken, setCurrentProject, toast]);
 
   // Show tutorial on first visit
   useEffect(() => {

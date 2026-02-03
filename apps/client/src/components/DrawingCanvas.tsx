@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from "react";
+import { useGesture } from "@use-gesture/react";
 import { useDrawingStore } from "@/store/drawingStore";
 import { useDrawingSocket } from "@/hooks/useSocket";
 import { usePerformanceMonitor } from "@/hooks/usePerformanceMonitor";
@@ -991,20 +992,20 @@ export function DrawingCanvas() {
       points: { x: number; y: number }[]
     ):
       | {
-          kind: "rectangle" | "ellipse" | "circle" | "triangle" | "line";
-          x: number;
-          y: number;
-          width: number;
-          height: number;
-        }
+        kind: "rectangle" | "ellipse" | "circle" | "triangle" | "line";
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }
       | {
-          kind: "parabola";
-          x: number;
-          y: number;
-          width: number;
-          height: number;
-          orientation: "up" | "down" | "left" | "right";
-        }
+        kind: "parabola";
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        orientation: "up" | "down" | "left" | "right";
+      }
       | null => {
       if (!points || points.length < 3) return null;
 
@@ -1694,12 +1695,12 @@ export function DrawingCanvas() {
             updatedObjects = currentObjects.map((o) =>
               o.id === draggedObject.id
                 ? {
-                    ...o,
-                    points: o.points!.map((p) => ({
-                      x: p.x + deltaX,
-                      y: p.y + deltaY,
-                    })),
-                  }
+                  ...o,
+                  points: o.points!.map((p) => ({
+                    x: p.x + deltaX,
+                    y: p.y + deltaY,
+                  })),
+                }
                 : o
             );
           } else if (
@@ -1713,14 +1714,14 @@ export function DrawingCanvas() {
             updatedObjects = currentObjects.map((o) =>
               o.id === draggedObject.id
                 ? {
-                    ...o,
-                    x: newX,
-                    y: newY,
-                    points: o.points!.map((p) => ({
-                      x: p.x + deltaX,
-                      y: p.y + deltaY,
-                    })),
-                  }
+                  ...o,
+                  x: newX,
+                  y: newY,
+                  points: o.points!.map((p) => ({
+                    x: p.x + deltaX,
+                    y: p.y + deltaY,
+                  })),
+                }
                 : o
             );
           } else {
@@ -2021,8 +2022,8 @@ export function DrawingCanvas() {
                 shape.kind === "line"
                   ? "line"
                   : shape.kind === "parabola"
-                  ? "parabola"
-                  : shape.kind,
+                    ? "parabola"
+                    : shape.kind,
               x: Math.min(shape.x, shape.x + shape.width),
               y: Math.min(shape.y, shape.y + shape.height),
               width: Math.abs(shape.width),
@@ -2056,12 +2057,12 @@ export function DrawingCanvas() {
             let shapeObject: {
               id: string;
               type:
-                | "parabola"
-                | "line"
-                | "rectangle"
-                | "ellipse"
-                | "circle"
-                | "triangle";
+              | "parabola"
+              | "line"
+              | "rectangle"
+              | "ellipse"
+              | "circle"
+              | "triangle";
               x: number;
               y: number;
               width: number;
@@ -2442,44 +2443,218 @@ export function DrawingCanvas() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const handlePointerEnter = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const bind = useGesture(
+    {
+      onDrag: ({ active, movement: [mx, my], xy: [clientX, clientY], event, cancel, touches, tap }) => {
+        if (tap) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-    workerRef.current?.postMessage({
-      type: "viewport",
-      zoom,
-      viewX,
-      viewY,
-      canvasWidth: rect.width,
-      canvasHeight: rect.height,
-      dpr,
-    });
-  }, [zoom, viewX, viewY]);
+        const isMultiTouch = touches > 1;
+        const isHandMode = currentTool === 'hand' || isSpacePan;
+
+        // Pan logic
+        if (isHandMode || isMultiTouch) {
+          if (!isPanning && active) {
+            setIsPanning(true);
+            setPanStart({ x: clientX, y: clientY, viewX, viewY });
+          } else if (isPanning && active && panStart) {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const deltaX = clientX - panStart.x;
+            const deltaY = clientY - panStart.y;
+
+            const unconstrained = {
+              x: panStart.viewX - deltaX / zoom,
+              y: panStart.viewY - deltaY / zoom,
+            };
+
+            const constrained = constrainView(
+              unconstrained.x,
+              unconstrained.y,
+              zoom,
+              rect.width,
+              rect.height
+            );
+
+            setView(constrained.x, constrained.y);
+
+            // Send viewport update to worker
+            const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
+            workerRef.current?.postMessage({
+              type: "viewport",
+              zoom,
+              viewX: constrained.x,
+              viewY: constrained.y,
+              canvasWidth: rect.width,
+              canvasHeight: rect.height,
+              dpr,
+            });
+          } else if (!active) {
+            setIsPanning(false);
+            setPanStart(null);
+          }
+          return;
+        }
+
+        // Draw logic (Single touch, not hand mode)
+        // Delegate to existing handlers for now, but wrapped
+        const nativeEvent = event as unknown as React.PointerEvent;
+        // Mock properties if missing or just pass what we can
+        // We might need to manually call startDrawing / draw / stopDrawing logic here
+
+        if (!isDrawing && active) {
+          // START DRAWING
+          if (!canDraw && currentTool !== "move") {
+            // Toast logic should be here or in startDrawing
+            return;
+          }
+
+          // Check if we are dragging an object
+          if (currentTool === 'move') {
+            // Reuse startDrawing logic for move... difficult to separate
+            // Let's call startDrawing effectively
+            // We need to construct a fake event or refactor startDrawing to take x,y
+            startDrawing(nativeEvent);
+          } else {
+            startDrawing(nativeEvent);
+          }
+        } else if (isDrawing && active) {
+          // DRAW MOVE
+          draw(nativeEvent);
+        } else if (!active) {
+          // STOP DRAWING
+          stopDrawing();
+        }
+      },
+      onPinch: ({ origin: [cx, cy], offset: [s], movement: [ms], first, memo }) => {
+        if (first) {
+          const canvas = canvasRef.current;
+          if (!canvas) return { initialZoom: zoom };
+          return { initialZoom: zoom };
+        }
+
+        const newZoom = memo.initialZoom * s;
+        // Constrain zoom
+        const clampedZoom = Math.max(0.1, Math.min(5, newZoom));
+
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          // Center of pinch relative to canvas
+          const pinchX = cx - rect.left;
+          const pinchY = cy - rect.top;
+
+          // World coordinates of pinch center
+          const worldX = viewX + pinchX / zoom;
+          const worldY = viewY + pinchY / zoom;
+
+          // New view position to keep pinch center stable
+          const newViewX = worldX - pinchX / clampedZoom;
+          const newViewY = worldY - pinchY / clampedZoom;
+
+          const constrained = constrainView(newViewX, newViewY, clampedZoom, rect.width, rect.height);
+
+          setZoom(clampedZoom);
+          setView(constrained.x, constrained.y);
+
+          const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
+          workerRef.current?.postMessage({
+            type: "viewport",
+            zoom: clampedZoom,
+            viewX: constrained.x,
+            viewY: constrained.y,
+            canvasWidth: rect.width,
+            canvasHeight: rect.height,
+            dpr,
+          });
+        }
+        return memo;
+      },
+      onWheel: ({ event, active, values: [vx, vy], delta: [dx, dy], ctrlKey }) => {
+        if (ctrlKey) {
+          // Zoom
+          event.preventDefault();
+          const delta = dy > 0 ? 0.9 : 1.1; // Invert direction for standard feel
+          const newZoom = Math.max(0.1, Math.min(5, zoom * delta));
+
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = (event as any).clientX - rect.left;
+          const mouseY = (event as any).clientY - rect.top;
+
+          const worldX = viewX + mouseX / zoom;
+          const worldY = viewY + mouseY / zoom;
+
+          const unconstrainedX = worldX - mouseX / newZoom;
+          const unconstrainedY = worldY - mouseY / newZoom;
+
+          const constrained = constrainView(unconstrainedX, unconstrainedY, newZoom, rect.width, rect.height);
+
+          setZoom(newZoom);
+          setView(constrained.x, constrained.y);
+
+          const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
+          workerRef.current?.postMessage({
+            type: "viewport",
+            zoom: newZoom,
+            viewX: constrained.x,
+            viewY: constrained.y,
+            canvasWidth: rect.width,
+            canvasHeight: rect.height,
+            dpr,
+          });
+        } else {
+          // Pan
+          if (active) {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+
+            const newViewX = viewX + dx / zoom;
+            const newViewY = viewY + dy / zoom;
+
+            const constrained = constrainView(newViewX, newViewY, zoom, rect.width, rect.height);
+            setView(constrained.x, constrained.y);
+
+            const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
+            workerRef.current?.postMessage({
+              type: "viewport",
+              zoom,
+              viewX: constrained.x,
+              viewY: constrained.y,
+              canvasWidth: rect.width,
+              canvasHeight: rect.height,
+              dpr,
+            });
+          }
+        }
+      },
+    },
+    {
+      target: canvasRef,
+      eventOptions: { passive: false },
+      drag: { filterTaps: true, threshold: 3 },
+      pinch: { scaleBounds: { min: 0.1, max: 5 }, modifierKey: null },
+    }
+  );
 
   return (
     <div
-      className={`w-full h-full relative overflow-hidden ${
-        theme === "dark" ? "bg-[#0a0a0a]" : "bg-[#e0e0e0]"
-      }`}
+      className={`w-full h-full relative overflow-hidden ${theme === "dark" ? "bg-[#0a0a0a]" : "bg-[#e0e0e0]"
+        }`}
     >
       <canvas
         ref={canvasRef}
-        className={`absolute inset-0 w-full h-full touch-none ${
-          currentTool === "hand" || isSpacePan || isPanning
-            ? isPanning
-              ? "cursor-grabbing"
-              : "cursor-grab"
-            : "cursor-crosshair"
-        }`}
-        onPointerEnter={handlePointerEnter}
-        onPointerDown={startDrawing}
-        onPointerMove={draw}
-        onPointerUp={stopDrawing}
-        onPointerLeave={stopDrawing}
-        onWheel={handleWheel}
+        className={`absolute inset-0 w-full h-full touch-none ${currentTool === "hand" || isSpacePan || isPanning
+          ? isPanning
+            ? "cursor-grabbing"
+            : "cursor-grab"
+          : "cursor-crosshair"
+          }`}
+        {...bind()}
         onContextMenu={(e) => e.preventDefault()}
       />
 
@@ -2634,8 +2809,7 @@ export function DrawingCanvas() {
                     const angle = (i * Math.PI) / pointCount - Math.PI / 2;
                     const radius = i % 2 === 0 ? outerRadius : innerRadius;
                     starPointsArr.push(
-                      `${centerX + radius * Math.cos(angle)},${
-                        centerY + radius * Math.sin(angle)
+                      `${centerX + radius * Math.cos(angle)},${centerY + radius * Math.sin(angle)
                       }`
                     );
                   }
@@ -2706,13 +2880,12 @@ export function DrawingCanvas() {
           variant={isConstraintMode ? "default" : "glass"}
           size="icon"
           className="fixed bottom-20 right-4 z-40 w-12 h-12"
-          title={`${isConstraintMode ? "Disable" : "Enable"} perfect ${
-            currentTool === "ellipse"
-              ? "circle"
-              : currentTool === "triangle"
+          title={`${isConstraintMode ? "Disable" : "Enable"} perfect ${currentTool === "ellipse"
+            ? "circle"
+            : currentTool === "triangle"
               ? "equilateral triangle"
               : "square"
-          } mode`}
+            } mode`}
         >
           {currentTool === "ellipse" ? (
             <Circle
@@ -2809,7 +2982,7 @@ export function DrawingCanvas() {
         showTrigger={false}
       />
 
-]      <input
+      ]      <input
         id="image-upload-input"
         ref={fileInputRef}
         type="file"
