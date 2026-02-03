@@ -45,8 +45,8 @@ export function Navbar() {
         if (nav) {
           const rect = nav.getBoundingClientRect();
           const isOverNav = e.clientX >= rect.left && e.clientX <= rect.right &&
-                           e.clientY >= rect.top && e.clientY <= rect.bottom;
-          
+            e.clientY >= rect.top && e.clientY <= rect.bottom;
+
           if (!isOverNav) {
             if (!hideTimerRef.current) {
               hideTimerRef.current = window.setTimeout(() => {
@@ -66,7 +66,7 @@ export function Navbar() {
     };
 
     window.addEventListener('mousemove', handleMouseMove);
-    
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (hideTimerRef.current) {
@@ -79,7 +79,7 @@ export function Navbar() {
   const isView = location.pathname === '/view';
 
   return (
-    <nav 
+    <nav
       className={cn(
         "fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/20 px-6 py-4 transition-all duration-500 ease-out",
         navVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'
@@ -114,19 +114,19 @@ export function Navbar() {
               SketchFlow
             </h1>
           </div>
-          
+
           {/* Connection status or Guest badge */}
           {isGuest ? (
             <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 bg-amber-100 dark:bg-gradient-to-r dark:from-amber-500/20 dark:to-yellow-500/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-400/40 shadow-lg shadow-amber-500/10 dark:shadow-amber-500/20">
               <User className="w-3.5 h-3.5" />
-              <span>Guest Mode</span>
+              <span className="hidden sm:inline">Guest Mode</span>
             </div>
           ) : isAuthenticated && (
             <div className="flex items-center gap-2">
               <div className={cn(
                 "flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300",
-                isConnected 
-                  ? "bg-green-100 dark:bg-gradient-to-r dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-400/40 shadow-lg shadow-green-500/10 dark:shadow-green-500/20" 
+                isConnected
+                  ? "bg-green-100 dark:bg-gradient-to-r dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-400/40 shadow-lg shadow-green-500/10 dark:shadow-green-500/20"
                   : "bg-red-100 dark:bg-gradient-to-r dark:from-red-500/20 dark:to-rose-500/20 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-400/40 shadow-lg shadow-red-500/10 dark:shadow-red-500/20"
               )}>
                 {isConnected ? (
@@ -134,7 +134,7 @@ export function Navbar() {
                 ) : (
                   <WifiOff className="w-3.5 h-3.5" />
                 )}
-                <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+                <span className="hidden sm:inline">{isConnected ? 'Connected' : 'Disconnected'}</span>
               </div>
               {!isConnected && (
                 <Button
@@ -170,7 +170,7 @@ export function Navbar() {
               <span className="hidden sm:inline">Draw</span>
             </Link>
           </Button>
-          
+
           <Button
             asChild
             variant={isView ? "default" : "secondary"}
@@ -191,7 +191,7 @@ export function Navbar() {
             <div className="flex items-center space-x-3">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 dark:bg-blue-500/10 border border-blue-300 dark:border-blue-400/30 rounded-lg shadow-lg">
                 <User className="w-4 h-4 text-blue-600 dark:text-blue-300" />
-                <span className="text-sm text-blue-700 dark:text-blue-200 font-semibold">
+                <span className="text-sm text-blue-700 dark:text-blue-200 font-semibold hidden sm:inline">
                   {user.username}
                 </span>
               </div>

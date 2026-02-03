@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { useDrawingStore, type Tool } from '@/store/drawingStore';
 import { Button } from '@/components/ui/button';
-import { 
-  Pen, 
-  Eraser, 
-  Minus, 
-  Square, 
-  Circle, 
+import {
+  Pen,
+  Eraser,
+  Minus,
+  Square,
+  Circle,
   Triangle,
   Star,
-  Type, 
+  Type,
   Hand,
   Move,
   ImageIcon,
   ChevronDown,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Undo2,
+  Redo2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MobilePropertiesDrawer } from './MobilePropertiesDrawer';
@@ -34,7 +36,7 @@ const tools = [
 ] as const;
 
 export function MobileToolbar() {
-  const { currentTool, setTool, clearCanvas } = useDrawingStore();
+  const { currentTool, setTool, clearCanvas, undo, redo, canUndo, canRedo } = useDrawingStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -59,8 +61,8 @@ export function MobileToolbar() {
         setIsDrawerOpen(false);
       }
     } else if (action === 'save') {
-       // Trigger save
-       setIsDrawerOpen(false);
+      // Trigger save
+      setIsDrawerOpen(false);
     }
   };
 
@@ -76,51 +78,71 @@ export function MobileToolbar() {
           <SlidersHorizontal className="w-5 h-5" />
         </Button>
 
-        {/* Tools Toggle */}
+        {/* Undo/Redo */}
+        <div className="flex flex-col gap-3">
+          <Button
+            onClick={undo}
+            disabled={!canUndo}
+            className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-lg border border-slate-200 dark:border-slate-700"
+            size="icon"
+          >
+            <Undo2 className="w-5 h-5" />
+          </Button>
+          <Button
+            onClick={redo}
+            disabled={!canRedo}
+            className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-lg border border-slate-200 dark:border-slate-700"
+            size="icon"
+          >
+            <Redo2 className="w-5 h-5" />
+          </Button>
+        </div>
+
+        {/* Properties Toggle */}
         <div className="relative">
-            {isExpanded ? (
+          {isExpanded ? (
             <div className="absolute bottom-16 left-1/2 -translate-x-1/2 mb-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-white/10 p-2 animate-in fade-in slide-in-from-bottom-2 duration-200 w-[280px]">
-                <div className="flex items-center gap-1 flex-wrap justify-center">
+              <div className="flex items-center gap-1 flex-wrap justify-center">
                 {tools.map(({ id, icon: Icon, label }) => (
-                    <Button
+                  <Button
                     key={id}
                     onClick={() => handleToolClick(id)}
                     variant={currentTool === id ? "default" : "ghost"}
                     size="icon"
                     className={cn(
-                        "w-10 h-10 rounded-xl transition-all",
-                        currentTool === id 
-                        ? "bg-blue-600 text-white" 
+                      "w-10 h-10 rounded-xl transition-all",
+                      currentTool === id
+                        ? "bg-blue-600 text-white"
                         : "text-slate-500 dark:text-slate-400"
                     )}
                     title={label}
-                    >
+                  >
                     <Icon className="w-5 h-5" />
-                    </Button>
+                  </Button>
                 ))}
-                </div>
-                <Button
+              </div>
+              <Button
                 onClick={() => setIsExpanded(false)}
                 variant="ghost"
                 size="sm"
                 className="w-full mt-2 text-slate-400 hover:text-slate-600"
-                >
+              >
                 <ChevronDown className="w-4 h-4" />
-                </Button>
+              </Button>
             </div>
-            ) : null}
-            
-            <Button
+          ) : null}
+
+          <Button
             onClick={() => setIsExpanded(!isExpanded)}
             className="h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30"
-            >
+          >
             <CurrentIcon className="w-6 h-6" />
-            </Button>
+          </Button>
         </div>
       </div>
 
-      <MobilePropertiesDrawer 
-        open={isDrawerOpen} 
+      <MobilePropertiesDrawer
+        open={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
         onAction={handleDrawerAction}
       />

@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.56.0",
-    "@sketchflow/shared": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-zone": "^2.2.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
@@ -34,6 +33,8 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.1.5",
     "@radix-ui/react-tooltip": "^1.0.7",
+    "@sketchflow/shared": "workspace:*",
+    "@use-gesture/react": "^10.3.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "data-fns": "^1.1.0",
