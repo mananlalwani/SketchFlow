@@ -26,7 +26,8 @@ export default defineConfig({
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       },
@@ -50,6 +51,9 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      ...(process.env.VITE_E2E === 'true' ? {
+        '@clerk/clerk-react': path.resolve(__dirname, './src/test/clerkE2E.tsx'),
+      } : {}),
       '@': path.resolve(__dirname, './src'),
       '@/components': path.resolve(__dirname, './src/components'),
       '@/lib': path.resolve(__dirname, './src/lib'),
@@ -74,7 +78,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // Source maps may be enabled explicitly for a private error-reporting upload.
+    // They must not be served with the public production bundle by default.
+    sourcemap: process.env.GENERATE_SOURCEMAP === 'true',
     rollupOptions: {
       output: {
         // Content-hash based filenames for cache busting

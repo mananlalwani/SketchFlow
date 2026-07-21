@@ -1,5 +1,5 @@
 import type { DrawingObject } from '@/store/drawingStore';
-import { jsPDF } from 'jspdf';
+import type { jsPDF } from 'jspdf';
 
 const WORLD_WIDTH = 4096;
 const WORLD_HEIGHT = 4096;
@@ -165,6 +165,10 @@ export async function exportAsPDF(
     orientation = 'landscape',
     margin = 20
   } = options;
+
+  // Load the PDF renderer only when a user actually exports a PDF. This keeps
+  // the initial drawing bundle independent from jsPDF and its HTML helpers.
+  const { jsPDF } = await import('jspdf');
 
   // Create PDF document
   const pdf = new jsPDF({

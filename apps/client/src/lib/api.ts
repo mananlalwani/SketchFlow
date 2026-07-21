@@ -13,6 +13,7 @@ export interface ProjectListItem {
   role?: 'owner' | 'editor' | 'viewer';
   collaborators?: { userId: string; role: string }[];
   thumbnail?: string; // base64 JPEG data URL
+  revision?: number;
 }
 
 export interface ProjectRecord<T = unknown> extends ProjectListItem {
@@ -148,14 +149,15 @@ export async function createProject<T = unknown>(
   title: string, 
   data: T, 
   token?: string | null,
-  thumbnail?: string | null
+  thumbnail?: string | null,
+  expectedRevision?: number
 ): Promise<ProjectRecord<T>> {
   if (!token) {
     return localProjectsService.create(title, data) as Promise<ProjectRecord<T>>;
   }
   return httpWithRetry<ProjectRecord<T>>('/api/projects', {
     method: 'POST',
-    body: JSON.stringify({ title, data, thumbnail })
+    body: JSON.stringify({ title, data, thumbnail, expectedRevision })
   }, token);
 }
 
@@ -164,14 +166,15 @@ export async function updateProject<T = unknown>(
   title: string, 
   data: T, 
   token?: string | null,
-  thumbnail?: string | null
+  thumbnail?: string | null,
+  expectedRevision?: number
 ): Promise<ProjectRecord<T>> {
   if (!token) {
     return localProjectsService.save(id, title, data) as Promise<ProjectRecord<T>>;
   }
   return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ title, data, thumbnail })
+    body: JSON.stringify({ title, data, thumbnail, expectedRevision })
   }, token);
 }
 

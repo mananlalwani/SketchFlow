@@ -69,12 +69,13 @@ class SocketManager {
   private listeners: Map<string, Set<ListenerCallback>> = new Map();
   private isConnected = false;
 
-  connect() {
+  connect(token: string) {
     if (this.socket?.connected) return this.socket;
 
     const url = resolveSocketBaseUrl();
 
     this.socket = io(url, {
+      auth: { token },
       transports: ['websocket'],
       upgrade: false,
       rememberUpgrade: true,
@@ -173,13 +174,13 @@ class SocketManager {
     return this.isConnected;
   }
 
-  reconnect() {
+  reconnect(token: string) {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
     }
-    return this.connect();
+    return this.connect(token);
   }
 }
 
@@ -190,20 +191,16 @@ export const useSocket = () => {
   const [connectionError, setConnectionError] = useState<Error | null>(null);
   const [connectionCount, setConnectionCount] = useState(1);
   const wasConnectedRef = React.useRef(false);
-  const { isGuest } = useAuthStore();
-  const allowGuestSocket = React.useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).has('share');
-  }, []);
+  const { isGuest, isAuthenticated, getToken } = useAuthStore();
 
   useEffect(() => {
-    // Don't connect socket for guests
-    if (isGuest && !allowGuestSocket) {
+    let disposed = false;
+    if (isGuest || !isAuthenticated) {
       setIsConnected(false);
       return;
     }
 
-    const socket = socketManager.connect();
+    let socket: SocketInstance | null = null;
 
     const unsubscribeConnect = socketManager.subscribe('connect', (data: unknown) => {
       const connected = data as boolean;
@@ -220,54 +217,46 @@ export const useSocket = () => {
       setConnectionError(error);
     });
 
-    // Listen for connection count updates
-    if (socket) {
-      socket.on('connection:count', (count: number) => {
-        setConnectionCount(count);
-      });
-    }
-
-    setIsConnected(socketManager.getConnectionStatus());
+    void getToken().then(token => {
+      if (disposed || !token) return;
+      socket = socketManager.connect(token);
+      socket.on('connection:count', (count: number) => setConnectionCount(count));
+      setIsConnected(socketManager.getConnectionStatus());
+    });
 
     return () => {
       unsubscribeConnect();
       unsubscribeError();
+      disposed = true;
       if (socket) {
         socket.off('connection:count');
       }
     };
-  }, [isGuest, allowGuestSocket]);
+  }, [isGuest, isAuthenticated, getToken]);
 
   const emit = useCallback(<T extends keyof ClientToServerEvents>(
     event: T,
     ...args: Parameters<ClientToServerEvents[T]>
   ) => {
-    // Don't emit for guests
-    if (isGuest && !allowGuestSocket) return;
-    if (isGuest && allowGuestSocket) {
-      const allowedEvents: Array<keyof ClientToServerEvents> = ['room:join', 'room:leave', 'cursor:move'];
-      if (!allowedEvents.includes(event)) return;
-    }
+    if (!isAuthenticated) return;
     socketManager.emit(event, ...args);
-  }, [isGuest, allowGuestSocket]);
+  }, [isAuthenticated]);
 
   const on = useCallback(<T extends keyof ServerToClientEvents>(
     event: T,
     callback: ServerToClientEvents[T]
   ) => {
-    // Mock listener for guests - never calls callback
-    if (isGuest && !allowGuestSocket) {
+    if (!isAuthenticated) {
       return () => { }; // Return no-op cleanup
     }
     socketManager.on(event, callback);
     return () => socketManager.off(event, callback);
-  }, [isGuest, allowGuestSocket]);
+  }, [isAuthenticated]);
 
   const reconnect = useCallback(() => {
-    // Don't reconnect for guests
-    if (isGuest && !allowGuestSocket) return;
-    socketManager.reconnect();
-  }, [isGuest, allowGuestSocket]);
+    if (!isAuthenticated) return;
+    void getToken().then(token => { if (token) socketManager.reconnect(token); });
+  }, [isAuthenticated, getToken]);
 
   return {
     isConnected,

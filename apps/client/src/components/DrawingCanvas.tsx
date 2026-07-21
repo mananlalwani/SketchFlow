@@ -26,35 +26,17 @@ import { useLiveCursors } from "@/hooks/useLiveCursors";
 import { useProjectPermissions } from "@/hooks/useProjectPermissions";
 import { useToast } from "@/hooks/use-toast";
 import { FEATURES } from "@/config/features";
-
-const WORLD_WIDTH = 51200;
-const WORLD_HEIGHT = 28800;
+import {
+  calculateTriangleVertices,
+  constrainView,
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+} from "@/lib/canvasViewport";
 
 const BG_COLORS = {
   dark: "#0a0a0a",
   light: "#e0e0e0",
 } as const;
-
-function constrainView(
-  viewX: number,
-  viewY: number,
-  zoom: number,
-  canvasWidth: number,
-  canvasHeight: number
-): { x: number; y: number } {
-  const viewportWorldWidth = canvasWidth / zoom;
-  const viewportWorldHeight = canvasHeight / zoom;
-
-  const minX = 0;
-  const maxX = Math.max(0, WORLD_WIDTH - viewportWorldWidth);
-  const constrainedX = Math.max(minX, Math.min(maxX, viewX));
-
-  const minY = 0;
-  const maxY = Math.max(0, WORLD_HEIGHT - viewportWorldHeight);
-  const constrainedY = Math.max(minY, Math.min(maxY, viewY));
-
-  return { x: constrainedX, y: constrainedY };
-}
 
 export function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1175,51 +1157,6 @@ export function DrawingCanvas() {
     [isShiftPressed, isConstraintMode]
   );
 
-  const calculateTriangleVertices = useCallback(
-    (
-      startX: number,
-      startY: number,
-      endX: number,
-      endY: number,
-      mode: "right" | "45-45-90" | "30-60-90"
-    ): { x: number; y: number }[] => {
-      const width = endX - startX;
-      const height = endY - startY;
-      const absWidth = Math.abs(width);
-      const absHeight = Math.abs(height);
-
-      if (mode === "right") {
-        return [
-          { x: startX, y: startY },
-          { x: endX, y: startY },
-          { x: startX, y: endY },
-        ];
-      } else if (mode === "45-45-90") {
-        const size = Math.min(absWidth, absHeight);
-        const signX = width >= 0 ? 1 : -1;
-        const signY = height >= 0 ? 1 : -1;
-
-        return [
-          { x: startX, y: startY },
-          { x: startX + signX * size, y: startY },
-          { x: startX, y: startY + signY * size },
-        ];
-      } else if (mode === "30-60-90") {
-        const shortLeg = absHeight / Math.sqrt(3);
-        const signX = width >= 0 ? 1 : -1;
-        const signY = height >= 0 ? 1 : -1;
-
-        return [
-          { x: startX, y: startY },
-          { x: startX + signX * shortLeg, y: startY + signY * absHeight },
-          { x: startX, y: startY + signY * absHeight },
-        ];
-      }
-      return [];
-    },
-    []
-  );
-
   const startDrawing = useCallback(
     (e: React.PointerEvent) => {
       if (!canDraw && currentTool !== "hand" && currentTool !== "move") {
@@ -1514,7 +1451,6 @@ export function DrawingCanvas() {
         setCurrentStroke([]);
 
         strokeGroupRef.current = generateId();
-        saveHistory();
       } else if (
         ["line", "rectangle", "ellipse", "star"].includes(currentTool)
       ) {
@@ -1824,7 +1760,12 @@ export function DrawingCanvas() {
         return;
       }
       if (!isDrawing) return;
-      const native = e.nativeEvent as unknown as PointerEvent & {
+      // use-gesture supplies a native PointerEvent, while React handlers supply
+      // a SyntheticEvent. Support both so drawing does not crash in browsers
+      // that dispatch native events through the gesture handler.
+      const native = (
+        "nativeEvent" in e && e.nativeEvent ? e.nativeEvent : e
+      ) as unknown as PointerEvent & {
         getCoalescedEvents?: () => PointerEvent[];
       };
       const coalesced =
@@ -2094,6 +2035,7 @@ export function DrawingCanvas() {
             }
 
             addObject(shapeObject);
+            saveHistory();
             emitProjectState([...objects, shapeObject]);
             workerRef.current?.postMessage({
               type: "shape",
@@ -2110,6 +2052,7 @@ export function DrawingCanvas() {
               alpha: brushOpacity,
             };
             addObject(drawingObject);
+            saveHistory();
             emitProjectState([...objects, drawingObject]);
           }
         } else {
@@ -2122,6 +2065,7 @@ export function DrawingCanvas() {
             alpha: brushOpacity,
           };
           addObject(drawingObject);
+          saveHistory();
           emitProjectState([...objects, drawingObject]);
         }
       }
@@ -2299,6 +2243,7 @@ export function DrawingCanvas() {
     brushSize,
     brushOpacity,
     addObject,
+    saveHistory,
     startPoint,
     previewShape,
     emitShape,
@@ -2307,7 +2252,6 @@ export function DrawingCanvas() {
     autoShape,
     detectShapeFromStroke,
     triangleMode,
-    calculateTriangleVertices,
     draggedObject,
     isPanning,
     isSpacePan,
@@ -2320,53 +2264,6 @@ export function DrawingCanvas() {
     buildStrokePoints,
     objects,
   ]);
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-
-      const delta = e.deltaY > 0 ? 1.1 : 0.9;
-      const newZoom = Math.max(0.1, Math.min(5, zoom * delta));
-
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const worldX = viewX + mouseX / zoom;
-        const worldY = viewY + mouseY / zoom;
-
-        const unconstrained = {
-          x: worldX - mouseX / newZoom,
-          y: worldY - mouseY / newZoom,
-        };
-
-        const constrained = constrainView(
-          unconstrained.x,
-          unconstrained.y,
-          newZoom,
-          rect.width,
-          rect.height
-        );
-
-        setZoom(newZoom);
-        setView(constrained.x, constrained.y);
-
-        const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-        workerRef.current?.postMessage({
-          type: "viewport",
-          zoom: newZoom,
-          viewX: constrained.x,
-          viewY: constrained.y,
-          canvasWidth: rect.width,
-          canvasHeight: rect.height,
-          dpr,
-        });
-      }
-    },
-    [zoom, viewX, viewY, setZoom, setView]
-  );
 
   const handleZoomStep = useCallback(
     (factor: number) => {
@@ -2443,9 +2340,9 @@ export function DrawingCanvas() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const bind = useGesture(
+  useGesture(
     {
-      onDrag: ({ active, movement: [mx, my], xy: [clientX, clientY], event, cancel, touches, tap }) => {
+      onDrag: ({ active, xy: [clientX, clientY], event, touches, tap }) => {
         if (tap) return;
 
         const isMultiTouch = touches > 1;
@@ -2527,7 +2424,7 @@ export function DrawingCanvas() {
           stopDrawing();
         }
       },
-      onPinch: ({ origin: [cx, cy], offset: [s], movement: [ms], first, memo }) => {
+      onPinch: ({ origin: [cx, cy], offset: [s], first, memo }) => {
         if (first) {
           const canvas = canvasRef.current;
           if (!canvas) return { initialZoom: zoom };
@@ -2571,7 +2468,7 @@ export function DrawingCanvas() {
         }
         return memo;
       },
-      onWheel: ({ event, active, values: [vx, vy], delta: [dx, dy], ctrlKey }) => {
+      onWheel: ({ event, active, delta: [dx, dy], ctrlKey }) => {
         if (ctrlKey) {
           // Zoom
           event.preventDefault();
@@ -2582,8 +2479,9 @@ export function DrawingCanvas() {
           if (!canvas) return;
 
           const rect = canvas.getBoundingClientRect();
-          const mouseX = (event as any).clientX - rect.left;
-          const mouseY = (event as any).clientY - rect.top;
+          const pointerEvent = event as unknown as { clientX: number; clientY: number };
+          const mouseX = pointerEvent.clientX - rect.left;
+          const mouseY = pointerEvent.clientY - rect.top;
 
           const worldX = viewX + mouseX / zoom;
           const worldY = viewY + mouseY / zoom;
@@ -2654,7 +2552,6 @@ export function DrawingCanvas() {
             : "cursor-grab"
           : "cursor-crosshair"
           }`}
-        {...bind()}
         onContextMenu={(e) => e.preventDefault()}
       />
 

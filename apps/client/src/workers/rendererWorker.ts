@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 
+import { objectIntersectsViewport } from '../lib/viewportCulling';
+
 export {};
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -41,8 +43,7 @@ type Shape = {
   text?: string;
   fontSize?: number;
   imageData?: string; // Base64 data URL for images
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  properties?: Record<string, any>; // Shape-specific properties (e.g., star point count)
+  properties?: Record<string, unknown>; // Shape-specific properties (e.g., star point count)
 };
 
 // Cache for loaded image bitmaps
@@ -247,6 +248,11 @@ function adjustColorForTheme(color: string): string {
   return color;
 }
 
+function getStarPointCount(shape: { properties?: Record<string, unknown> }): number {
+  const value = shape.properties?.pointCount;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 3 && value <= 64 ? value : 5;
+}
+
 // Supersampled anti-aliased vector rendering
 // Base factor; actual factor is dynamic per frame
 const SSAA_FACTOR = 1; // default, may be overridden dynamically
@@ -271,30 +277,6 @@ function ensureVectorSS(targetW: number, targetH: number, ss: number) {
   vectorSS = null;
   vectorSSCtx = null;
   return false;
-}
-
-function objectIntersectsViewport(obj: { type: string; x?: number; y?: number; width?: number; height?: number; points?: { x: number; y: number }[]; size?: number }, vx1: number, vy1: number, vx2: number, vy2: number) {
-  const margin = Math.max(2, obj.size || 1);
-  if (obj.type === 'stroke' && obj.points && obj.points.length) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (let i = 0; i < obj.points.length; i++) {
-      const p = obj.points[i];
-      if (p.x < minX) minX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y > maxY) maxY = p.y;
-    }
-    minX -= margin; minY -= margin; maxX += margin; maxY += margin;
-    return !(maxX < vx1 || minX > vx2 || maxY < vy1 || minY > vy2);
-  }
-  if (obj.x === undefined || obj.y === undefined || obj.width === undefined || obj.height === undefined) return true;
-  const x2 = obj.x + obj.width;
-  const y2 = obj.y + obj.height;
-  const minX = Math.min(obj.x, x2) - margin;
-  const minY = Math.min(obj.y, y2) - margin;
-  const maxX = Math.max(obj.x, x2) + margin;
-  const maxY = Math.max(obj.y, y2) + margin;
-  return !(maxX < vx1 || minX > vx2 || maxY < vy1 || minY > vy2);
 }
 
 function getSnappedWorldLineWidth(lineWidthWorld: number, zoom: number, dpr: number) {
@@ -465,8 +447,7 @@ function blit() {
         points?: { x: number; y: number }[];
         text?: string; fontSize?: number;
         imageData?: string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        properties?: Record<string, any>;
+        properties?: Record<string, unknown>;
       };
       if (sh.type === 'image' && sh.imageData) {
         // Check viewport intersection for images (they can be large)
@@ -527,8 +508,7 @@ function blit() {
         points?: { x: number; y: number }[];
         text?: string; fontSize?: number;
         imageData?: string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        properties?: Record<string, any>;
+        properties?: Record<string, unknown>;
       };
       // Skip images - already rendered above
       if (sh.type === 'image') continue;
@@ -633,8 +613,7 @@ function blit() {
         const cy = sh.y + sh.height / 2;
         const outerRadius = Math.min(sh.width, sh.height) / 2;
         const innerRadius = outerRadius * 0.38;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const pointCount = (sh as any).properties?.pointCount || 5;
+        const pointCount = getStarPointCount(sh);
         
         vectorSSCtx.beginPath();
         for (let i = 0; i < pointCount * 2; i++) {
@@ -721,8 +700,7 @@ function blit() {
       points?: { x: number; y: number }[];
       text?: string; fontSize?: number;
       imageData?: string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      properties?: Record<string, any>;
+      properties?: Record<string, unknown>;
     };
     if (sh.type === 'image' && sh.imageData && objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
       const bitmap = imageBitmapCache.get(sh.imageData);
@@ -784,8 +762,7 @@ function blit() {
       points?: { x: number; y: number }[];
       text?: string; fontSize?: number;
       imageData?: string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      properties?: Record<string, any>;
+      properties?: Record<string, unknown>;
     };
     // Skip images - already rendered above
     if (sh.type === 'image') continue;
@@ -901,8 +878,7 @@ function blit() {
       const cy = sh.y + sh.height / 2;
       const outerRadius = Math.min(sh.width, sh.height) / 2;
       const innerRadius = outerRadius * 0.38;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pointCount = (sh as any).properties?.pointCount || 5;
+      const pointCount = getStarPointCount(sh);
       
       screenCtx.beginPath();
       for (let i = 0; i < pointCount * 2; i++) {
@@ -1331,5 +1307,3 @@ function handleMessage(evt: MessageEvent<Inbound>) {
 }
 
 self.onmessage = handleMessage as unknown as (ev: MessageEvent) => void;
-
-

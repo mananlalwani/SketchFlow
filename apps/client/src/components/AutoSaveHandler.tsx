@@ -3,10 +3,12 @@ import { useDrawingStore } from "@/store/drawingStore";
 import { useAuth } from "@clerk/clerk-react";
 import { useAuthStore } from "@/store/authStore";
 import { updateProject } from "@/lib/api";
-import { serializeProject } from "@/lib/utils";
+import { deserializeProject, serializeProject } from "@/lib/utils";
+import { getEmergencyBackup, removeEmergencyBackup, saveEmergencyBackup } from "@/lib/emergencyBackup";
 import { generateThumbnail } from "@/lib/thumbnailGenerator";
+import { NetworkError } from "@/lib/errorHandling";
+import { useToast } from "@/hooks/use-toast";
 
-const EMERGENCY_BACKUP_KEY = "emergency-backup";
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -14,6 +16,7 @@ export function AutoSaveHandler() {
   const {
     unsavedChanges,
     currentProjectId,
+    projectRevision,
     objects,
     projectTitle,
     markSaved,
@@ -23,21 +26,25 @@ export function AutoSaveHandler() {
   const { isGuest } = useAuthStore();
   const saveTimeoutRef = useRef<number>();
   const retryCountRef = useRef(0);
+  const recoveredProjectRef = useRef<string>();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!currentProjectId || !unsavedChanges) return;
 
-    try {
+    void (async () => {
+      try {
       const backup = {
         projectId: currentProjectId,
         title: projectTitle,
         data: serializeProject(objects, 4096, 4096),
         timestamp: Date.now(),
       };
-      localStorage.setItem(EMERGENCY_BACKUP_KEY, JSON.stringify(backup));
-    } catch (e) {
+      await saveEmergencyBackup(backup);
+      } catch (e) {
       console.warn("Emergency backup failed:", e);
-    }
+      }
+    })();
   }, [objects, projectTitle, currentProjectId, unsavedChanges]);
 
   const performSave = useCallback(
@@ -59,8 +66,9 @@ export function AutoSaveHandler() {
           );
         }
 
+        let saved;
         if (isGuest) {
-          await updateProject(
+          saved = await updateProject(
             currentProjectId,
             projectTitle,
             payload,
@@ -69,23 +77,31 @@ export function AutoSaveHandler() {
           );
         } else if (userId) {
           const token = await getToken();
-          await updateProject(
+          saved = await updateProject(
             currentProjectId,
-            projectTitle,
-            payload,
-            token,
-            thumbnail
+          projectTitle,
+          payload,
+          token,
+          thumbnail,
+          projectRevision
           );
         } else {
           return false;
         }
 
-        localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+        await removeEmergencyBackup(currentProjectId);
+        useDrawingStore.getState().setProjectRevision(saved.revision);
         markSaved();
         retryCountRef.current = 0;
         console.debug("Auto-saved project:", currentProjectId);
         return true;
       } catch (e) {
+        if (e instanceof NetworkError && e.statusCode === 409) {
+          setSaveStatus("conflict");
+          // Keep the emergency backup intact so the local version remains recoverable.
+          console.warn("Auto-save conflict: the project changed on another client.");
+          return false;
+        }
         console.error(
           `Auto-save failed (attempt ${
             attemptNumber + 1
@@ -110,6 +126,7 @@ export function AutoSaveHandler() {
       isGuest,
       objects,
       projectTitle,
+      projectRevision,
       getToken,
       markSaved,
       setSaveStatus,
@@ -132,27 +149,45 @@ export function AutoSaveHandler() {
     };
   }, [unsavedChanges, performSave]);
 
+  // The IndexedDB backup is a durable local queue for an unsaved snapshot.
+  // Retry it when the browser regains connectivity; a 409 remains visible as a
+  // conflict instead of overwriting newer remote data.
   useEffect(() => {
-    const tryRecoverBackup = () => {
+    const retryWhenOnline = () => {
+      if (useDrawingStore.getState().unsavedChanges) {
+        void performSave();
+      }
+    };
+
+    window.addEventListener("online", retryWhenOnline);
+    return () => window.removeEventListener("online", retryWhenOnline);
+  }, [performSave]);
+
+  useEffect(() => {
+    const tryRecoverBackup = async () => {
+      if (!currentProjectId || recoveredProjectRef.current === currentProjectId) return;
       try {
-        const backupStr = localStorage.getItem(EMERGENCY_BACKUP_KEY);
-        if (!backupStr) return;
-
-        const backup = JSON.parse(backupStr);
-        const age = Date.now() - backup.timestamp;
-
-        if (age < 60 * 60 * 1000) {
-          console.info("Emergency backup found, attempting recovery...");
+        const backup = await getEmergencyBackup(currentProjectId);
+        if (!backup) return;
+        if (Date.now() - backup.timestamp < 60 * 60 * 1000) {
+          useDrawingStore.getState().setObjects(deserializeProject(backup.data));
+          useDrawingStore.getState().requestFullRedraw();
+          recoveredProjectRef.current = currentProjectId;
+          toast({
+            title: "Recovered unsaved changes",
+            description: "A recent local backup was restored. Review it and save when ready.",
+          });
+          console.info("Recovered unsaved local changes from IndexedDB backup.");
         } else {
-          localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+          await removeEmergencyBackup(currentProjectId);
         }
       } catch (e) {
         console.warn("Failed to check emergency backup:", e);
       }
     };
 
-    tryRecoverBackup();
-  }, []);
+    void tryRecoverBackup();
+  }, [currentProjectId, toast]);
 
   return null;
 }

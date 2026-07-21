@@ -49,9 +49,10 @@ interface DrawingState {
   needsFullRedraw: boolean;
   projectTitle: string;
   unsavedChanges: boolean;
-  saveStatus: 'saved' | 'syncing' | 'failed' | 'retrying';
+  saveStatus: 'saved' | 'syncing' | 'failed' | 'retrying' | 'conflict';
   lastSavedAt?: number;
   currentProjectId?: string;
+  projectRevision?: number;
   projectRole?: 'owner' | 'editor' | 'viewer' | null;
   brushSize: number;
   brushColor: string;
@@ -110,9 +111,10 @@ interface DrawingState {
   setProjectTitle: (title: string) => void;
   markSaved: () => void;
   markDirty: () => void;
-  setSaveStatus: (status: 'saved' | 'syncing' | 'failed' | 'retrying') => void;
+  setSaveStatus: (status: 'saved' | 'syncing' | 'failed' | 'retrying' | 'conflict') => void;
   newProject: () => void;
   setCurrentProject: (id: string | undefined) => void;
+  setProjectRevision: (revision: number | undefined) => void;
   setProjectRole: (role: 'owner' | 'editor' | 'viewer' | null) => void;
   setBrushSize: (size: number) => void;
   setBrushColor: (color: string) => void;
@@ -241,6 +243,7 @@ export const useDrawingStore = create<DrawingState>()(
           localStorage.removeItem('lastProjectId');
         },
         setCurrentProject: (id) => set({ currentProjectId: id }),
+        setProjectRevision: (revision) => set({ projectRevision: revision }),
         setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(100, size)) }),
         setBrushColor: (color) => set({ brushColor: color }),
         setBrushOpacity: (opacity) => set({ brushOpacity: Math.max(0.1, Math.min(1, opacity)) }),
@@ -314,7 +317,8 @@ export const useDrawingStore = create<DrawingState>()(
             return {
               historyIndex: newIndex,
               objects,
-              objectCount: objects.length
+              objectCount: objects.length,
+              needsFullRedraw: true,
             };
           }
           return state;
@@ -328,7 +332,8 @@ export const useDrawingStore = create<DrawingState>()(
             return {
               historyIndex: newIndex,
               objects,
-              objectCount: objects.length
+              objectCount: objects.length,
+              needsFullRedraw: true,
             };
           }
           return state;
@@ -390,6 +395,3 @@ export const useDrawingStore = create<DrawingState>()(
     { name: 'drawing-store' }
   )
 );
-
-
-

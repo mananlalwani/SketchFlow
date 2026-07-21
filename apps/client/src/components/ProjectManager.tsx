@@ -18,11 +18,6 @@ import {
 import { useDrawingStore } from '@/store/drawingStore';
 import { deserializeProject, serializeProject, generateId } from '@/lib/utils';
 import { encodeDrawFormat, decodeDrawFormat, DRAW_FORMAT_EXTENSION } from '@/lib/drawFormat';
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-// Configure PDF.js worker using Vite's asset import
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -77,11 +72,16 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerClose } from '@/components/ui/drawer';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerClose, DrawerTrigger } from '@/components/ui/drawer';
 import { useMobile } from '@/hooks/useMobile';
+import {
+  filterAndSortProjects,
+  type ProjectSortDirection,
+  type ProjectSortOption,
+} from '@/lib/projectList';
 
-type SortOption = 'updated' | 'created' | 'name';
-type SortDirection = 'asc' | 'desc';
+type SortOption = ProjectSortOption;
+type SortDirection = ProjectSortDirection;
 type ViewMode = 'grid' | 'list';
 
 const FOLDER_COLORS = [
@@ -246,42 +246,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     }
   }, [isAuthenticated]);
 
-  const filteredProjects = useMemo(() => {
-    let result = [...projects];
-
-    if (selectedFolderId === null) {
-      if (!searchQuery.trim()) {
-        result = result.filter(p => !p.folderId);
-      }
-    } else {
-      result = result.filter(p => p.folderId === selectedFolderId);
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = projects.filter(p =>
-        p.title?.toLowerCase().includes(query)
-      );
-    }
-
-    result.sort((a, b) => {
-      let comparison = 0;
-      switch (sortBy) {
-        case 'name':
-          comparison = (a.title || '').localeCompare(b.title || '');
-          break;
-        case 'created':
-          comparison = (a.createdAt || 0) - (b.createdAt || 0);
-          break;
-        case 'updated':
-        default:
-          comparison = (a.updatedAt || 0) - (b.updatedAt || 0);
-      }
-      return sortDirection === 'desc' ? -comparison : comparison;
-    });
-
-    return result;
-  }, [projects, searchQuery, sortBy, sortDirection, selectedFolderId]);
+  const filteredProjects = useMemo(
+    () => filterAndSortProjects(projects, searchQuery, selectedFolderId, sortBy, sortDirection),
+    [projects, searchQuery, sortBy, sortDirection, selectedFolderId],
+  );
 
   const currentFolderName = useMemo(() => {
     if (selectedFolderId === null) return 'All Projects';
@@ -693,8 +661,13 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       try {
         toast({ title: 'Processing PDF...', description: 'This may take a moment.' });
 
-        const buffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+        const [{ getDocument, GlobalWorkerOptions }, workerModule, buffer] = await Promise.all([
+          import('pdfjs-dist'),
+          import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+          file.arrayBuffer(),
+        ]);
+        GlobalWorkerOptions.workerSrc = workerModule.default;
+        const pdf = await getDocument({ data: buffer }).promise;
 
         const objects: ReturnType<typeof deserializeProject> = [];
         const CANVAS_SIZE = 4096;
