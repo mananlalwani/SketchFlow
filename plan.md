@@ -16,11 +16,11 @@ This plan turns the current strong foundation into a production-grade applicatio
 **Priority:** P0 — complete before the next production release.
 
 - [ ] Remove `.env`, `apps/client/.env`, and `apps/server/.env` from Git history and current tracking. Rotate every credential that was ever present in them.
-- [ ] Add `.env`, `.env.*`, and application-specific variants to `.gitignore`; explicitly allow only `*.env.example` templates.
-- [ ] Create root, client, and server `.env.example` files containing variable names, safe examples, and short descriptions.
-- [ ] Make production startup fail fast when `CLERK_SECRET_KEY`, `DATABASE_URL`, or a non-empty `CORS_ORIGINS` allowlist is missing or invalid.
-- [ ] Make dependency audit policy enforce zero critical/high findings. Track each remaining moderate finding with owner, reachability, remediation version, and review date in `docs/dependency-audit.md`.
-- [ ] Add Dependabot or Renovate for weekly dependency PRs and monthly lockfile refreshes.
+- [x] Add `.env`, `.env.*`, and application-specific variants to `.gitignore`; explicitly allow only `*.env.example` templates.
+- [x] Create root, client, and server `.env.example` files containing variable names, safe examples, and short descriptions.
+- [x] Make production startup fail fast when `CLERK_SECRET_KEY`, `DATABASE_URL`, or a non-empty `CORS_ORIGINS` allowlist is missing or invalid.
+- [x] Make dependency audit policy enforce zero critical/high findings. Track each remaining moderate finding with owner, reachability, remediation version, and review date in `docs/dependency-audit.md`.
+- [x] Add Dependabot or Renovate for weekly dependency PRs and monthly lockfile refreshes.
 - [ ] Protect `main`: require CI, at least one review, and no direct pushes.
 
 **Verify:** `git ls-files '*env'` returns only example files; `pnpm audit --prod --audit-level high` exits cleanly; a production startup with an incomplete environment exits non-zero.

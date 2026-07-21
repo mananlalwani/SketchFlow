@@ -69,7 +69,7 @@ jobs:
         run: |
           docker run -d --rm --name sketchflow-ci -p 3000:3000 \
             -e DATABASE_URL=postgresql://sketchflow:sketchflow@127.0.0.1:5432/sketchflow \
-            -e CLERK_SECRET_KEY=sk_test_ci_only \
+            -e CLERK_SECRET_KEY=sk_live_ci_only \
             -e CLERK_PUBLISHABLE_KEY=pk_test_ci_only \
             -e CORS_ORIGINS=http://localhost:3000 \
             sketchflow:ci
