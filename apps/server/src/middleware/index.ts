@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 import { Logger, logger, getTraceContext } from '../utils/logger.js';
+import { createClient } from 'redis';
+import { env, isProd } from '../config/env.js';
 
 /**
  * Request ID middleware - adds correlation ID to all requests
@@ -52,6 +54,10 @@ export function securityHeadersMiddleware(_req: Request, res: Response, next: Ne
   
   // Referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; worker-src 'self' blob:"
+  );
   
   // Content Security Policy (basic)
   if (process.env.NODE_ENV === 'production') {
@@ -71,6 +77,35 @@ interface RateLimitEntry {
 }
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
+type RateLimitRedisClient = {
+  isOpen: boolean;
+  on(event: 'error', listener: (error: Error) => void): unknown;
+  connect(): Promise<unknown>;
+  incr(key: string): Promise<number>;
+  pExpire(key: string, milliseconds: number): Promise<boolean>;
+  pTTL(key: string): Promise<number>;
+};
+
+let redisLimiter: RateLimitRedisClient | null = null;
+let redisLimiterConnecting: Promise<RateLimitRedisClient | null> | null = null;
+
+async function getRedisLimiter(): Promise<RateLimitRedisClient | null> {
+  if (!env.REDIS_URL) return null;
+  if (redisLimiter?.isOpen) return redisLimiter;
+  if (!redisLimiterConnecting) {
+    redisLimiterConnecting = (async () => {
+      const client = createClient({ url: env.REDIS_URL });
+      client.on('error', (error) => logger.error('Redis rate limiter error', error));
+      await client.connect();
+      redisLimiter = client;
+      return client;
+    })().catch((error) => {
+      logger.error('Redis rate limiter unavailable', error);
+      return null;
+    });
+  }
+  return redisLimiterConnecting;
+}
 
 export function rateLimitMiddleware(options: {
   windowMs: number;
@@ -89,10 +124,32 @@ export function rateLimitMiddleware(options: {
     }
   }, windowMs);
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const key = keyGenerator ? keyGenerator(req) : (req.ip || req.socket.remoteAddress || 'unknown');
     const now = Date.now();
     
+    const redis = await getRedisLimiter();
+    if (redis) {
+      const redisKey = `sketchflow:rate-limit:${req.path}:${key}`;
+      const count = await redis.incr(redisKey);
+      if (count === 1) await redis.pExpire(redisKey, windowMs);
+      const ttl = await redis.pTTL(redisKey);
+      res.setHeader('X-RateLimit-Limit', maxRequests);
+      res.setHeader('X-RateLimit-Remaining', Math.max(0, maxRequests - count));
+      res.setHeader('X-RateLimit-Reset', Math.ceil((Date.now() + Math.max(0, ttl)) / 1000));
+      if (count > maxRequests) {
+        res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil(Math.max(0, ttl) / 1000) });
+        return;
+      }
+      next();
+      return;
+    }
+
+    if (isProd && env.REDIS_URL) {
+      res.status(503).json({ error: 'Rate limiter unavailable' });
+      return;
+    }
+
     let entry = rateLimitStore.get(key);
     
     if (!entry || entry.resetTime < now) {
@@ -123,7 +180,7 @@ export function rateLimitMiddleware(options: {
  * Error handling middleware - consistent error responses
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorHandlerMiddleware(err: Error, req: Request, res: Response, _next: NextFunction): void {
+export function errorHandlerMiddleware(err: Error & { status?: number; statusCode?: number }, req: Request, res: Response, _next: NextFunction): void {
   const traceContext = getTraceContext();
   
   logger.error('Unhandled error', err, {
@@ -138,7 +195,9 @@ export function errorHandlerMiddleware(err: Error, req: Request, res: Response, 
     ? 'Internal server error' 
     : err.message;
 
-  res.status(500).json({
+  const status = err.statusCode ?? err.status;
+  const expectedStatus = status === 400 || status === 403 || status === 404 || status === 413 ? status : 500;
+  res.status(expectedStatus).json({
     error: message,
     requestId: req.headers['x-request-id'],
     ...(traceContext.traceId && { traceId: traceContext.traceId }),

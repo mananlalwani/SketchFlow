@@ -33,18 +33,33 @@ model Project {
   userId        String               // Clerk user ID (owner)
   title         String
   data          Json                 // Project data (strokes, shapes, etc.)
+  revision      Int                  @default(1)
   shared        Boolean              @default(false)
   shareToken    String?              @unique
+  shareExpiresAt DateTime?
+  shareRevokedAt DateTime?
   folderId      String?              // Optional folder
   folder        Folder?              @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
   collaborators ProjectCollaborator[]
+  collaborationSnapshot CollaborationSnapshot?
 
   @@index([userId])
   @@index([shareToken])
+  @@index([shareExpiresAt])
   @@index([folderId])
+  @@unique([id, revision])
   @@map("projects")
+}
+
+model CollaborationSnapshot {
+  projectId String @id
+  data      Json
+  updatedAt DateTime @updatedAt
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("collaboration_snapshots")
 }
 
 // Collaborator access to projects

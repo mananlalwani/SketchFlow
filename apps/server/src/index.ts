@@ -24,6 +24,8 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
@@ -33,6 +35,15 @@ import { ProjectService } from './services/ProjectService.js';
 import { logger } from './utils/logger.js';
 import { env, isProd, clerkPublishableKey } from './config/env.js';
 import { disconnectPrisma, checkDatabaseHealth } from './lib/prisma.js';
+import {
+  collaboratorInputSchema,
+  collaboratorUserIdSchema,
+  folderInputSchema,
+  moveProjectSchema,
+  projectInputSchema,
+  resourceIdSchema,
+  shareTokenSchema,
+} from './validation/project.js';
 import {
   requestIdMiddleware,
   requestLoggingMiddleware,
@@ -46,7 +57,8 @@ import type {
   CanvasSnapshot,
   CursorData,
   ClientToServerEvents,
-  ServerToClientEvents
+  ServerToClientEvents,
+  SocketData,
 } from './types/socket.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,13 +71,16 @@ export interface AuthenticatedRequest extends express.Request {
   };
 }
 
-class SketchFlowServer {
+export class SketchFlowServer {
   private app = express();
   private server = createServer(this.app);
-  private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
+  private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
   private drawingService = new DrawingService();
   private projectService = new ProjectService();
   private isShuttingDown = false;
+  private clientDistPath = process.env.CLIENT_DIST_PATH || path.join(__dirname, '../../client/dist');
+  private redisPublisher: { quit: () => Promise<unknown> } | null = null;
+  private redisSubscriber: { quit: () => Promise<unknown> } | null = null;
 
   constructor() {
 
@@ -75,7 +90,7 @@ class SketchFlowServer {
       ? env.CORS_ORIGINS
       : true;
 
-    this.io = new SocketIOServer(this.server, {
+    this.io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(this.server, {
       cors: {
         origin: corsOrigins,
         credentials: true
@@ -94,6 +109,31 @@ class SketchFlowServer {
     this.setupMiddleware();
     this.setupRoutes();
     this.setupSocketHandlers();
+    setInterval(() => this.drawingService.cleanupInactiveCanvases(30 * 60 * 1000), 5 * 60 * 1000).unref();
+    void this.setupRedisAdapter();
+  }
+
+  private async setupRedisAdapter(): Promise<void> {
+    if (!env.REDIS_URL) {
+      logger.info('Redis adapter disabled; Socket.IO is limited to one server instance');
+      return;
+    }
+
+    const publisher = createClient({ url: env.REDIS_URL });
+    const subscriber = publisher.duplicate();
+    publisher.on('error', error => logger.error('Redis publisher error', error));
+    subscriber.on('error', error => logger.error('Redis subscriber error', error));
+
+    try {
+      await Promise.all([publisher.connect(), subscriber.connect()]);
+      this.io.adapter(createAdapter(publisher, subscriber));
+      this.redisPublisher = publisher;
+      this.redisSubscriber = subscriber;
+      logger.info('Socket.IO Redis adapter connected');
+    } catch (error) {
+      logger.error('Socket.IO Redis adapter unavailable; continuing in single-instance mode', error);
+      await Promise.allSettled([publisher.disconnect(), subscriber.disconnect()]);
+    }
   }
 
   private setupMiddleware(): void {
@@ -129,15 +169,21 @@ class SketchFlowServer {
     this.app.use('/api/auth', authRateLimiter);
     this.app.use('/api/projects/:id/collaborators', authRateLimiter);
 
-    // Clerk middleware
-    this.app.use(clerkMiddleware({
+    this.app.use('/api', rateLimitMiddleware({ windowMs: 60 * 1000, maxRequests: 120 }));
+
+    // Authentication applies to API routes. Keeping liveness probes and static
+    // assets outside Clerk makes container health checks independent of Clerk.
+    const clerk = clerkMiddleware({
       secretKey: env.CLERK_SECRET_KEY,
       publishableKey: clerkPublishableKey,
-    }));
+    });
+    this.app.use((req, res, next) => {
+      if (!req.path.startsWith('/api/')) return next();
+      return clerk(req, res, next);
+    });
 
     // Static files - serve the built client
-    const staticPath = path.join(__dirname, '../../client/dist');
-    this.app.use(express.static(staticPath, {
+    this.app.use(express.static(this.clientDistPath, {
       // Cache static assets aggressively in production
       maxAge: isProd ? '1y' : 0,
       etag: true,
@@ -151,10 +197,29 @@ class SketchFlowServer {
     }));
 
     // Body parsing with limits
-    this.app.use(express.json({ limit: '50mb' }));
+    this.app.use(express.json({ limit: '10mb' }));
   }
 
   private setupRoutes(): void {
+    this.app.param('id', (_req, res, next, id) => {
+      if (!resourceIdSchema.safeParse(id).success) {
+        return res.status(400).json({ error: 'Invalid resource id' });
+      }
+      return next();
+    });
+    this.app.param('token', (_req, res, next, token) => {
+      if (!shareTokenSchema.safeParse(token).success) {
+        return res.status(400).json({ error: 'Invalid share token' });
+      }
+      return next();
+    });
+    this.app.param('collaboratorUserId', (_req, res, next, collaboratorUserId) => {
+      if (!collaboratorUserIdSchema.safeParse(collaboratorUserId).success) {
+        return res.status(400).json({ error: 'Invalid collaborator user id' });
+      }
+      return next();
+    });
+
     // Health check - basic liveness
     this.app.get('/api/health', (_req, res) => {
       res.json({
@@ -242,7 +307,9 @@ class SketchFlowServer {
     this.app.post('/api/projects', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
       try {
         const userId = req.auth!.userId!;
-        const { title, data } = req.body || {};
+        const parsed = projectInputSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
+        const { title, data } = parsed.data;
         const created = await this.projectService.create(userId, title || 'Untitled', data ?? {});
         res.json(created);
       } catch {
@@ -253,12 +320,19 @@ class SketchFlowServer {
     this.app.put('/api/projects/:id', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
       try {
         const userId = req.auth!.userId!;
-        const { title, data } = req.body || {};
-        const saved = await this.projectService.save(req.params.id, userId, title || 'Untitled', data ?? {});
+        const parsed = projectInputSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
+        const { title, data, expectedRevision } = parsed.data;
+        const saved = await this.projectService.save(req.params.id, userId, title || 'Untitled', data ?? {}, expectedRevision);
         res.json(saved);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to save project';
-        res.status(500).json({ error: message });
+        const status = error instanceof Error && error.name === 'ProjectConflictError'
+          ? 409
+          : error instanceof Error && error.name === 'ProjectAccessError'
+            ? 403
+            : 500;
+        res.status(status).json({ error: message });
       }
     });
 
@@ -286,6 +360,7 @@ class SketchFlowServer {
         }
         res.json({
           shareToken: shared.shareToken,
+          expiresAt: shared.shareExpiresAt,
           shareUrl: `${env.CLIENT_URL || (req.protocol + '://' + req.get('host'))}/draw?share=${shared.shareToken}`
         });
       } catch {
@@ -336,11 +411,9 @@ class SketchFlowServer {
     this.app.post('/api/projects/:id/collaborators', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
       try {
         const userId = req.auth!.userId!;
-        const { email, role } = req.body || {};
-
-        if (!email) {
-          return res.status(400).json({ error: 'Email is required' });
-        }
+        const parsed = collaboratorInputSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Invalid collaborator payload' });
+        const { email, role } = parsed.data;
 
         // Look up user by email using Clerk
         let collaboratorUserId: string | null = null;
@@ -393,8 +466,9 @@ class SketchFlowServer {
     this.app.post('/api/projects/:id/move', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
       try {
         const userId = req.auth!.userId!;
-        const { folderId } = req.body || {};
-        const moved = await this.projectService.moveToFolder(req.params.id, userId, folderId ?? null);
+        const parsed = moveProjectSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Invalid move payload' });
+        const moved = await this.projectService.moveToFolder(req.params.id, userId, parsed.data.folderId);
         if (!moved) {
           return res.status(404).json({ error: 'Project not found' });
         }
@@ -418,7 +492,9 @@ class SketchFlowServer {
     this.app.post('/api/folders', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
       try {
         const userId = req.auth!.userId!;
-        const { name, color, parentId } = req.body || {};
+        const parsed = folderInputSchema.safeParse(req.body);
+        if (!parsed.success || !parsed.data.name) return res.status(400).json({ error: 'Invalid folder payload' });
+        const { name, color, parentId } = parsed.data;
         const folder = await this.projectService.createFolder(userId, name || 'New Folder', color, parentId);
         res.json(folder);
       } catch {
@@ -429,7 +505,9 @@ class SketchFlowServer {
     this.app.put('/api/folders/:id', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
       try {
         const userId = req.auth!.userId!;
-        const { name, color, parentId } = req.body || {};
+        const parsed = folderInputSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Invalid folder payload' });
+        const { name, color, parentId } = parsed.data;
         const folder = await this.projectService.updateFolder(req.params.id, userId, name, color, parentId);
         if (!folder) {
           return res.status(404).json({ error: 'Folder not found' });
@@ -458,12 +536,34 @@ class SketchFlowServer {
 
     // Serve React app for all other routes (SPA fallback)
     this.app.get('*', (_req, res) => {
-      const indexPath = path.join(__dirname, '../../dist/index.html');
-      res.sendFile(indexPath);
+      res.sendFile(path.join(this.clientDistPath, 'index.html'));
     });
   }
 
   private setupSocketHandlers(): void {
+    this.io.use(async (socket, next) => {
+      if (this.drawingService.getConnectionCount() >= this.drawingService.getMaxConnections()) {
+        return next(new Error('Server connection limit reached'));
+      }
+      const token = socket.handshake.auth.token;
+      if (typeof token !== 'string' || token.length === 0) return next(new Error('Authentication required'));
+
+      try {
+        const request = new Request('http://localhost/socket.io', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const auth = (await clerkClient.authenticateRequest(request)).toAuth();
+        if (!auth?.userId) return next(new Error('Invalid authentication token'));
+        socket.data.userId = auth.userId;
+        const exp = (auth.sessionClaims as { exp?: number } | null)?.exp;
+        if (typeof exp === 'number') socket.data.sessionExpiresAt = exp * 1000;
+        next();
+      } catch (error) {
+        logger.warn('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
+        next(new Error('Invalid authentication token'));
+      }
+    });
+
     // Track active cursors per room
     const roomCursors = new Map<string, Map<string, { userId: string; username: string; x: number; y: number; color: string; timestamp: number }>>();
 
@@ -477,7 +577,33 @@ class SketchFlowServer {
     this.io.on('connection', (socket) => {
       const clientId = socket.id;
       let currentRoom: string | null = null;
-      let currentUserId: string | null = null;
+      const currentUserId = socket.data.userId ?? null;
+      const sessionExpiryTimer = socket.data.sessionExpiresAt
+        ? setTimeout(() => socket.disconnect(true), Math.max(0, socket.data.sessionExpiresAt - Date.now()))
+        : null;
+      let operationWindowStartedAt = Date.now();
+      let operationCount = 0;
+      let cursorWindowStartedAt = Date.now();
+      let cursorCount = 0;
+
+      socket.use(([eventName], next) => {
+        const now = Date.now();
+        if (eventName === 'cursor:move') {
+          if (now - cursorWindowStartedAt >= 1000) {
+            cursorWindowStartedAt = now;
+            cursorCount = 0;
+          }
+          if (++cursorCount > 60) return next(new Error('Cursor rate limit exceeded'));
+          return next();
+        }
+
+        if (now - operationWindowStartedAt >= 60_000) {
+          operationWindowStartedAt = now;
+          operationCount = 0;
+        }
+        if (++operationCount > 600) return next(new Error('Socket operation rate limit exceeded'));
+        next();
+      });
 
       logger.info(`Client connected: ${clientId}`);
 
@@ -485,12 +611,6 @@ class SketchFlowServer {
 
       // Broadcast updated connection count to all clients
       this.io.emit('connection:count', this.drawingService.getConnectionCount());
-
-      // Send current canvas state to new client
-      const currentSnapshot = this.drawingService.getCurrentSnapshot();
-      if (currentSnapshot) {
-        socket.emit('canvas:snapshot', currentSnapshot);
-      }
 
       // Helper to check if user can edit in current room
       const canUserEdit = async (): Promise<boolean> => {
@@ -509,16 +629,13 @@ class SketchFlowServer {
         }
 
         // Check if user has edit permission
-        if (currentRoom && currentUserId) {
-          const canEdit = await canUserEdit();
-          if (!canEdit) {
-            logger.warn(`User ${currentUserId} attempted to draw without permission in ${currentRoom}`);
-            return;
-          }
+        if (!currentRoom || !currentUserId || !await canUserEdit()) {
+          logger.warn(`User ${currentUserId ?? clientId} attempted to draw without project edit permission`);
+          return;
         }
 
         try {
-          this.drawingService.addStroke(stroke);
+          this.drawingService.addStroke(currentRoom, stroke);
           // Only broadcast to other clients in the same room/project
           if (currentRoom) {
             socket.to(currentRoom).emit('draw:stroke', stroke);
@@ -533,12 +650,9 @@ class SketchFlowServer {
         if (!Array.isArray(strokes) || strokes.length === 0) return;
 
         // Check edit permission
-        if (currentRoom && currentUserId) {
-          const canEdit = await canUserEdit();
-          if (!canEdit) {
-            logger.warn(`User ${currentUserId} attempted to draw without permission in ${currentRoom}`);
-            return;
-          }
+        if (!currentRoom || !currentUserId || !await canUserEdit()) {
+          logger.warn(`User ${currentUserId ?? clientId} attempted to draw without project edit permission`);
+          return;
         }
 
         const validStrokes = strokes
@@ -548,7 +662,7 @@ class SketchFlowServer {
         if (validStrokes.length === 0) return;
 
         try {
-          this.drawingService.addStrokes(validStrokes);
+          this.drawingService.addStrokes(currentRoom, validStrokes);
           // Only broadcast to other clients in the same room/project
           if (currentRoom) {
             socket.to(currentRoom).emit('draw:strokes', validStrokes);
@@ -566,16 +680,13 @@ class SketchFlowServer {
         }
 
         // Check edit permission
-        if (currentRoom && currentUserId) {
-          const canEdit = await canUserEdit();
-          if (!canEdit) {
-            logger.warn(`User ${currentUserId} attempted to draw without permission in ${currentRoom}`);
-            return;
-          }
+        if (!currentRoom || !currentUserId || !await canUserEdit()) {
+          logger.warn(`User ${currentUserId ?? clientId} attempted to draw without project edit permission`);
+          return;
         }
 
         try {
-          this.drawingService.addShape(shape);
+          this.drawingService.addShape(currentRoom, shape);
           // Only broadcast to other clients in the same room/project
           if (currentRoom) {
             socket.to(currentRoom).emit('draw:shape', shape);
@@ -586,16 +697,19 @@ class SketchFlowServer {
       });
 
       // Handle canvas snapshots
-      socket.on('canvas:snapshot', (snapshot: CanvasSnapshot) => {
+      socket.on('canvas:snapshot', async (snapshot: CanvasSnapshot) => {
+        if (!currentRoom || !currentUserId) return;
+        if (!await canUserEdit()) return;
         if (!this.isValidSnapshot(snapshot)) {
           logger.warn(`Invalid snapshot from ${clientId}`);
           return;
         }
 
         try {
-          this.drawingService.updateSnapshot(snapshot);
+          this.drawingService.updateSnapshot(currentRoom, snapshot);
+          await this.projectService.saveCollaborationSnapshot(currentRoom, snapshot);
           // Throttled broadcast to prevent spam - only to room
-          this.drawingService.broadcastSnapshotThrottled(() => {
+          this.drawingService.broadcastSnapshotThrottled(currentRoom, () => {
             if (currentRoom) {
               socket.to(currentRoom).emit('canvas:snapshot', snapshot);
             }
@@ -608,16 +722,13 @@ class SketchFlowServer {
       // Handle clear canvas
       socket.on('canvas:clear', async () => {
         // Check edit permission
-        if (currentRoom && currentUserId) {
-          const canEdit = await canUserEdit();
-          if (!canEdit) {
-            logger.warn(`User ${currentUserId} attempted to clear canvas without permission in ${currentRoom}`);
-            return;
-          }
+        if (!currentRoom || !currentUserId || !await canUserEdit()) {
+          logger.warn(`User ${currentUserId ?? clientId} attempted to clear without project edit permission`);
+          return;
         }
 
         try {
-          this.drawingService.clearCanvas();
+          this.drawingService.clearCanvas(currentRoom);
           // Only broadcast to clients in the same room/project
           if (currentRoom) {
             socket.to(currentRoom).emit('canvas:clear');
@@ -628,13 +739,17 @@ class SketchFlowServer {
         }
       });
 
-      socket.on('project:state', (data: { objects: unknown[]; timestamp: number }) => {
-        if (!currentRoom) return;
+      socket.on('project:state', async (data: { objects: unknown[]; timestamp: number }) => {
+        if (!currentRoom || !currentUserId || !Array.isArray(data?.objects) || !await canUserEdit()) return;
         socket.to(currentRoom).emit('project:state', data);
       });
 
       // Handle room join
-      socket.on('room:join', (projectId: string) => {
+      socket.on('room:join', async (projectId: string) => {
+        if (typeof projectId !== 'string' || !currentUserId || !await this.projectService.checkPermission(projectId, currentUserId, 'view')) {
+          logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
+          return;
+        }
         // Leave previous room if any
         if (currentRoom) {
           socket.leave(currentRoom);
@@ -648,6 +763,9 @@ class SketchFlowServer {
         // Join new room
         currentRoom = projectId;
         socket.join(projectId);
+
+        const currentSnapshot = this.drawingService.getCurrentSnapshot(projectId) ?? await this.projectService.getCollaborationSnapshot(projectId);
+        if (currentSnapshot) socket.emit('canvas:snapshot', currentSnapshot);
 
         // Log room join for debugging
         logger.debug(`Client ${clientId} joined room ${projectId}`);
@@ -690,10 +808,8 @@ class SketchFlowServer {
           return;
         }
 
-        // Store current user ID
-        if (!currentUserId) {
-          currentUserId = cursor.userId;
-        }
+        // The client may choose a display name, but never its identity.
+        if (!currentUserId || cursor.userId !== currentUserId) return;
 
         // Ensure color is set
         if (!cursor.color) {
@@ -719,6 +835,7 @@ class SketchFlowServer {
 
       // Handle disconnection
       socket.on('disconnect', (reason) => {
+        if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
         this.drawingService.removeConnection(clientId);
 
         // Clean up cursor from current room
@@ -745,12 +862,12 @@ class SketchFlowServer {
     return (
       stroke &&
       typeof stroke === 'object' &&
-      typeof stroke.x0 === 'number' &&
-      typeof stroke.y0 === 'number' &&
-      typeof stroke.x1 === 'number' &&
-      typeof stroke.y1 === 'number' &&
+      Number.isFinite(stroke.x0) &&
+      Number.isFinite(stroke.y0) &&
+      Number.isFinite(stroke.x1) &&
+      Number.isFinite(stroke.y1) &&
       typeof stroke.color === 'string' &&
-      typeof stroke.size === 'number' &&
+      Number.isFinite(stroke.size) &&
       stroke.size > 0 &&
       stroke.size <= 100 &&
       /^#[0-9A-Fa-f]{6}$/.test(stroke.color)
@@ -786,7 +903,7 @@ class SketchFlowServer {
       typeof snapshot === 'object' &&
       typeof snapshot.dataUrl === 'string' &&
       snapshot.dataUrl.startsWith('data:image/') &&
-      snapshot.dataUrl.length < 50 * 1024 * 1024 // 50MB limit
+      snapshot.dataUrl.length < 8 * 1024 * 1024
     );
   }
 
@@ -863,42 +980,60 @@ class SketchFlowServer {
     // Disconnect Prisma
     await disconnectPrisma();
 
+    await Promise.allSettled([
+      this.redisPublisher?.quit() ?? Promise.resolve(),
+      this.redisSubscriber?.quit() ?? Promise.resolve(),
+    ]);
+
     logger.info('Graceful shutdown complete');
   }
-}
 
-// Start server
-const server = new SketchFlowServer();
+  /** Exposed for integration tests and container smoke checks. */
+  public getApp(): express.Express {
+    return this.app;
+  }
 
-// Graceful shutdown handlers
-async function handleShutdown(signal: string): Promise<void> {
-  logger.info(`Received ${signal}, shutting down gracefully...`);
+  /** Exposed for Socket.IO integration tests. */
+  public getHttpServer() {
+    return this.server;
+  }
 
-  try {
-    await server.stop();
-    process.exit(0);
-  } catch (error) {
-    logger.error('Error during shutdown:', error);
-    process.exit(1);
+  /** Exposed for Socket.IO integration tests. */
+  public getSocketServer() {
+    return this.io;
   }
 }
 
-process.on('SIGINT', () => handleShutdown('SIGINT'));
-process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+if (process.env.NODE_ENV !== 'test') {
+  const server = new SketchFlowServer();
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught exception:', error);
-  handleShutdown('uncaughtException');
-});
+  // Graceful shutdown handlers
+  async function handleShutdown(signal: string): Promise<void> {
+    logger.info(`Received ${signal}, shutting down gracefully...`);
 
-process.on('unhandledRejection', (reason) => {
-  logger.error('Unhandled rejection:', reason);
-  // Don't exit on unhandled rejection, just log it
-});
+    try {
+      await server.stop();
+      process.exit(0);
+    } catch (error) {
+      logger.error('Error during shutdown:', error);
+      process.exit(1);
+    }
+  }
 
-// Start the server
-server.start().catch((error) => {
-  logger.error('Failed to start server:', error);
-  process.exit(1);
-});
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception:', error);
+    void handleShutdown('uncaughtException');
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled rejection:', reason);
+  });
+
+  server.start().catch((error) => {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}

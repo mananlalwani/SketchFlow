@@ -16,6 +16,10 @@ vi.mock('../../lib/prisma.js', () => ({
       upsert: vi.fn(),
       deleteMany: vi.fn(),
     },
+    collaborationSnapshot: {
+      upsert: vi.fn(),
+      findUnique: vi.fn(),
+    },
     folder: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -45,6 +49,60 @@ describe('ProjectService', () => {
   beforeEach(() => {
     service = new ProjectService();
     vi.clearAllMocks();
+  });
+
+  describe('permission matrix', () => {
+    const project = {
+      id: 'proj-1', userId: 'owner', title: 'Board', data: {},
+      updatedAt: new Date(), createdAt: new Date(), shared: true, shareToken: 'token',
+      collaborators: [{ userId: 'editor', role: 'editor' }, { userId: 'viewer', role: 'viewer' }],
+    };
+
+    it.each([
+      ['owner', 'view', true], ['owner', 'edit', true], ['owner', 'share', true],
+      ['editor', 'view', true], ['editor', 'edit', true], ['editor', 'share', false],
+      ['viewer', 'view', true], ['viewer', 'edit', false], ['viewer', 'delete', false],
+      ['anonymous', 'view', false], ['anonymous', 'edit', false],
+    ] as const)('%s %s permission is %s', async (userId, action, expected) => {
+      vi.mocked(prisma.project.findUnique).mockResolvedValue(project as never);
+      await expect(service.checkPermission('proj-1', userId, action)).resolves.toBe(expected);
+    });
+  });
+
+  describe('public share links', () => {
+    const sharedProject = {
+      id: 'proj-1', userId: 'owner', title: 'Shared board', data: {},
+      updatedAt: new Date(), createdAt: new Date(), shared: true, shareToken: 'a'.repeat(43),
+      shareExpiresAt: new Date(Date.now() + 60_000), shareRevokedAt: null, collaborators: [],
+    };
+
+    it('only resolves active, non-revoked share tokens', async () => {
+      vi.mocked(prisma.project.findUnique).mockResolvedValue(sharedProject as never);
+      await expect(service.getByShareToken('a'.repeat(43))).resolves.toMatchObject({ id: 'proj-1', role: 'viewer' });
+
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        ...sharedProject, shareExpiresAt: new Date(Date.now() - 1),
+      } as never);
+      await expect(service.getByShareToken('a'.repeat(43))).resolves.toBeNull();
+
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        ...sharedProject, shareRevokedAt: new Date(),
+      } as never);
+      await expect(service.getByShareToken('a'.repeat(43))).resolves.toBeNull();
+    });
+  });
+
+  describe('collaboration snapshots', () => {
+    it('persists and reloads a snapshot across service instances', async () => {
+      const snapshot = { dataUrl: 'data:image/png;base64,recovery', timestamp: 1 };
+      vi.mocked(prisma.collaborationSnapshot.upsert).mockResolvedValue({} as never);
+      vi.mocked(prisma.collaborationSnapshot.findUnique).mockResolvedValue({
+        projectId: 'proj-1', data: snapshot, updatedAt: new Date(),
+      } as never);
+
+      await expect(service.saveCollaborationSnapshot('proj-1', snapshot)).resolves.toBeUndefined();
+      await expect(new ProjectService().getCollaborationSnapshot('proj-1')).resolves.toEqual(snapshot);
+    });
   });
 
   describe('list', () => {
@@ -135,7 +193,7 @@ describe('ProjectService', () => {
       expect(result).toBeNull();
     });
 
-    it('should allow access to shared project', async () => {
+    it('should deny ID-only access to a shared project', async () => {
       const mockProject = {
         id: 'proj-1',
         userId: 'other-user',
@@ -152,8 +210,7 @@ describe('ProjectService', () => {
       
       const result = await service.get('proj-1', 'user-123');
       
-      expect(result).not.toBeNull();
-      expect(result?.role).toBe('viewer');
+      expect(result).toBeNull();
     });
   });
 

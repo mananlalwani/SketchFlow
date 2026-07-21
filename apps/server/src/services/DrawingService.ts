@@ -1,102 +1,113 @@
 import type { StrokeData, ShapeData, CanvasSnapshot } from '../types/socket.js';
 import { logger } from '../utils/logger.js';
 
+interface CanvasState {
+  currentSnapshot: CanvasSnapshot | null;
+  strokes: StrokeData[];
+  shapes: ShapeData[];
+  snapshotThrottleTimeout: NodeJS.Timeout | null;
+  lastActivityAt: number;
+}
+
+/**
+ * Ephemeral collaboration state. Durable project data remains in PostgreSQL;
+ * this cache is deliberately keyed by project so rooms cannot share state.
+ */
 export class DrawingService {
   private connections = new Set<string>();
-  private currentSnapshot: CanvasSnapshot | null = null;
-  private strokes: StrokeData[] = [];
-  private shapes: ShapeData[] = [];
-  private readonly maxConnections = 50; // Reduced for better performance
-  private readonly maxStrokes = 5000; // Reduced memory usage
-  private readonly maxShapes = 1000; // Limit for shapes
-  private snapshotThrottleTimeout: NodeJS.Timeout | null = null;
-  private readonly snapshotThrottleMs = 200; // Increased throttling for CPU efficiency
+  private canvases = new Map<string, CanvasState>();
+  private readonly maxConnections = 50;
+  private readonly maxStrokes = 5000;
+  private readonly maxShapes = 1000;
+  private readonly snapshotThrottleMs = 200;
 
-  public addConnection(clientId: string): void {
+  private canvas(projectId: string): CanvasState {
+    let canvas = this.canvases.get(projectId);
+    if (!canvas) {
+      canvas = { currentSnapshot: null, strokes: [], shapes: [], snapshotThrottleTimeout: null, lastActivityAt: Date.now() };
+      this.canvases.set(projectId, canvas);
+    }
+    return canvas;
+  }
+
+  public addConnection(clientId: string): boolean {
     if (this.connections.size >= this.maxConnections) {
       logger.warn(`Max connections reached, rejecting ${clientId}`);
-      return;
+      return false;
     }
-    
     this.connections.add(clientId);
-    logger.debug(`Connection added: ${clientId}, total: ${this.connections.size}`);
+    return true;
   }
 
-  public removeConnection(clientId: string): void {
-    this.connections.delete(clientId);
-    logger.debug(`Connection removed: ${clientId}, total: ${this.connections.size}`);
+  public removeConnection(clientId: string): void { this.connections.delete(clientId); }
+  public getConnectionCount(): number { return this.connections.size; }
+  public getMaxConnections(): number { return this.maxConnections; }
+
+  public addStroke(projectId: string, stroke: StrokeData): void {
+    const canvas = this.canvas(projectId);
+    canvas.lastActivityAt = Date.now();
+    canvas.strokes.push(stroke);
+    if (canvas.strokes.length > this.maxStrokes) canvas.strokes = canvas.strokes.slice(-this.maxStrokes * 0.8);
   }
 
-  public getConnectionCount(): number {
-    return this.connections.size;
+  public addStrokes(projectId: string, strokes: StrokeData[]): void {
+    const canvas = this.canvas(projectId);
+    canvas.lastActivityAt = Date.now();
+    canvas.strokes.push(...strokes);
+    if (canvas.strokes.length > this.maxStrokes) canvas.strokes = canvas.strokes.slice(-this.maxStrokes * 0.8);
   }
 
-  public getMaxConnections(): number {
-    return this.maxConnections;
+  public addShape(projectId: string, shape: ShapeData): void {
+    const canvas = this.canvas(projectId);
+    canvas.lastActivityAt = Date.now();
+    canvas.shapes.push(shape);
+    if (canvas.shapes.length > this.maxShapes) canvas.shapes = canvas.shapes.slice(-this.maxShapes * 0.8);
   }
 
-  public addStroke(stroke: StrokeData): void {
-    this.strokes.push(stroke);
-    
-    // Keep stroke history manageable
-    if (this.strokes.length > this.maxStrokes) {
-      this.strokes = this.strokes.slice(-this.maxStrokes * 0.8); // Keep 80% of max
-      logger.debug(`Stroke history trimmed to ${this.strokes.length} strokes`);
+  public getCurrentSnapshot(projectId: string): CanvasSnapshot | null { return this.canvas(projectId).currentSnapshot; }
+  public updateSnapshot(projectId: string, snapshot: CanvasSnapshot): void {
+    const canvas = this.canvas(projectId);
+    canvas.currentSnapshot = snapshot;
+    canvas.lastActivityAt = Date.now();
+  }
+
+  public cleanupInactiveCanvases(maxIdleMs: number, now = Date.now()): number {
+    let removed = 0;
+    for (const [projectId, canvas] of this.canvases) {
+      if (canvas.lastActivityAt + maxIdleMs >= now) continue;
+      if (canvas.snapshotThrottleTimeout) clearTimeout(canvas.snapshotThrottleTimeout);
+      this.canvases.delete(projectId);
+      removed++;
     }
+    return removed;
   }
 
-  public addStrokes(strokes: StrokeData[]): void {
-    this.strokes.push(...strokes);
-    
-    if (this.strokes.length > this.maxStrokes) {
-      this.strokes = this.strokes.slice(-this.maxStrokes * 0.8);
-      logger.debug(`Stroke history trimmed to ${this.strokes.length} strokes`);
-    }
-  }
-
-  public addShape(shape: ShapeData): void {
-    this.shapes.push(shape);
-    // No special handling needed; text is just another shape type
-    
-    // Keep shape history manageable
-    if (this.shapes.length > this.maxShapes) {
-      this.shapes = this.shapes.slice(-this.maxShapes * 0.8); // Keep 80% of max
-      logger.debug(`Shape history trimmed to ${this.shapes.length} shapes`);
-    }
-  }
-
-  public getCurrentSnapshot(): CanvasSnapshot | null {
-    return this.currentSnapshot;
-  }
-
-  public updateSnapshot(snapshot: CanvasSnapshot): void {
-    this.currentSnapshot = snapshot;
-    logger.debug('Canvas snapshot updated');
-  }
-
-  public broadcastSnapshotThrottled(callback: () => void): void {
-    if (this.snapshotThrottleTimeout) return;
-    
-    this.snapshotThrottleTimeout = setTimeout(() => {
+  public broadcastSnapshotThrottled(projectId: string, callback: () => void): void {
+    const canvas = this.canvas(projectId);
+    if (canvas.snapshotThrottleTimeout) return;
+    canvas.snapshotThrottleTimeout = setTimeout(() => {
       callback();
-      this.snapshotThrottleTimeout = null;
+      canvas.snapshotThrottleTimeout = null;
     }, this.snapshotThrottleMs);
   }
 
-  public clearCanvas(): void {
-    this.strokes = [];
-    this.shapes = [];
-    this.currentSnapshot = null;
-    logger.info('Canvas cleared');
+  public clearCanvas(projectId: string): void {
+    const canvas = this.canvas(projectId);
+    canvas.lastActivityAt = Date.now();
+    canvas.strokes = [];
+    canvas.shapes = [];
+    canvas.currentSnapshot = null;
   }
 
-  public getStats() {
+  public getStats(projectId?: string) {
+    const canvas = projectId ? this.canvas(projectId) : undefined;
     return {
       connections: this.connections.size,
-      strokes: this.strokes.length,
-      shapes: this.shapes.length,
-      hasSnapshot: !!this.currentSnapshot,
-      snapshotSize: this.currentSnapshot?.dataUrl?.length || 0
+      projects: this.canvases.size,
+      strokes: canvas?.strokes.length ?? 0,
+      shapes: canvas?.shapes.length ?? 0,
+      hasSnapshot: !!canvas?.currentSnapshot,
+      snapshotSize: canvas?.currentSnapshot?.dataUrl.length ?? 0,
     };
   }
 }

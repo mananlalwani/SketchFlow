@@ -1,5 +1,7 @@
+import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { prisma } from '../lib/prisma.js';
+import type { CanvasSnapshot } from '../types/socket.js';
 
 export interface ProjectRecord {
   id: string;
@@ -8,8 +10,10 @@ export interface ProjectRecord {
   updatedAt: number;
   createdAt: number;
   data: unknown;
+  revision?: number;
   shared?: boolean;
   shareToken?: string;
+  shareExpiresAt?: number;
   folderId?: string | null;
   role?: 'owner' | 'editor' | 'viewer';
   collaborators?: { userId: string; role: string }[];
@@ -27,6 +31,18 @@ export interface FolderRecord {
 }
 
 export class ProjectService {
+  public async saveCollaborationSnapshot(projectId: string, snapshot: CanvasSnapshot): Promise<void> {
+    await prisma.collaborationSnapshot.upsert({
+      where: { projectId },
+      create: { projectId, data: snapshot as object },
+      update: { data: snapshot as object },
+    });
+  }
+
+  public async getCollaborationSnapshot(projectId: string): Promise<CanvasSnapshot | null> {
+    const snapshot = await prisma.collaborationSnapshot.findUnique({ where: { projectId } });
+    return snapshot ? snapshot.data as unknown as CanvasSnapshot : null;
+  }
   // Permission checking helper
   public async checkPermission(
     projectId: string, 
@@ -51,7 +67,7 @@ export class ProjectService {
 
       switch (action) {
         case 'view':
-          return isOwner || !!collaborator || project.shared;
+          return isOwner || !!collaborator;
         
         case 'edit':
           return isOwner || (collaborator?.role === 'editor');
@@ -227,10 +243,10 @@ export class ProjectService {
 
       if (!project) return null;
 
-      // Check access: owner, collaborator, or shared
+      // Public projects are accessed exclusively through getByShareToken.
       const isOwner = project.userId === userId;
       const collaborator = collaborators.find(c => c.userId === userId);
-      const hasAccess = isOwner || collaborator || project.shared;
+      const hasAccess = isOwner || collaborator;
 
       if (userId && !hasAccess) {
         return null;
@@ -267,7 +283,7 @@ export class ProjectService {
         }
       });
 
-      if (!project || !project.shared) return null;
+      if (!project || !project.shared || project.shareRevokedAt || (project.shareExpiresAt && project.shareExpiresAt <= new Date())) return null;
 
       return {
         id: project.id,
@@ -278,6 +294,7 @@ export class ProjectService {
         createdAt: project.createdAt.getTime(),
         shared: project.shared,
         shareToken: project.shareToken ?? undefined,
+        shareExpiresAt: project.shareExpiresAt?.getTime(),
         role: 'viewer',
         collaborators: project.collaborators
       };
@@ -287,7 +304,7 @@ export class ProjectService {
     }
   }
 
-  public async save(id: string, userId: string, title: string, data: unknown): Promise<ProjectRecord> {
+  public async save(id: string, userId: string, title: string, data: unknown, expectedRevision?: number): Promise<ProjectRecord> {
     try {
       let existing;
       
@@ -306,7 +323,14 @@ export class ProjectService {
       if (existing) {
         const canEdit = await this.checkPermission(id, userId, 'edit');
         if (!canEdit) {
-          throw new Error('No permission to edit this project');
+          const forbidden = new Error('No permission to edit this project');
+          forbidden.name = 'ProjectAccessError';
+          throw forbidden;
+        }
+        if (expectedRevision !== undefined && existing.revision !== expectedRevision) {
+          const conflict = new Error('Project revision conflict');
+          conflict.name = 'ProjectConflictError';
+          throw conflict;
         }
       }
 
@@ -314,7 +338,23 @@ export class ProjectService {
       let resultCollaborators: { userId: string; role: string }[] = [];
       
       try {
-        project = await prisma.project.upsert({
+        if (existing && expectedRevision !== undefined) {
+          const updated = await prisma.project.updateMany({
+            where: { id, userId, revision: expectedRevision },
+            data: { title, data: data as object, revision: { increment: 1 }, updatedAt: new Date() },
+          });
+          if (updated.count !== 1) {
+            const conflict = new Error('Project revision conflict');
+            conflict.name = 'ProjectConflictError';
+            throw conflict;
+          }
+          project = await prisma.project.findUnique({
+            where: { id },
+            include: { collaborators: { select: { userId: true, role: true } } },
+          });
+          if (!project) throw new Error('Project disappeared during save');
+        } else {
+          project = await prisma.project.upsert({
           where: { id },
           create: {
             id,
@@ -326,6 +366,7 @@ export class ProjectService {
           update: {
             title,
             data: data as object,
+            revision: { increment: 1 },
             updatedAt: new Date(),
           },
           include: {
@@ -333,7 +374,8 @@ export class ProjectService {
               select: { userId: true, role: true }
             }
           }
-        });
+          });
+        }
         resultCollaborators = project.collaborators || [];
       } catch {
         // Fallback if collaborators table doesn't exist
@@ -359,6 +401,7 @@ export class ProjectService {
         userId: project.userId,
         title: project.title,
         data: project.data,
+        revision: project.revision,
         updatedAt: project.updatedAt.getTime(),
         createdAt: project.createdAt.getTime(),
         shared: project.shared,
@@ -381,12 +424,15 @@ export class ProjectService {
         return null;
       }
 
-      const shareToken = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const shareToken = randomBytes(32).toString('base64url');
+      const shareExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const project = await prisma.project.update({
         where: { id },
         data: {
           shared: true,
           shareToken,
+          shareExpiresAt,
+          shareRevokedAt: null,
         },
         include: {
           collaborators: {
@@ -404,6 +450,7 @@ export class ProjectService {
         createdAt: project.createdAt.getTime(),
         shared: project.shared,
         shareToken: project.shareToken ?? undefined,
+        shareExpiresAt: project.shareExpiresAt?.getTime(),
         collaborators: project.collaborators
       };
     } catch (e) {
@@ -427,6 +474,7 @@ export class ProjectService {
         data: {
           shared: false,
           shareToken: null,
+          shareRevokedAt: new Date(),
         },
         include: {
           collaborators: {
@@ -444,6 +492,7 @@ export class ProjectService {
         createdAt: project.createdAt.getTime(),
         shared: project.shared,
         shareToken: project.shareToken ?? undefined,
+        shareExpiresAt: project.shareExpiresAt?.getTime(),
         collaborators: project.collaborators
       };
     } catch (e) {
@@ -673,6 +722,10 @@ export class ProjectService {
 
   public async createFolder(userId: string, name: string, color?: string, parentId?: string | null): Promise<FolderRecord> {
     try {
+      if (parentId) {
+        const parent = await prisma.folder.findFirst({ where: { id: parentId, userId } });
+        if (!parent) throw new Error('Parent folder not found');
+      }
       const folder = await prisma.folder.create({
         data: {
           userId,
@@ -711,6 +764,12 @@ export class ProjectService {
 
       if (!existing || existing.userId !== userId) {
         return null;
+      }
+
+      if (parentId) {
+        if (parentId === id) return null;
+        const parent = await prisma.folder.findFirst({ where: { id: parentId, userId } });
+        if (!parent) return null;
       }
 
       const folder = await prisma.folder.update({
@@ -767,6 +826,10 @@ export class ProjectService {
 
   public async moveToFolder(projectId: string, userId: string, folderId: string | null): Promise<boolean> {
     try {
+      if (folderId) {
+        const folder = await prisma.folder.findFirst({ where: { id: folderId, userId } });
+        if (!folder) return false;
+      }
       const project = await prisma.project.findUnique({
         where: { id: projectId }
       });
