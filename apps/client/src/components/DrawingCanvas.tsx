@@ -1388,6 +1388,8 @@ export function DrawingCanvas() {
                   color: obj.color,
                   size: obj.size,
                   alpha: obj.alpha ?? 1,
+                  filled: obj.filled,
+                  points: obj.points,
                   orientation: (
                     obj as { orientation?: "up" | "down" | "left" | "right" }
                   ).orientation,

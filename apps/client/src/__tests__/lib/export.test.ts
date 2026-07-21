@@ -148,6 +148,26 @@ describe('export', () => {
       expect(svg).toContain('points="50,0 100,80 0,80"');
     });
 
+    it('preserves free-form triangle vertices', () => {
+      const svg = exportAsSVG([
+        {
+          id: 'custom-triangle',
+          type: 'triangle',
+          x: 10,
+          y: 20,
+          width: 90,
+          height: 80,
+          points: [{ x: 10, y: 20 }, { x: 100, y: 40 }, { x: 35, y: 100 }],
+          color: '#123456',
+          size: 3,
+          alpha: 1,
+        },
+      ]);
+
+      expect(svg).toContain('points="10,20 100,40 35,100"');
+      expect(svg).not.toContain('points="55,20 100,100 10,100"');
+    });
+
     it('should export text objects', () => {
       const objects: DrawingObject[] = [
         {

@@ -4,6 +4,17 @@ import type { jsPDF } from 'jspdf';
 const WORLD_WIDTH = 4096;
 const WORLD_HEIGHT = 4096;
 
+function triangleVertices(obj: DrawingObject): { x: number; y: number }[] | null {
+  if (obj.points?.length === 3) return obj.points;
+  if (obj.x === undefined || obj.y === undefined || obj.width === undefined || obj.height === undefined) return null;
+
+  return [
+    { x: obj.x + obj.width / 2, y: obj.y },
+    { x: obj.x + obj.width, y: obj.y + obj.height },
+    { x: obj.x, y: obj.y + obj.height },
+  ];
+}
+
 export type ExportQuality = '1x' | '2x' | '4x' | 'retina' | 'print';
 
 /**
@@ -300,17 +311,13 @@ function renderObjectToPDF(
       break;
 
     case 'triangle':
-      if (obj.x !== undefined && obj.y !== undefined && obj.width && obj.height) {
-        const x = offsetX + obj.x * scale;
-        const y = offsetY + obj.y * scale;
-        const w = obj.width * scale;
-        const h = obj.height * scale;
-
-        const points = [
-          { x: x + w / 2, y: y },         // Top
-          { x: x + w, y: y + h },         // Bottom right
-          { x: x, y: y + h }              // Bottom left
-        ];
+      {
+        const vertices = triangleVertices(obj);
+        if (!vertices) break;
+        const points = vertices.map((point) => ({
+          x: offsetX + point.x * scale,
+          y: offsetY + point.y * scale,
+        }));
 
         if (obj.filled) {
           pdf.triangle(
@@ -522,16 +529,14 @@ function renderObjectsToContext(ctx: CanvasRenderingContext2D, objects: DrawingO
         break;
 
       case 'triangle':
-        if (obj.x !== undefined && obj.y !== undefined && obj.width && obj.height) {
-          const x = obj.x;
-          const y = obj.y;
-          const w = obj.width;
-          const h = obj.height;
+        {
+          const vertices = triangleVertices(obj);
+          if (!vertices) break;
 
           ctx.beginPath();
-          ctx.moveTo(x + w / 2, y); // Top
-          ctx.lineTo(x + w, y + h); // Bottom right
-          ctx.lineTo(x, y + h); // Bottom left
+          ctx.moveTo(vertices[0].x, vertices[0].y);
+          ctx.lineTo(vertices[1].x, vertices[1].y);
+          ctx.lineTo(vertices[2].x, vertices[2].y);
           ctx.closePath();
 
           if (obj.filled) {
@@ -709,12 +714,10 @@ function objectToSVG(obj: DrawingObject): string | null {
       break;
 
     case 'triangle':
-      if (obj.x !== undefined && obj.y !== undefined && obj.width && obj.height) {
-        const x = obj.x;
-        const y = obj.y;
-        const w = obj.width;
-        const h = obj.height;
-        const points = `${x + w / 2},${y} ${x + w},${y + h} ${x},${y + h}`;
+      {
+        const vertices = triangleVertices(obj);
+        if (!vertices) break;
+        const points = vertices.map((point) => `${point.x},${point.y}`).join(' ');
 
         if (obj.filled) {
           return `<polygon points="${points}" fill="${obj.color}"${opacity}/>`;
