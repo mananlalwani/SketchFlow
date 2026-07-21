@@ -64,6 +64,17 @@ jobs:
       - name: Run all tests
         run: pnpm test
 
+      - name: Generate coverage reports
+        run: pnpm test:coverage
+
+      - name: Publish coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            apps/client/coverage
+            apps/server/coverage
+
       - name: Install Playwright browser
         run: pnpm --filter @sketchflow/client exec playwright install --with-deps chromium
 
@@ -125,6 +136,22 @@ jobs:
         env:
           DATABASE_URL: postgresql://sketchflow:sketchflow@localhost:5432/sketchflow_test?schema=public
         run: pnpm --filter @sketchflow/server db:migrate:deploy
+      - name: Seed shared-project lifecycle fixture
+        env:
+          PGPASSWORD: sketchflow
+        run: |
+          psql --host=127.0.0.1 --username=sketchflow --dbname=sketchflow_test <<'SQL'
+          INSERT INTO projects (id, "userId", title, data, shared, "shareToken", "shareExpiresAt")
+          VALUES (
+            'cicollaborationproject000001',
+            'user_ci',
+            'CI shared project',
+            '{"objects": []}'::jsonb,
+            TRUE,
+            'ci_shared_project_token_123456789',
+            NOW() + INTERVAL '1 day'
+          );
+          SQL
       - uses: docker/setup-buildx-action@v3
       - name: Build production image
         uses: docker/build-push-action@v5
@@ -148,6 +175,8 @@ jobs:
           done
           curl --fail --silent http://localhost:3000/api/readyz >/dev/null
           curl --fail --silent http://localhost:3000/draw >/dev/null
+          curl --fail --silent http://localhost:3000/api/projects/shared/ci_shared_project_token_123456789 | \
+            jq -e '.title == "CI shared project" and .shared == true' >/dev/null
           docker stop sketchflow-ci
 
   build-and-push:

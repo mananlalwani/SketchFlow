@@ -8,6 +8,7 @@
     "build": "pnpm --filter @sketchflow/shared build && pnpm --filter @sketchflow/client build && pnpm --filter @sketchflow/server build",
     "start": "pnpm --filter @sketchflow/server start",
     "test": "pnpm --filter @sketchflow/client test && pnpm --filter @sketchflow/server test",
+    "test:coverage": "pnpm --filter @sketchflow/client test:coverage && pnpm --filter @sketchflow/server test:coverage",
     "lint": "pnpm --filter @sketchflow/client lint && pnpm --filter @sketchflow/server lint",
     "format:check": "prettier --check \"**/*.{js,mjs,cjs,ts,tsx,json,md,yml,yaml}\"",
     "type-check": "pnpm --filter @sketchflow/client type-check && pnpm --filter @sketchflow/server build",

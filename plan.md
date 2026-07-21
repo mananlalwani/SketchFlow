@@ -35,7 +35,7 @@ This plan turns the current strong foundation into a production-grade applicatio
 - [ ] Add an accessibility CI job using axe-core for the draw surface, toolbar, dialogs, project manager, and share flow.
 - [ ] Publish coverage artifacts and set ratcheting thresholds: 80% lines/functions globally, 90% for authorization, validation, persistence, and socket-boundary modules.
 - [x] Keep the Docker smoke test, but use readiness (`/api/readyz`) with a real CI database instead of liveness alone.
-- [ ] Add a migration test: apply all migrations to a clean database, start the production image, then verify the critical project lifecycle.
+- [x] Add a migration test: apply all migrations to a clean database, start the production image, then verify the critical project lifecycle.
 
 **Verify:** a pull request cannot merge unless lint, format, type-check, unit/integration/E2E/accessibility tests, audit, build, migration, and container checks pass.
 
