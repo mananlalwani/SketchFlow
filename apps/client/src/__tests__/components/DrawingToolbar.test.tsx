@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useDrawingStore } from '@/store/drawingStore';
@@ -34,27 +35,16 @@ function ToolbarTestComponent() {
     setShapeFilled,
   } = useDrawingStore();
 
-  return (
-    <div data-testid="toolbar">
-      <div data-testid="current-tool">{currentTool}</div>
-      <div data-testid="brush-size">{brushSize}</div>
-      <div data-testid="shape-filled">{shapeFilled ? 'filled' : 'outline'}</div>
-      
-      <button onClick={() => setTool('pen')} data-testid="tool-pen">Pen</button>
-      <button onClick={() => setTool('eraser')} data-testid="tool-eraser">Eraser</button>
-      <button onClick={() => setTool('rectangle')} data-testid="tool-rectangle">Rectangle</button>
-      
-      <input
-        type="range"
-        value={brushSize}
-        onChange={(e) => setBrushSize(Number(e.target.value))}
-        data-testid="size-slider"
-      />
-      
-      <button onClick={() => setShapeFilled(!shapeFilled)} data-testid="toggle-fill">
-        Toggle Fill
-      </button>
-    </div>
+  const h = React.createElement;
+  return h('div', { 'data-testid': 'toolbar' },
+    h('div', { 'data-testid': 'current-tool' }, currentTool),
+    h('div', { 'data-testid': 'brush-size' }, brushSize),
+    h('div', { 'data-testid': 'shape-filled' }, shapeFilled ? 'filled' : 'outline'),
+    h('button', { onClick: () => setTool('pen'), 'data-testid': 'tool-pen' }, 'Pen'),
+    h('button', { onClick: () => setTool('eraser'), 'data-testid': 'tool-eraser' }, 'Eraser'),
+    h('button', { onClick: () => setTool('rectangle'), 'data-testid': 'tool-rectangle' }, 'Rectangle'),
+    h('input', { type: 'range', value: brushSize, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBrushSize(Number(e.target.value)), 'data-testid': 'size-slider' }),
+    h('button', { onClick: () => setShapeFilled(!shapeFilled), 'data-testid': 'toggle-fill' }, 'Toggle Fill'),
   );
 }
 
@@ -69,7 +59,7 @@ describe('DrawingToolbar (simplified)', () => {
   });
 
   it('should render with initial state', () => {
-    render(<ToolbarTestComponent />);
+    render(React.createElement(ToolbarTestComponent));
     
     expect(screen.getByTestId('current-tool')).toHaveTextContent('pen');
     expect(screen.getByTestId('brush-size')).toHaveTextContent('4');
@@ -77,7 +67,7 @@ describe('DrawingToolbar (simplified)', () => {
   });
 
   it('should change tool when clicked', () => {
-    render(<ToolbarTestComponent />);
+    render(React.createElement(ToolbarTestComponent));
     
     fireEvent.click(screen.getByTestId('tool-eraser'));
     expect(screen.getByTestId('current-tool')).toHaveTextContent('eraser');
@@ -87,7 +77,7 @@ describe('DrawingToolbar (simplified)', () => {
   });
 
   it('should toggle fill state', () => {
-    render(<ToolbarTestComponent />);
+    render(React.createElement(ToolbarTestComponent));
     
     expect(screen.getByTestId('shape-filled')).toHaveTextContent('outline');
     
@@ -99,7 +89,7 @@ describe('DrawingToolbar (simplified)', () => {
   });
 
   it('should update brush size', () => {
-    render(<ToolbarTestComponent />);
+    render(React.createElement(ToolbarTestComponent));
     
     const slider = screen.getByTestId('size-slider');
     fireEvent.change(slider, { target: { value: '20' } });
@@ -108,7 +98,7 @@ describe('DrawingToolbar (simplified)', () => {
   });
 
   it('should sync state with Zustand store', () => {
-    render(<ToolbarTestComponent />);
+    render(React.createElement(ToolbarTestComponent));
     
     // Change state via store directly, wrapped in act()
     act(() => {

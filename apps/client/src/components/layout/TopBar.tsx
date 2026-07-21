@@ -270,6 +270,13 @@ export function TopBar({
                   >
                     <AlertCircle className="w-3 h-3 mr-1" /> Failed
                   </span>
+                ) : saveStatus === "conflict" ? (
+                  <span
+                    className="flex items-center text-orange-600 dark:text-orange-400"
+                    title="This project changed elsewhere. Your local work is preserved in the emergency backup. Reload the project before saving again."
+                  >
+                    <AlertCircle className="w-3 h-3 mr-1" /> Conflict
+                  </span>
                 ) : unsavedChanges ? (
                   <span className="text-yellow-600 dark:text-yellow-500 flex items-center">
                     <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" />{" "}
