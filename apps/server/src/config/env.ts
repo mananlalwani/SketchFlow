@@ -25,7 +25,12 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().optional().transform((val) => {
     if (!val) return [];
     return val.split(',').map(origin => origin.trim()).filter(Boolean);
-  }),
+  }).pipe(z.array(z.string().url().superRefine((origin, context) => {
+    const parsed = new URL(origin);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin.replace(/\/$/, '')) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'CORS origins must be HTTP(S) origins without paths' });
+    }
+  }))),
 
   // Client URL for sharing links (fallback to request host if not set)
   CLIENT_URL: z.string().url().optional(),
@@ -42,6 +47,24 @@ const envSchema = z.object({
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
   HONEYCOMB_API_KEY: z.string().optional(),
   HONEYCOMB_DATASET: z.string().optional(),
+}).superRefine((data, context) => {
+  if (data.NODE_ENV !== 'production') return;
+
+  if (!/^sk_live_[A-Za-z0-9_-]+$/.test(data.CLERK_SECRET_KEY)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['CLERK_SECRET_KEY'],
+      message: 'Production requires a valid Clerk live secret key',
+    });
+  }
+
+  if (data.CORS_ORIGINS.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['CORS_ORIGINS'],
+      message: 'CORS_ORIGINS is required in production',
+    });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -52,11 +75,6 @@ function validateEnv(): Env {
   if (!result.success) {
     console.error('❌ Invalid environment variables:');
     console.error(result.error.format());
-    process.exit(1);
-  }
-
-  if (result.data.NODE_ENV === 'production' && result.data.CORS_ORIGINS.length === 0) {
-    console.error('❌ CORS_ORIGINS is required in production');
     process.exit(1);
   }
 
