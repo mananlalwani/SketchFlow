@@ -4,13 +4,36 @@
   "type": "module",
   "description": "Modern SketchFlow canvas with real-time collaboration using React, TypeScript, and WebSocket",
   "scripts": {
-    "dev": "concurrently \"pnpm --filter @sketchflow/server dev\" \"pnpm --filter @sketchflow/client dev\"",
+    "dev": "NODE_ENV=development concurrently \"pnpm --filter @sketchflow/server dev\" \"pnpm --filter @sketchflow/client dev\"",
     "build": "pnpm --filter @sketchflow/shared build && pnpm --filter @sketchflow/client build && pnpm --filter @sketchflow/server build",
     "start": "pnpm --filter @sketchflow/server start",
-    "test": "pnpm --filter @sketchflow/client test",
-    "lint": "pnpm --filter @sketchflow/client lint"
+    "test": "pnpm --filter @sketchflow/client test && pnpm --filter @sketchflow/server test",
+    "lint": "pnpm --filter @sketchflow/client lint",
+    "type-check": "pnpm --filter @sketchflow/client type-check && pnpm --filter @sketchflow/server build",
+    "audit:prod": "pnpm audit --prod --audit-level high"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
-  }
+  },
+  "pnpm": {
+    "overrides": {
+      "@grpc/grpc-js": "1.14.4",
+      "@hono/node-server": "1.19.13",
+      "@opentelemetry/auto-instrumentations-node": "0.75.0",
+    "@opentelemetry/exporter-prometheus": "0.217.0",
+    "@opentelemetry/propagator-jaeger": "2.9.0",
+    "@opentelemetry/sdk-node": "0.217.0",
+      "defu": "6.1.5",
+      "effect": "3.20.0",
+      "hono": "4.12.25",
+      "lodash": "4.18.0",
+      "minimatch": "9.0.7",
+      "path-to-regexp": "0.1.13",
+      "picomatch": "4.0.4",
+      "protobufjs": "7.6.5",
+      "workbox-build>lodash": "4.17.21",
+      "brace-expansion": "5.0.7"
+    }
+  },
+  "packageManager": "pnpm@10.0.0+sha512.b8fef5494bd3fe4cbd4edabd0745df2ee5be3e4b0b8b08fa643aa3e4c6702ccc0f00d68fa8a8c9858a735a0032485a44990ed2810526c875e416f001b17df12b"
 }

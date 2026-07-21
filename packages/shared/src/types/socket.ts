@@ -29,8 +29,7 @@ export interface ShapeData {
   fontSize?: number;
   imageData?: string;
   points?: { x: number; y: number }[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
   timestamp?: number;
   createdBy?: string;
   createdAt?: number;
@@ -145,8 +144,7 @@ export interface ServerToClientEvents {
   'cursor:join': (cursor: CursorData) => void;
   'cursor:leave': (userId: string) => void;
   'cursors:all': (cursors: CursorData[]) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  'project:state': (data: { objects: any[]; timestamp: number }) => void;
+  'project:state': (data: { objects: unknown[]; timestamp: number }) => void;
   'object:delete': (objectId: string, userId: string) => void;
 }
 
@@ -161,6 +159,7 @@ export interface ClientToServerEvents {
   'room:leave': () => void;
   'project:request-state': () => void;
   'object:delete': (objectId: string) => void;
+  'project:state': (data: { objects: unknown[]; timestamp: number }) => void;
 }
 
 export interface InterServerEvents {
@@ -170,4 +169,5 @@ export interface InterServerEvents {
 export interface SocketData {
   userId?: string;
   userName?: string;
+  sessionExpiresAt?: number;
 }

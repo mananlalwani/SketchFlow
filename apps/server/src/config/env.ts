@@ -29,6 +29,7 @@ const envSchema = z.object({
 
   // Client URL for sharing links (fallback to request host if not set)
   CLIENT_URL: z.string().url().optional(),
+  REDIS_URL: z.string().url().optional(),
 
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -51,6 +52,11 @@ function validateEnv(): Env {
   if (!result.success) {
     console.error('❌ Invalid environment variables:');
     console.error(result.error.format());
+    process.exit(1);
+  }
+
+  if (result.data.NODE_ENV === 'production' && result.data.CORS_ORIGINS.length === 0) {
+    console.error('❌ CORS_ORIGINS is required in production');
     process.exit(1);
   }
 
