@@ -5,14 +5,14 @@ import request from 'supertest';
 // Create a minimal test app with just the health endpoints
 function createTestApp() {
   const app = express();
-  
+
   let isShuttingDown = false;
   let connectionCount = 0;
-  
+
   // Mock health endpoints matching the real server
   app.get('/api/health', (_req, res) => {
-    res.json({ 
-      status: 'ok', 
+    res.json({
+      status: 'ok',
       timestamp: new Date().toISOString(),
       connections: connectionCount,
     });
@@ -32,7 +32,7 @@ function createTestApp() {
       return;
     }
     // In tests, assume DB is healthy
-    res.json({ 
+    res.json({
       status: 'ok',
       database: 'connected',
       connections: connectionCount,
@@ -41,8 +41,12 @@ function createTestApp() {
 
   return {
     app,
-    setShuttingDown: (value: boolean) => { isShuttingDown = value; },
-    setConnectionCount: (count: number) => { connectionCount = count; },
+    setShuttingDown: (value: boolean) => {
+      isShuttingDown = value;
+    },
+    setConnectionCount: (count: number) => {
+      connectionCount = count;
+    },
   };
 }
 
@@ -53,7 +57,7 @@ describe('Health API', () => {
   describe('GET /api/health', () => {
     it('should return ok status', async () => {
       const response = await request(app).get('/api/health');
-      
+
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('ok');
       expect(response.body.timestamp).toBeDefined();
@@ -61,9 +65,9 @@ describe('Health API', () => {
 
     it('should include connection count', async () => {
       testServer.setConnectionCount(5);
-      
+
       const response = await request(app).get('/api/health');
-      
+
       expect(response.body.connections).toBe(5);
     });
   });
@@ -71,18 +75,18 @@ describe('Health API', () => {
   describe('GET /api/healthz (liveness)', () => {
     it('should return ok when running', async () => {
       testServer.setShuttingDown(false);
-      
+
       const response = await request(app).get('/api/healthz');
-      
+
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('ok');
     });
 
     it('should return 503 when shutting down', async () => {
       testServer.setShuttingDown(true);
-      
+
       const response = await request(app).get('/api/healthz');
-      
+
       expect(response.status).toBe(503);
       expect(response.body.status).toBe('shutting_down');
     });
@@ -91,9 +95,9 @@ describe('Health API', () => {
   describe('GET /api/readyz (readiness)', () => {
     it('should return ok with database status', async () => {
       testServer.setShuttingDown(false);
-      
+
       const response = await request(app).get('/api/readyz');
-      
+
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('ok');
       expect(response.body.database).toBe('connected');
@@ -101,9 +105,9 @@ describe('Health API', () => {
 
     it('should return 503 when shutting down', async () => {
       testServer.setShuttingDown(true);
-      
+
       const response = await request(app).get('/api/readyz');
-      
+
       expect(response.status).toBe(503);
     });
   });

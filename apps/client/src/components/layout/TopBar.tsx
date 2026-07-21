@@ -1,27 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useDrawingStore } from "@/store/drawingStore";
-import { useDrawingSocket } from "@/hooks/useSocket";
-import { useAuthStore } from "@/store/authStore";
-import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import {
-  Save,
-  Trash2,
-  Cloud,
-  Loader2,
-  Share2,
-  Download,
-  AlertCircle,
-} from "lucide-react";
-import { serializeProject } from "@/lib/utils";
-import {
-  exportAsPNG,
-  exportAsSVG,
-  downloadFile,
-  type ExportQuality,
-} from "@/lib/export";
-import { createProject, updateProject } from "@/lib/api";
-import { generateThumbnail } from "@/lib/thumbnailGenerator";
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useDrawingStore } from '@/store/drawingStore';
+import { useDrawingSocket } from '@/hooks/useSocket';
+import { useAuthStore } from '@/store/authStore';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Save, Trash2, Cloud, Loader2, Share2, Download, AlertCircle } from 'lucide-react';
+import { serializeProject } from '@/lib/utils';
+import { exportAsPNG, exportAsSVG, downloadFile, type ExportQuality } from '@/lib/export';
+import { createProject, updateProject } from '@/lib/api';
+import { generateThumbnail } from '@/lib/thumbnailGenerator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,24 +16,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ShortcutsDialog } from "@/components/ShortcutsDialog";
-import { ProjectShareDialog } from "@/components/ProjectShareDialog";
-import { SettingsDropdown } from "@/components/SettingsDropdown";
-import { ConnectionStatus } from "@/components/ConnectionStatus";
-import {
-  useAuth,
-  SignInButton,
-  SignUpButton,
-  useClerk,
-} from "@clerk/clerk-react";
-import { User } from "lucide-react";
+} from '@/components/ui/dropdown-menu';
+import { ShortcutsDialog } from '@/components/ShortcutsDialog';
+import { ProjectShareDialog } from '@/components/ProjectShareDialog';
+import { SettingsDropdown } from '@/components/SettingsDropdown';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { useAuth, SignInButton, SignUpButton, useClerk } from '@clerk/clerk-react';
+import { User } from 'lucide-react';
 
-export function TopBar({
-  hideProjectControls,
-}: {
-  hideProjectControls?: boolean;
-}) {
+export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean }) {
   const {
     projectTitle,
     setProjectTitle,
@@ -75,16 +53,15 @@ export function TopBar({
   }, [setCurrentProject, clearCanvas]);
 
   const currentProject = useMemo(() => {
-    if (!currentProjectId || currentProjectId.startsWith("offline-"))
-      return null;
+    if (!currentProjectId || currentProjectId.startsWith('offline-')) return null;
     return {
       id: currentProjectId,
-      userId: userId || "",
-      title: projectTitle || "Untitled",
+      userId: userId || '',
+      title: projectTitle || 'Untitled',
       createdAt: Date.now(),
       updatedAt: lastSavedAt || Date.now(),
       shared: false,
-      role: "owner" as const,
+      role: 'owner' as const,
     };
   }, [currentProjectId, userId, projectTitle, lastSavedAt]);
 
@@ -95,18 +72,18 @@ export function TopBar({
 
       const payload = serializeProject(objects, 4096, 4096);
       localStorage.setItem(
-        "local_work",
+        'local_work',
         JSON.stringify({
           title: projectTitle,
           data: payload,
           updatedAt: Date.now(),
-        })
+        }),
       );
 
       markSaved();
       toast({
-        title: "Saved locally",
-        description: "Sign in to save to cloud.",
+        title: 'Saved locally',
+        description: 'Sign in to save to cloud.',
       });
       return;
     }
@@ -118,37 +95,26 @@ export function TopBar({
     try {
       thumbnail = await generateThumbnail(objects, 4096, 4096);
     } catch (e) {
-      console.warn("Failed to generate thumbnail:", e);
+      console.warn('Failed to generate thumbnail:', e);
     }
 
     try {
       const token = await getToken();
       let saved;
-      if (currentProjectId && !currentProjectId.startsWith("offline-")) {
-        saved = await updateProject(
-          currentProjectId,
-          projectTitle,
-          payload,
-          token,
-          thumbnail
-        );
+      if (currentProjectId && !currentProjectId.startsWith('offline-')) {
+        saved = await updateProject(currentProjectId, projectTitle, payload, token, thumbnail);
       } else {
-        saved = await createProject(
-          projectTitle || "Untitled",
-          payload,
-          token,
-          thumbnail
-        );
+        saved = await createProject(projectTitle || 'Untitled', payload, token, thumbnail);
         setCurrentProject(saved.id);
       }
       markSaved();
-      toast({ title: "Saved to cloud" });
+      toast({ title: 'Saved to cloud' });
     } catch (e) {
-      console.error("Save failed", e);
+      console.error('Save failed', e);
       toast({
-        title: "Save failed",
-        description: "Could not save to cloud.",
-        variant: "destructive",
+        title: 'Save failed',
+        description: 'Could not save to cloud.',
+        variant: 'destructive',
       });
     } finally {
       setIsSaving(false);
@@ -165,25 +131,22 @@ export function TopBar({
   ]);
 
   const handleClear = () => {
-    if (window.confirm("Are you sure you want to clear the canvas?")) {
+    if (window.confirm('Are you sure you want to clear the canvas?')) {
       clearCanvas();
       requestFullRedraw();
       emitClear();
-      toast({ title: "Canvas cleared" });
+      toast({ title: 'Canvas cleared' });
     }
   };
 
   const handleExportPNG = useCallback(
-    async (
-      quality: ExportQuality = "1x",
-      format: "png" | "jpeg" | "webp" = "png"
-    ) => {
+    async (quality: ExportQuality = '1x', format: 'png' | 'jpeg' | 'webp' = 'png') => {
       setIsExporting(true);
       try {
         const blob = await exportAsPNG(objects, { quality, format });
-        const ext = format === "jpeg" ? "jpg" : format;
-        const qualityLabel = quality !== "1x" ? `-${quality}` : "";
-        const filename = `${projectTitle || "drawing"}${qualityLabel}.${ext}`;
+        const ext = format === 'jpeg' ? 'jpg' : format;
+        const qualityLabel = quality !== '1x' ? `-${quality}` : '';
+        const filename = `${projectTitle || 'drawing'}${qualityLabel}.${ext}`;
         downloadFile(blob, filename);
 
         const sizeKB = (blob.size / 1024).toFixed(1);
@@ -192,29 +155,29 @@ export function TopBar({
           description: `${filename} (${sizeKB} KB)`,
         });
       } catch (e) {
-        console.error("Export failed", e);
-        toast({ title: "Export failed", variant: "destructive" });
+        console.error('Export failed', e);
+        toast({ title: 'Export failed', variant: 'destructive' });
       } finally {
         setIsExporting(false);
       }
     },
-    [objects, projectTitle, toast]
+    [objects, projectTitle, toast],
   );
 
   const handleExportSVG = useCallback(() => {
     setIsExporting(true);
     try {
       const svg = exportAsSVG(objects);
-      const filename = `${projectTitle || "drawing"}.svg`;
+      const filename = `${projectTitle || 'drawing'}.svg`;
       const sizeKB = (new Blob([svg]).size / 1024).toFixed(1);
-      downloadFile(svg, filename, "image/svg+xml");
+      downloadFile(svg, filename, 'image/svg+xml');
       toast({
-        title: "Exported SVG",
+        title: 'Exported SVG',
         description: `${filename} (${sizeKB} KB)`,
       });
     } catch (e) {
-      console.error("Export failed", e);
-      toast({ title: "Export failed", variant: "destructive" });
+      console.error('Export failed', e);
+      toast({ title: 'Export failed', variant: 'destructive' });
     } finally {
       setIsExporting(false);
     }
@@ -223,13 +186,13 @@ export function TopBar({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && key === "s") {
+      if ((e.ctrlKey || e.metaKey) && key === 's') {
         e.preventDefault();
         handleSave();
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [handleSave]);
 
   return (
@@ -254,23 +217,22 @@ export function TopBar({
                 placeholder="Untitled Project"
               />
               <div className="flex items-center gap-2 text-xs">
-                {isSaving || saveStatus === "syncing" ? (
+                {isSaving || saveStatus === 'syncing' ? (
                   <span className="flex items-center text-blue-500 dark:text-blue-400">
                     <Loader2 className="w-3 h-3 animate-spin mr-1" /> Saving...
                   </span>
-                ) : saveStatus === "retrying" ? (
+                ) : saveStatus === 'retrying' ? (
                   <span className="flex items-center text-orange-500 dark:text-orange-400">
-                    <Loader2 className="w-3 h-3 animate-spin mr-1" />{" "}
-                    Retrying...
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" /> Retrying...
                   </span>
-                ) : saveStatus === "failed" ? (
+                ) : saveStatus === 'failed' ? (
                   <span
                     className="flex items-center text-red-500 dark:text-red-400"
                     title="Auto-save failed. Changes are backed up locally."
                   >
                     <AlertCircle className="w-3 h-3 mr-1" /> Failed
                   </span>
-                ) : saveStatus === "conflict" ? (
+                ) : saveStatus === 'conflict' ? (
                   <span
                     className="flex items-center text-orange-600 dark:text-orange-400"
                     title="This project changed elsewhere. Your local work is preserved in the emergency backup. Reload the project before saving again."
@@ -279,8 +241,7 @@ export function TopBar({
                   </span>
                 ) : unsavedChanges ? (
                   <span className="text-yellow-600 dark:text-yellow-500 flex items-center">
-                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" />{" "}
-                    Unsaved
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" /> Unsaved
                   </span>
                 ) : (
                   <span className="text-slate-500 flex items-center">
@@ -336,19 +297,19 @@ export function TopBar({
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuLabel>PNG Format</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleExportPNG("1x", "png")}>
+                <DropdownMenuItem onClick={() => handleExportPNG('1x', 'png')}>
                   <div className="flex items-center justify-between w-full">
                     <span>Standard Quality</span>
                     <span className="text-xs text-slate-500">1x</span>
                   </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportPNG("2x", "png")}>
+                <DropdownMenuItem onClick={() => handleExportPNG('2x', 'png')}>
                   <div className="flex items-center justify-between w-full">
                     <span>Retina Display</span>
                     <span className="text-xs text-slate-500">2x</span>
                   </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportPNG("4x", "png")}>
+                <DropdownMenuItem onClick={() => handleExportPNG('4x', 'png')}>
                   <div className="flex items-center justify-between w-full">
                     <span>Print Quality</span>
                     <span className="text-xs text-slate-500">4x</span>
@@ -358,13 +319,13 @@ export function TopBar({
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel>JPEG Format</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleExportPNG("1x", "jpeg")}>
+                <DropdownMenuItem onClick={() => handleExportPNG('1x', 'jpeg')}>
                   <div className="flex items-center justify-between w-full">
                     <span>Smaller File Size</span>
                     <span className="text-xs text-slate-500">1x</span>
                   </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportPNG("2x", "jpeg")}>
+                <DropdownMenuItem onClick={() => handleExportPNG('2x', 'jpeg')}>
                   <div className="flex items-center justify-between w-full">
                     <span>High Quality</span>
                     <span className="text-xs text-slate-500">2x</span>
@@ -380,7 +341,7 @@ export function TopBar({
                     <span className="text-xs text-slate-500">Scalable</span>
                   </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportPNG("1x", "webp")}>
+                <DropdownMenuItem onClick={() => handleExportPNG('1x', 'webp')}>
                   <div className="flex items-center justify-between w-full">
                     <span>WebP</span>
                     <span className="text-xs text-slate-500">Modern</span>
@@ -427,10 +388,7 @@ export function TopBar({
               </Button>
             </SignInButton>
             <SignUpButton mode="modal">
-              <Button
-                size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
                 Sign Up
               </Button>
             </SignUpButton>

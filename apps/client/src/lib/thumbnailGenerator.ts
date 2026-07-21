@@ -13,7 +13,7 @@ const THUMBNAIL_QUALITY = 0.8;
 export async function generateThumbnail(
   objects: DrawingObject[],
   worldWidth = 4096,
-  worldHeight = 4096
+  worldHeight = 4096,
 ): Promise<string | null> {
   if (objects.length === 0) {
     return null; // No thumbnail for empty canvas
@@ -25,7 +25,7 @@ export async function generateThumbnail(
     canvas.width = THUMBNAIL_WIDTH;
     canvas.height = THUMBNAIL_HEIGHT;
     const ctx = canvas.getContext('2d');
-    
+
     if (!ctx) {
       console.error('Failed to get canvas context for thumbnail');
       return null;
@@ -66,40 +66,67 @@ export async function generateThumbnail(
             ctx.lineTo(obj.points[i].x, obj.points[i].y);
           }
           ctx.stroke();
-        } else if (obj.type === 'line' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        } else if (
+          obj.type === 'line' &&
+          obj.x !== undefined &&
+          obj.y !== undefined &&
+          obj.width !== undefined &&
+          obj.height !== undefined
+        ) {
           ctx.beginPath();
           ctx.moveTo(obj.x, obj.y);
           ctx.lineTo(obj.x + obj.width, obj.y + obj.height);
           ctx.stroke();
-        } else if (obj.type === 'arrow' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        } else if (
+          obj.type === 'arrow' &&
+          obj.x !== undefined &&
+          obj.y !== undefined &&
+          obj.width !== undefined &&
+          obj.height !== undefined
+        ) {
           // Draw arrow shaft
           ctx.beginPath();
           ctx.moveTo(obj.x, obj.y);
           ctx.lineTo(obj.x + obj.width, obj.y + obj.height);
           ctx.stroke();
-          
+
           // Draw arrow head (simplified for thumbnail)
           const angle = Math.atan2(obj.height, obj.width);
-          const headLength = Math.min(20, Math.sqrt(obj.width * obj.width + obj.height * obj.height) * 0.3);
+          const headLength = Math.min(
+            20,
+            Math.sqrt(obj.width * obj.width + obj.height * obj.height) * 0.3,
+          );
           ctx.beginPath();
           ctx.moveTo(obj.x + obj.width, obj.y + obj.height);
           ctx.lineTo(
             obj.x + obj.width - headLength * Math.cos(angle - Math.PI / 6),
-            obj.y + obj.height - headLength * Math.sin(angle - Math.PI / 6)
+            obj.y + obj.height - headLength * Math.sin(angle - Math.PI / 6),
           );
           ctx.moveTo(obj.x + obj.width, obj.y + obj.height);
           ctx.lineTo(
             obj.x + obj.width - headLength * Math.cos(angle + Math.PI / 6),
-            obj.y + obj.height - headLength * Math.sin(angle + Math.PI / 6)
+            obj.y + obj.height - headLength * Math.sin(angle + Math.PI / 6),
           );
           ctx.stroke();
-        } else if (obj.type === 'rectangle' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        } else if (
+          obj.type === 'rectangle' &&
+          obj.x !== undefined &&
+          obj.y !== undefined &&
+          obj.width !== undefined &&
+          obj.height !== undefined
+        ) {
           if (obj.filled) {
             ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
           } else {
             ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
           }
-        } else if (obj.type === 'ellipse' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        } else if (
+          obj.type === 'ellipse' &&
+          obj.x !== undefined &&
+          obj.y !== undefined &&
+          obj.width !== undefined &&
+          obj.height !== undefined
+        ) {
           ctx.beginPath();
           ctx.ellipse(
             obj.x + obj.width / 2,
@@ -108,14 +135,19 @@ export async function generateThumbnail(
             Math.abs(obj.height) / 2,
             0,
             0,
-            Math.PI * 2
+            Math.PI * 2,
           );
           if (obj.filled) {
             ctx.fill();
           } else {
             ctx.stroke();
           }
-        } else if (obj.type === 'circle' && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined) {
+        } else if (
+          obj.type === 'circle' &&
+          obj.x !== undefined &&
+          obj.y !== undefined &&
+          obj.width !== undefined
+        ) {
           const radius = Math.abs(obj.width) / 2;
           ctx.beginPath();
           ctx.arc(obj.x + radius, obj.y + radius, radius, 0, Math.PI * 2);
@@ -152,7 +184,14 @@ export async function generateThumbnail(
           const fontSize = (obj.fontSize || 24) * 0.8; // Slightly smaller for thumbnail
           ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
           ctx.fillText(obj.text, obj.x, obj.y);
-        } else if (obj.type === 'image' && obj.imageData && obj.x !== undefined && obj.y !== undefined && obj.width !== undefined && obj.height !== undefined) {
+        } else if (
+          obj.type === 'image' &&
+          obj.imageData &&
+          obj.x !== undefined &&
+          obj.y !== undefined &&
+          obj.width !== undefined &&
+          obj.height !== undefined
+        ) {
           // Skip images in thumbnails to keep them lightweight
           // Just draw a placeholder rectangle
           ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
@@ -192,7 +231,7 @@ export class ThumbnailGenerator {
   async generate(
     objects: DrawingObject[],
     worldWidth?: number,
-    worldHeight?: number
+    worldHeight?: number,
   ): Promise<string | null> {
     return new Promise((resolve) => {
       if (this.timeoutId !== null) {

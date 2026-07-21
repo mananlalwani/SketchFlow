@@ -1,14 +1,14 @@
 import { useDrawingStore, type Tool } from '@/store/drawingStore';
 import { Button } from '@/components/ui/button';
-import { 
-  Pen, 
-  Eraser, 
-  Minus, 
-  Square, 
-  Circle, 
+import {
+  Pen,
+  Eraser,
+  Minus,
+  Square,
+  Circle,
   Triangle,
   Star,
-  Type, 
+  Type,
   Hand,
   Move,
   ImageIcon,
@@ -47,13 +47,13 @@ export function Sidebar() {
         <Button
           key={id}
           onClick={() => handleToolClick(id)}
-          variant={currentTool === id ? "default" : "ghost"}
+          variant={currentTool === id ? 'default' : 'ghost'}
           size="icon"
           className={cn(
-            "w-10 h-10 rounded-xl transition-all duration-200",
-            currentTool === id 
-              ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" 
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10"
+            'w-10 h-10 rounded-xl transition-all duration-200',
+            currentTool === id
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10',
           )}
           title={label}
         >

@@ -1,6 +1,6 @@
 /**
  * Error reporting utility with OpenTelemetry integration
- * 
+ *
  * This module provides a simple interface for error reporting that integrates
  * with OpenTelemetry for trace correlation and can be extended for services
  * like Sentry, LogRocket, etc.
@@ -20,7 +20,7 @@ let currentUserId: string | null = null;
  */
 export function reportError(error: Error, context?: ErrorContext): void {
   const traceContext = getTraceContext();
-  
+
   // Record error on current OTel span if available
   recordError(error);
 
@@ -69,7 +69,7 @@ export function reportError(error: Error, context?: ErrorContext): void {
  */
 export function setErrorUser(userId: string | null): void {
   currentUserId = userId;
-  
+
   if (import.meta.env.DEV) {
     console.debug('[Error Tracking] User set:', userId);
   }
@@ -79,7 +79,11 @@ export function setErrorUser(userId: string | null): void {
  * Add breadcrumb for error tracking
  * Creates an OTel span event for trace correlation
  */
-export function addBreadcrumb(message: string, category?: string, data?: Record<string, unknown>): void {
+export function addBreadcrumb(
+  message: string,
+  category?: string,
+  data?: Record<string, unknown>,
+): void {
   const traceContext = getTraceContext();
   const tracer = getTracer();
 
@@ -97,7 +101,7 @@ export function addBreadcrumb(message: string, category?: string, data?: Record<
     }
     span.end();
   }
-  
+
   if (import.meta.env.DEV) {
     console.debug('[Breadcrumb]', category || 'general', message, data, traceContext);
   }

@@ -27,10 +27,20 @@ export function objectIntersectsViewport(
       maxX = Math.max(maxX, point.x);
       maxY = Math.max(maxY, point.y);
     }
-    return !(maxX + margin < viewLeft || minX - margin > viewRight || maxY + margin < viewTop || minY - margin > viewBottom);
+    return !(
+      maxX + margin < viewLeft ||
+      minX - margin > viewRight ||
+      maxY + margin < viewTop ||
+      minY - margin > viewBottom
+    );
   }
 
-  if (object.x === undefined || object.y === undefined || object.width === undefined || object.height === undefined) {
+  if (
+    object.x === undefined ||
+    object.y === undefined ||
+    object.width === undefined ||
+    object.height === undefined
+  ) {
     return true;
   }
   const endX = object.x + object.width;

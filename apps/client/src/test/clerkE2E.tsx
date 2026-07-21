@@ -14,7 +14,11 @@ export function useUser() {
 }
 
 export function useClerk() {
-  return { signOut: async () => undefined, openSignIn: () => undefined, openSignUp: () => undefined };
+  return {
+    signOut: async () => undefined,
+    openSignIn: () => undefined,
+    openSignUp: () => undefined,
+  };
 }
 
 export function SignInButton({ children }: { children: ReactNode }) {

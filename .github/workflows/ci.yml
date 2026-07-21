@@ -17,7 +17,26 @@ jobs:
   test:
     name: Test & Lint
     runs-on: ubuntu-latest
-    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sketchflow
+          POSTGRES_PASSWORD: sketchflow
+          POSTGRES_DB: sketchflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sketchflow -d sketchflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sketchflow:sketchflow@localhost:5432/sketchflow_test?schema=public
+      CLERK_SECRET_KEY: sk_test_ci_only
+      CLERK_PUBLISHABLE_KEY: pk_test_ci_only
+      CORS_ORIGINS: http://127.0.0.1:4173
+
     steps:
       - uses: actions/checkout@v4
 
@@ -36,14 +55,36 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @sketchflow/server db:generate
 
+      - name: Apply migrations to clean database
+        run: pnpm --filter @sketchflow/server db:migrate:deploy
+
       - name: Build workspace
         run: pnpm build
 
       - name: Run all tests
         run: pnpm test
 
-      - name: Lint client
+      - name: Install Playwright browser
+        run: pnpm --filter @sketchflow/client exec playwright install --with-deps chromium
+
+      - name: Run browser and accessibility tests
+        run: pnpm --filter @sketchflow/client test:e2e
+
+      - name: Publish browser test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/client/playwright-report
+            apps/client/test-results
+          if-no-files-found: ignore
+
+      - name: Lint workspace
         run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Type check workspace
         run: pnpm type-check
@@ -55,8 +96,35 @@ jobs:
     name: Container build
     runs-on: ubuntu-latest
     needs: test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sketchflow
+          POSTGRES_PASSWORD: sketchflow
+          POSTGRES_DB: sketchflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sketchflow -d sketchflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - name: Install migration tooling
+        run: pnpm install --frozen-lockfile
+      - name: Apply migrations to container smoke database
+        env:
+          DATABASE_URL: postgresql://sketchflow:sketchflow@localhost:5432/sketchflow_test?schema=public
+        run: pnpm --filter @sketchflow/server db:migrate:deploy
       - uses: docker/setup-buildx-action@v3
       - name: Build production image
         uses: docker/build-push-action@v5
@@ -67,17 +135,18 @@ jobs:
 
       - name: Container smoke test
         run: |
-          docker run -d --rm --name sketchflow-ci -p 3000:3000 \
-            -e DATABASE_URL=postgresql://sketchflow:sketchflow@127.0.0.1:5432/sketchflow \
+          docker run -d --rm --name sketchflow-ci \
+            --network host \
+            -e DATABASE_URL=postgresql://sketchflow:sketchflow@127.0.0.1:5432/sketchflow_test \
             -e CLERK_SECRET_KEY=sk_live_ci_only \
             -e CLERK_PUBLISHABLE_KEY=pk_test_ci_only \
             -e CORS_ORIGINS=http://localhost:3000 \
             sketchflow:ci
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://localhost:3000/api/health >/dev/null; then break; fi
+            if curl --fail --silent http://localhost:3000/api/readyz >/dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent http://localhost:3000/api/health >/dev/null
+          curl --fail --silent http://localhost:3000/api/readyz >/dev/null
           curl --fail --silent http://localhost:3000/draw >/dev/null
           docker stop sketchflow-ci
 

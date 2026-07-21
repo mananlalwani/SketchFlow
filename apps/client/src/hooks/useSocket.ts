@@ -1,7 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/store/authStore';
-import type { ServerToClientEvents, ClientToServerEvents, StrokeData, ShapeData, CanvasSnapshot } from '@/types/socket';
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  StrokeData,
+  ShapeData,
+  CanvasSnapshot,
+} from '@/types/socket';
 
 type SocketInstance = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -83,7 +89,7 @@ class SocketManager {
       reconnectionAttempts: 8,
       reconnectionDelay: 500,
       reconnectionDelayMax: 3000,
-      autoConnect: true
+      autoConnect: true,
     });
 
     this.socket.on('connect', () => {
@@ -126,20 +132,14 @@ class SocketManager {
     }
   }
 
-  on<T extends keyof ServerToClientEvents>(
-    event: T,
-    callback: ServerToClientEvents[T]
-  ) {
+  on<T extends keyof ServerToClientEvents>(event: T, callback: ServerToClientEvents[T]) {
     if (this.socket) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.socket as any).on(event, callback as any);
     }
   }
 
-  off<T extends keyof ServerToClientEvents>(
-    event: T,
-    callback?: ServerToClientEvents[T]
-  ) {
+  off<T extends keyof ServerToClientEvents>(event: T, callback?: ServerToClientEvents[T]) {
     if (this.socket) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.socket as any).off(event, callback as any);
@@ -166,7 +166,7 @@ class SocketManager {
   private notifyListeners(event: string, data: unknown) {
     const eventListeners = this.listeners.get(event);
     if (eventListeners) {
-      eventListeners.forEach(callback => callback(data));
+      eventListeners.forEach((callback) => callback(data));
     }
   }
 
@@ -217,7 +217,7 @@ export const useSocket = () => {
       setConnectionError(error);
     });
 
-    void getToken().then(token => {
+    void getToken().then((token) => {
       if (disposed || !token) return;
       socket = socketManager.connect(token);
       socket.on('connection:count', (count: number) => setConnectionCount(count));
@@ -234,28 +234,33 @@ export const useSocket = () => {
     };
   }, [isGuest, isAuthenticated, getToken]);
 
-  const emit = useCallback(<T extends keyof ClientToServerEvents>(
-    event: T,
-    ...args: Parameters<ClientToServerEvents[T]>
-  ) => {
-    if (!isAuthenticated) return;
-    socketManager.emit(event, ...args);
-  }, [isAuthenticated]);
+  const emit = useCallback(
+    <T extends keyof ClientToServerEvents>(
+      event: T,
+      ...args: Parameters<ClientToServerEvents[T]>
+    ) => {
+      if (!isAuthenticated) return;
+      socketManager.emit(event, ...args);
+    },
+    [isAuthenticated],
+  );
 
-  const on = useCallback(<T extends keyof ServerToClientEvents>(
-    event: T,
-    callback: ServerToClientEvents[T]
-  ) => {
-    if (!isAuthenticated) {
-      return () => { }; // Return no-op cleanup
-    }
-    socketManager.on(event, callback);
-    return () => socketManager.off(event, callback);
-  }, [isAuthenticated]);
+  const on = useCallback(
+    <T extends keyof ServerToClientEvents>(event: T, callback: ServerToClientEvents[T]) => {
+      if (!isAuthenticated) {
+        return () => {}; // Return no-op cleanup
+      }
+      socketManager.on(event, callback);
+      return () => socketManager.off(event, callback);
+    },
+    [isAuthenticated],
+  );
 
   const reconnect = useCallback(() => {
     if (!isAuthenticated) return;
-    void getToken().then(token => { if (token) socketManager.reconnect(token); });
+    void getToken().then((token) => {
+      if (token) socketManager.reconnect(token);
+    });
   }, [isAuthenticated, getToken]);
 
   return {
@@ -265,7 +270,7 @@ export const useSocket = () => {
     emit,
     on,
     reconnect,
-    socket: socketManager
+    socket: socketManager,
   };
 };
 
@@ -273,29 +278,44 @@ export const useSocket = () => {
 export const useDrawingSocket = () => {
   const { emit, on } = useSocket();
 
-  const emitStroke = useCallback((stroke: StrokeData) => {
-    emit('draw:stroke', stroke);
-  }, [emit]);
+  const emitStroke = useCallback(
+    (stroke: StrokeData) => {
+      emit('draw:stroke', stroke);
+    },
+    [emit],
+  );
 
-  const emitStrokes = useCallback((strokes: StrokeData[]) => {
-    emit('draw:strokes', strokes);
-  }, [emit]);
+  const emitStrokes = useCallback(
+    (strokes: StrokeData[]) => {
+      emit('draw:strokes', strokes);
+    },
+    [emit],
+  );
 
-  const emitShape = useCallback((shape: ShapeData) => {
-    emit('draw:shape', shape);
-  }, [emit]);
+  const emitShape = useCallback(
+    (shape: ShapeData) => {
+      emit('draw:shape', shape);
+    },
+    [emit],
+  );
 
-  const emitSnapshot = useCallback((snapshot: CanvasSnapshot) => {
-    emit('canvas:snapshot', snapshot);
-  }, [emit]);
+  const emitSnapshot = useCallback(
+    (snapshot: CanvasSnapshot) => {
+      emit('canvas:snapshot', snapshot);
+    },
+    [emit],
+  );
 
   const emitClear = useCallback(() => {
     emit('canvas:clear');
   }, [emit]);
 
-  const emitProjectState = useCallback((objects: unknown[]) => {
-    emit('project:state', { objects, timestamp: Date.now() });
-  }, [emit]);
+  const emitProjectState = useCallback(
+    (objects: unknown[]) => {
+      emit('project:state', { objects, timestamp: Date.now() });
+    },
+    [emit],
+  );
 
   return {
     emitStroke,
@@ -304,6 +324,6 @@ export const useDrawingSocket = () => {
     emitSnapshot,
     emitClear,
     emitProjectState,
-    on
+    on,
   };
 };

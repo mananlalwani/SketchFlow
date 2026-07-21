@@ -90,7 +90,7 @@ describe('geometry', () => {
         { x: 5, y: 10 },
       ];
       const bbox = getBoundingBox(points);
-      
+
       expect(bbox.minX).toBe(0);
       expect(bbox.minY).toBe(0);
       expect(bbox.maxX).toBe(10);
@@ -184,7 +184,7 @@ describe('geometry', () => {
         { x: 20, y: 0 },
       ];
       const smoothed = smoothPath(points, 3);
-      
+
       // The outlier should be smoothed
       expect(smoothed[1].y).toBeLessThan(10);
     });
@@ -195,7 +195,7 @@ describe('geometry', () => {
       const point = { x: 5, y: 5 };
       const lineStart = { x: 0, y: 0 };
       const lineEnd = { x: 10, y: 0 };
-      
+
       expect(distanceToLine(point, lineStart, lineEnd)).toBe(5);
     });
 
@@ -203,7 +203,7 @@ describe('geometry', () => {
       const point = { x: -5, y: 0 };
       const lineStart = { x: 0, y: 0 };
       const lineEnd = { x: 10, y: 0 };
-      
+
       expect(distanceToLine(point, lineStart, lineEnd)).toBe(5);
     });
   });
@@ -217,7 +217,7 @@ describe('geometry', () => {
         { x: 3, y: 3 },
       ];
       const line = fitLine(points);
-      
+
       expect(line).not.toBeNull();
       expect(line!.slope).toBeCloseTo(1, 5);
       expect(line!.intercept).toBeCloseTo(0, 5);

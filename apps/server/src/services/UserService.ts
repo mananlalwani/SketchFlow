@@ -28,10 +28,7 @@ export class UserService {
   private sessionsDir: string;
   private sessions: Map<string, UserSession> = new Map();
 
-  constructor(
-    usersDirRelative = '../../data/users',
-    sessionsDirRelative = '../../data/sessions'
-  ) {
+  constructor(usersDirRelative = '../../data/users', sessionsDirRelative = '../../data/sessions') {
     this.usersDir = path.join(__dirname, usersDirRelative);
     this.sessionsDir = path.join(__dirname, sessionsDirRelative);
     this.ensureDirs();
@@ -93,7 +90,7 @@ export class UserService {
       username,
       passwordHash: this.hashPassword(password),
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     fs.writeFileSync(this.userPath(id), JSON.stringify(user, null, 2), 'utf-8');
@@ -114,7 +111,7 @@ export class UserService {
   }
 
   public findByEmail(email: string): User | null {
-    const files = fs.readdirSync(this.usersDir).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(this.usersDir).filter((f) => f.endsWith('.json'));
     for (const file of files) {
       try {
         const raw = fs.readFileSync(path.join(this.usersDir, file), 'utf-8');
@@ -130,7 +127,7 @@ export class UserService {
   }
 
   public findByUsername(username: string): User | null {
-    const files = fs.readdirSync(this.usersDir).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(this.usersDir).filter((f) => f.endsWith('.json'));
     for (const file of files) {
       try {
         const raw = fs.readFileSync(path.join(this.usersDir, file), 'utf-8');
@@ -148,7 +145,7 @@ export class UserService {
   public async authenticate(email: string, password: string): Promise<User | null> {
     const user = this.findByEmail(email);
     if (!user) return null;
-    
+
     if (!this.verifyPassword(password, user.passwordHash)) {
       return null;
     }
@@ -159,18 +156,18 @@ export class UserService {
   public createSession(userId: string): UserSession {
     const token = this.generateToken();
     const now = Date.now();
-    const expiresAt = now + (7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = now + 7 * 24 * 60 * 60 * 1000; // 7 days
 
     const session: UserSession = {
       userId,
       token,
       expiresAt,
-      createdAt: now
+      createdAt: now,
     };
 
     this.sessions.set(token, session);
     fs.writeFileSync(this.sessionPath(token), JSON.stringify(session, null, 2), 'utf-8');
-    
+
     return session;
   }
 
@@ -188,7 +185,7 @@ export class UserService {
     try {
       const raw = fs.readFileSync(p, 'utf-8');
       const session = JSON.parse(raw) as UserSession;
-      
+
       if (session.expiresAt <= Date.now()) {
         this.deleteSession(token);
         return null;
@@ -223,14 +220,14 @@ export class UserService {
   }
 
   private loadSessions(): void {
-    const files = fs.readdirSync(this.sessionsDir).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(this.sessionsDir).filter((f) => f.endsWith('.json'));
     const now = Date.now();
-    
+
     for (const file of files) {
       try {
         const raw = fs.readFileSync(path.join(this.sessionsDir, file), 'utf-8');
         const session = JSON.parse(raw) as UserSession;
-        
+
         if (session.expiresAt > now) {
           this.sessions.set(session.token, session);
         } else {
@@ -252,17 +249,3 @@ export class UserService {
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

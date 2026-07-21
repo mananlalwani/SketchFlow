@@ -4,7 +4,10 @@
 import { reportError } from './errorReporting';
 
 export class NetworkError extends Error {
-  constructor(message: string, public statusCode?: number) {
+  constructor(
+    message: string,
+    public statusCode?: number,
+  ) {
     super(message);
     this.name = 'NetworkError';
   }
@@ -74,7 +77,7 @@ export function getUserFriendlyErrorMessage(error: unknown): string {
     if (error.message.includes('quota')) {
       return 'Storage quota exceeded. Please clear some space.';
     }
-    
+
     // Generic error message
     return 'An unexpected error occurred. Please try again.';
   }
@@ -122,12 +125,9 @@ interface ErrorHandlerOptions {
  */
 export function handleError(
   error: unknown,
-  options: ErrorHandlerOptions = {}
+  options: ErrorHandlerOptions = {},
 ): { message: string; suggestion: string | null } {
-  const {
-    context = {},
-    userMessage,
-  } = options;
+  const { context = {}, userMessage } = options;
 
   // Report error for tracking
   if (error instanceof Error) {
@@ -148,14 +148,14 @@ export function handleError(
  */
 export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
-  options: ErrorHandlerOptions = {}
+  options: ErrorHandlerOptions = {},
 ): T {
   return (async (...args: Parameters<T>) => {
     try {
       return await fn(...args);
     } catch (error) {
       const { message, suggestion } = handleError(error, options);
-      
+
       // Re-throw with enhanced error
       const enhancedError = error instanceof Error ? error : new Error(String(error));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,7 +172,7 @@ export function withErrorHandling<T extends (...args: unknown[]) => Promise<unkn
  */
 export async function parseHttpError(response: Response): Promise<NetworkError> {
   let message = response.statusText;
-  
+
   try {
     const data = await response.json();
     if (data.error) {

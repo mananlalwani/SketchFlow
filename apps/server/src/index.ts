@@ -74,26 +74,35 @@ export interface AuthenticatedRequest extends express.Request {
 export class SketchFlowServer {
   private app = express();
   private server = createServer(this.app);
-  private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
+  private io: SocketIOServer<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    Record<string, never>,
+    SocketData
+  >;
   private drawingService = new DrawingService();
   private projectService = new ProjectService();
   private isShuttingDown = false;
-  private clientDistPath = process.env.CLIENT_DIST_PATH || path.join(__dirname, '../../client/dist');
+  private clientDistPath =
+    process.env.CLIENT_DIST_PATH || path.join(__dirname, '../../client/dist');
   private redisPublisher: { quit: () => Promise<unknown> } | null = null;
   private redisSubscriber: { quit: () => Promise<unknown> } | null = null;
 
   constructor() {
-
     // Configure CORS origins for Socket.IO
     // In development, allow all origins with credentials (reflective origin)
-    const corsOrigins = isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0
-      ? env.CORS_ORIGINS
-      : true;
+    const corsOrigins =
+      isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : true;
 
-    this.io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(this.server, {
+    this.io = new SocketIOServer<
+      ClientToServerEvents,
+      ServerToClientEvents,
+      Record<string, never>,
+      SocketData
+    >(this.server, {
       cors: {
         origin: corsOrigins,
-        credentials: true
+        credentials: true,
       },
       maxHttpBufferSize: 10 * 1024 * 1024, // 10MB for better performance
       pingTimeout: 20000,
@@ -109,7 +118,10 @@ export class SketchFlowServer {
     this.setupMiddleware();
     this.setupRoutes();
     this.setupSocketHandlers();
-    setInterval(() => this.drawingService.cleanupInactiveCanvases(30 * 60 * 1000), 5 * 60 * 1000).unref();
+    setInterval(
+      () => this.drawingService.cleanupInactiveCanvases(30 * 60 * 1000),
+      5 * 60 * 1000,
+    ).unref();
     void this.setupRedisAdapter();
   }
 
@@ -121,8 +133,8 @@ export class SketchFlowServer {
 
     const publisher = createClient({ url: env.REDIS_URL });
     const subscriber = publisher.duplicate();
-    publisher.on('error', error => logger.error('Redis publisher error', error));
-    subscriber.on('error', error => logger.error('Redis subscriber error', error));
+    publisher.on('error', (error) => logger.error('Redis publisher error', error));
+    subscriber.on('error', (error) => logger.error('Redis subscriber error', error));
 
     try {
       await Promise.all([publisher.connect(), subscriber.connect()]);
@@ -131,7 +143,10 @@ export class SketchFlowServer {
       this.redisSubscriber = subscriber;
       logger.info('Socket.IO Redis adapter connected');
     } catch (error) {
-      logger.error('Socket.IO Redis adapter unavailable; continuing in single-instance mode', error);
+      logger.error(
+        'Socket.IO Redis adapter unavailable; continuing in single-instance mode',
+        error,
+      );
       await Promise.allSettled([publisher.disconnect(), subscriber.disconnect()]);
     }
   }
@@ -139,14 +154,15 @@ export class SketchFlowServer {
   private setupMiddleware(): void {
     // CORS middleware (must be before all routes/static)
     // In development, allow all origins with credentials (reflective origin)
-    const corsOrigins = isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0
-      ? env.CORS_ORIGINS
-      : true;
+    const corsOrigins =
+      isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : true;
 
-    this.app.use(cors({
-      origin: corsOrigins,
-      credentials: true,
-    }));
+    this.app.use(
+      cors({
+        origin: corsOrigins,
+        credentials: true,
+      }),
+    );
     // Request ID for correlation (must be first)
     this.app.use(requestIdMiddleware);
 
@@ -162,7 +178,7 @@ export class SketchFlowServer {
     // Rate limiting for auth endpoints
     const authRateLimiter = rateLimitMiddleware({
       windowMs: 60 * 1000, // 1 minute
-      maxRequests: 30,     // 30 requests per minute
+      maxRequests: 30, // 30 requests per minute
     });
 
     // Apply rate limiting to auth-heavy endpoints
@@ -183,18 +199,20 @@ export class SketchFlowServer {
     });
 
     // Static files - serve the built client
-    this.app.use(express.static(this.clientDistPath, {
-      // Cache static assets aggressively in production
-      maxAge: isProd ? '1y' : 0,
-      etag: true,
-      lastModified: true,
-      // Don't cache HTML
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
-          res.setHeader('Cache-Control', 'no-cache');
-        }
-      },
-    }));
+    this.app.use(
+      express.static(this.clientDistPath, {
+        // Cache static assets aggressively in production
+        maxAge: isProd ? '1y' : 0,
+        etag: true,
+        lastModified: true,
+        // Don't cache HTML
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+          }
+        },
+      }),
+    );
 
     // Body parsing with limits
     this.app.use(express.json({ limit: '10mb' }));
@@ -280,15 +298,20 @@ export class SketchFlowServer {
     };
 
     // Project APIs (require authentication)
-    this.app.get('/api/projects', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const list = await this.projectService.list(userId);
-        res.json(list);
-      } catch {
-        res.status(500).json({ error: 'Failed to list projects' });
-      }
-    });
+    this.app.get(
+      '/api/projects',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const list = await this.projectService.list(userId);
+          res.json(list);
+        } catch {
+          res.status(500).json({ error: 'Failed to list projects' });
+        }
+      },
+    );
 
     // Public endpoint for shared projects (no auth required)
     this.app.get('/api/projects/shared/:token', async (req, res) => {
@@ -297,239 +320,344 @@ export class SketchFlowServer {
       res.json(record);
     });
 
-    this.app.get('/api/projects/:id', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      const userId = req.auth!.userId!;
-      const record = await this.projectService.get(req.params.id, userId);
-      if (!record) return res.status(404).json({ error: 'Not found' });
-      res.json(record);
-    });
-
-    this.app.post('/api/projects', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
+    this.app.get(
+      '/api/projects/:id',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
         const userId = req.auth!.userId!;
-        const parsed = projectInputSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
-        const { title, data } = parsed.data;
-        const created = await this.projectService.create(userId, title || 'Untitled', data ?? {});
-        res.json(created);
-      } catch {
-        res.status(500).json({ error: 'Failed to create project' });
-      }
-    });
+        const record = await this.projectService.get(req.params.id, userId);
+        if (!record) return res.status(404).json({ error: 'Not found' });
+        res.json(record);
+      },
+    );
 
-    this.app.put('/api/projects/:id', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const parsed = projectInputSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
-        const { title, data, expectedRevision } = parsed.data;
-        const saved = await this.projectService.save(req.params.id, userId, title || 'Untitled', data ?? {}, expectedRevision);
-        res.json(saved);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to save project';
-        const status = error instanceof Error && error.name === 'ProjectConflictError'
-          ? 409
-          : error instanceof Error && error.name === 'ProjectAccessError'
-            ? 403
-            : 500;
-        res.status(status).json({ error: message });
-      }
-    });
-
-    this.app.delete('/api/projects/:id', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const deleted = await this.projectService.delete(req.params.id, userId);
-        if (deleted) {
-          res.json({ success: true });
-        } else {
-          res.status(404).json({ error: 'Project not found' });
+    this.app.post(
+      '/api/projects',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const parsed = projectInputSchema.safeParse(req.body);
+          if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
+          const { title, data } = parsed.data;
+          const created = await this.projectService.create(userId, title || 'Untitled', data ?? {});
+          res.json(created);
+        } catch {
+          res.status(500).json({ error: 'Failed to create project' });
         }
-      } catch {
-        res.status(500).json({ error: 'Failed to delete project' });
-      }
-    });
+      },
+    );
+
+    this.app.put(
+      '/api/projects/:id',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const parsed = projectInputSchema.safeParse(req.body);
+          if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
+          const { title, data, expectedRevision } = parsed.data;
+          const saved = await this.projectService.save(
+            req.params.id,
+            userId,
+            title || 'Untitled',
+            data ?? {},
+            expectedRevision,
+          );
+          res.json(saved);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to save project';
+          const status =
+            error instanceof Error && error.name === 'ProjectConflictError'
+              ? 409
+              : error instanceof Error && error.name === 'ProjectAccessError'
+                ? 403
+                : 500;
+          res.status(status).json({ error: message });
+        }
+      },
+    );
+
+    this.app.delete(
+      '/api/projects/:id',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const deleted = await this.projectService.delete(req.params.id, userId);
+          if (deleted) {
+            res.json({ success: true });
+          } else {
+            res.status(404).json({ error: 'Project not found' });
+          }
+        } catch {
+          res.status(500).json({ error: 'Failed to delete project' });
+        }
+      },
+    );
 
     // Share/unshare endpoints
-    this.app.post('/api/projects/:id/share', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const shared = await this.projectService.shareProject(req.params.id, userId);
-        if (!shared) {
-          return res.status(404).json({ error: 'Project not found' });
+    this.app.post(
+      '/api/projects/:id/share',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const shared = await this.projectService.shareProject(req.params.id, userId);
+          if (!shared) {
+            return res.status(404).json({ error: 'Project not found' });
+          }
+          res.json({
+            shareToken: shared.shareToken,
+            expiresAt: shared.shareExpiresAt,
+            shareUrl: `${env.CLIENT_URL || req.protocol + '://' + req.get('host')}/draw?share=${shared.shareToken}`,
+          });
+        } catch {
+          res.status(500).json({ error: 'Failed to share project' });
         }
-        res.json({
-          shareToken: shared.shareToken,
-          expiresAt: shared.shareExpiresAt,
-          shareUrl: `${env.CLIENT_URL || (req.protocol + '://' + req.get('host'))}/draw?share=${shared.shareToken}`
-        });
-      } catch {
-        res.status(500).json({ error: 'Failed to share project' });
-      }
-    });
+      },
+    );
 
-    this.app.post('/api/projects/:id/unshare', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const unshared = await this.projectService.unshareProject(req.params.id, userId);
-        if (!unshared) {
-          return res.status(404).json({ error: 'Project not found' });
+    this.app.post(
+      '/api/projects/:id/unshare',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const unshared = await this.projectService.unshareProject(req.params.id, userId);
+          if (!unshared) {
+            return res.status(404).json({ error: 'Project not found' });
+          }
+          res.json({ success: true });
+        } catch {
+          res.status(500).json({ error: 'Failed to unshare project' });
         }
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ error: 'Failed to unshare project' });
-      }
-    });
+      },
+    );
 
     // Collaborator endpoints
-    this.app.get('/api/projects/:id/collaborators', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const collaborators = await this.projectService.getCollaborators(req.params.id, userId);
-
-        // Enrich with email addresses from Clerk
-        const enrichedCollaborators = await Promise.all(
-          collaborators.map(async (c) => {
-            try {
-              const user = await clerkClient.users.getUser(c.userId);
-              return {
-                ...c,
-                email: user.emailAddresses[0]?.emailAddress || undefined
-              };
-            } catch {
-              return { ...c, email: undefined };
-            }
-          })
-        );
-
-        res.json(enrichedCollaborators);
-      } catch {
-        res.status(500).json({ error: 'Failed to get collaborators' });
-      }
-    });
-
-    this.app.post('/api/projects/:id/collaborators', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const parsed = collaboratorInputSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Invalid collaborator payload' });
-        const { email, role } = parsed.data;
-
-        // Look up user by email using Clerk
-        let collaboratorUserId: string | null = null;
+    this.app.get(
+      '/api/projects/:id/collaborators',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
         try {
-          const users = await clerkClient.users.getUserList({
-            emailAddress: [email.trim()]
-          });
-          if (users.data.length > 0) {
-            collaboratorUserId = users.data[0].id;
+          const userId = req.auth!.userId!;
+          const collaborators = await this.projectService.getCollaborators(req.params.id, userId);
+
+          // Enrich with email addresses from Clerk
+          const enrichedCollaborators = await Promise.all(
+            collaborators.map(async (c) => {
+              try {
+                const user = await clerkClient.users.getUser(c.userId);
+                return {
+                  ...c,
+                  email: user.emailAddresses[0]?.emailAddress || undefined,
+                };
+              } catch {
+                return { ...c, email: undefined };
+              }
+            }),
+          );
+
+          res.json(enrichedCollaborators);
+        } catch {
+          res.status(500).json({ error: 'Failed to get collaborators' });
+        }
+      },
+    );
+
+    this.app.post(
+      '/api/projects/:id/collaborators',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const parsed = collaboratorInputSchema.safeParse(req.body);
+          if (!parsed.success)
+            return res.status(400).json({ error: 'Invalid collaborator payload' });
+          const { email, role } = parsed.data;
+
+          // Look up user by email using Clerk
+          let collaboratorUserId: string | null = null;
+          try {
+            const users = await clerkClient.users.getUserList({
+              emailAddress: [email.trim()],
+            });
+            if (users.data.length > 0) {
+              collaboratorUserId = users.data[0].id;
+            }
+          } catch (e) {
+            logger.error('Failed to look up user by email', e);
           }
-        } catch (e) {
-          logger.error('Failed to look up user by email', e);
-        }
 
-        if (!collaboratorUserId) {
-          return res.status(404).json({ error: 'User not found with that email' });
-        }
+          if (!collaboratorUserId) {
+            return res.status(404).json({ error: 'User not found with that email' });
+          }
 
-        // Extra safety check: prevent adding yourself
-        if (collaboratorUserId === userId) {
-          return res.status(400).json({ error: 'Cannot add yourself as a collaborator' });
-        }
+          // Extra safety check: prevent adding yourself
+          if (collaboratorUserId === userId) {
+            return res.status(400).json({ error: 'Cannot add yourself as a collaborator' });
+          }
 
-        logger.info(`Adding collaborator ${collaboratorUserId} to project ${req.params.id} by owner ${userId}`);
+          logger.info(
+            `Adding collaborator ${collaboratorUserId} to project ${req.params.id} by owner ${userId}`,
+          );
 
-        const added = await this.projectService.addCollaborator(req.params.id, userId, collaboratorUserId, role || 'editor');
-        if (!added) {
-          return res.status(404).json({ error: 'Project not found or unauthorized' });
+          const added = await this.projectService.addCollaborator(
+            req.params.id,
+            userId,
+            collaboratorUserId,
+            role || 'editor',
+          );
+          if (!added) {
+            return res.status(404).json({ error: 'Project not found or unauthorized' });
+          }
+          res.json({ success: true });
+        } catch {
+          res.status(500).json({ error: 'Failed to add collaborator' });
         }
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ error: 'Failed to add collaborator' });
-      }
-    });
+      },
+    );
 
-    this.app.delete('/api/projects/:id/collaborators/:collaboratorUserId', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const removed = await this.projectService.removeCollaborator(req.params.id, userId, req.params.collaboratorUserId);
-        if (!removed) {
-          return res.status(404).json({ error: 'Project not found or unauthorized' });
+    this.app.delete(
+      '/api/projects/:id/collaborators/:collaboratorUserId',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const removed = await this.projectService.removeCollaborator(
+            req.params.id,
+            userId,
+            req.params.collaboratorUserId,
+          );
+          if (!removed) {
+            return res.status(404).json({ error: 'Project not found or unauthorized' });
+          }
+          res.json({ success: true });
+        } catch {
+          res.status(500).json({ error: 'Failed to remove collaborator' });
         }
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ error: 'Failed to remove collaborator' });
-      }
-    });
+      },
+    );
 
     // Move project to folder
-    this.app.post('/api/projects/:id/move', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const parsed = moveProjectSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Invalid move payload' });
-        const moved = await this.projectService.moveToFolder(req.params.id, userId, parsed.data.folderId);
-        if (!moved) {
-          return res.status(404).json({ error: 'Project not found' });
+    this.app.post(
+      '/api/projects/:id/move',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const parsed = moveProjectSchema.safeParse(req.body);
+          if (!parsed.success) return res.status(400).json({ error: 'Invalid move payload' });
+          const moved = await this.projectService.moveToFolder(
+            req.params.id,
+            userId,
+            parsed.data.folderId,
+          );
+          if (!moved) {
+            return res.status(404).json({ error: 'Project not found' });
+          }
+          res.json({ success: true });
+        } catch {
+          res.status(500).json({ error: 'Failed to move project' });
         }
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ error: 'Failed to move project' });
-      }
-    });
+      },
+    );
 
     // Folder APIs
-    this.app.get('/api/folders', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const folders = await this.projectService.listFolders(userId);
-        res.json(folders);
-      } catch {
-        res.status(500).json({ error: 'Failed to list folders' });
-      }
-    });
-
-    this.app.post('/api/folders', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const parsed = folderInputSchema.safeParse(req.body);
-        if (!parsed.success || !parsed.data.name) return res.status(400).json({ error: 'Invalid folder payload' });
-        const { name, color, parentId } = parsed.data;
-        const folder = await this.projectService.createFolder(userId, name || 'New Folder', color, parentId);
-        res.json(folder);
-      } catch {
-        res.status(500).json({ error: 'Failed to create folder' });
-      }
-    });
-
-    this.app.put('/api/folders/:id', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const parsed = folderInputSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Invalid folder payload' });
-        const { name, color, parentId } = parsed.data;
-        const folder = await this.projectService.updateFolder(req.params.id, userId, name, color, parentId);
-        if (!folder) {
-          return res.status(404).json({ error: 'Folder not found' });
+    this.app.get(
+      '/api/folders',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const folders = await this.projectService.listFolders(userId);
+          res.json(folders);
+        } catch {
+          res.status(500).json({ error: 'Failed to list folders' });
         }
-        res.json(folder);
-      } catch {
-        res.status(500).json({ error: 'Failed to update folder' });
-      }
-    });
+      },
+    );
 
-    this.app.delete('/api/folders/:id', requireAuth(), requireAuthMiddleware(), async (req: AuthenticatedRequest, res) => {
-      try {
-        const userId = req.auth!.userId!;
-        const deleted = await this.projectService.deleteFolder(req.params.id, userId);
-        if (!deleted) {
-          return res.status(404).json({ error: 'Folder not found' });
+    this.app.post(
+      '/api/folders',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const parsed = folderInputSchema.safeParse(req.body);
+          if (!parsed.success || !parsed.data.name)
+            return res.status(400).json({ error: 'Invalid folder payload' });
+          const { name, color, parentId } = parsed.data;
+          const folder = await this.projectService.createFolder(
+            userId,
+            name || 'New Folder',
+            color,
+            parentId,
+          );
+          res.json(folder);
+        } catch {
+          res.status(500).json({ error: 'Failed to create folder' });
         }
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ error: 'Failed to delete folder' });
-      }
-    });
+      },
+    );
+
+    this.app.put(
+      '/api/folders/:id',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const parsed = folderInputSchema.safeParse(req.body);
+          if (!parsed.success) return res.status(400).json({ error: 'Invalid folder payload' });
+          const { name, color, parentId } = parsed.data;
+          const folder = await this.projectService.updateFolder(
+            req.params.id,
+            userId,
+            name,
+            color,
+            parentId,
+          );
+          if (!folder) {
+            return res.status(404).json({ error: 'Folder not found' });
+          }
+          res.json(folder);
+        } catch {
+          res.status(500).json({ error: 'Failed to update folder' });
+        }
+      },
+    );
+
+    this.app.delete(
+      '/api/folders/:id',
+      requireAuth(),
+      requireAuthMiddleware(),
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const userId = req.auth!.userId!;
+          const deleted = await this.projectService.deleteFolder(req.params.id, userId);
+          if (!deleted) {
+            return res.status(404).json({ error: 'Folder not found' });
+          }
+          res.json({ success: true });
+        } catch {
+          res.status(500).json({ error: 'Failed to delete folder' });
+        }
+      },
+    );
 
     // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
@@ -546,7 +674,8 @@ export class SketchFlowServer {
         return next(new Error('Server connection limit reached'));
       }
       const token = socket.handshake.auth.token;
-      if (typeof token !== 'string' || token.length === 0) return next(new Error('Authentication required'));
+      if (typeof token !== 'string' || token.length === 0)
+        return next(new Error('Authentication required'));
 
       try {
         const request = new Request('http://localhost/socket.io', {
@@ -559,13 +688,21 @@ export class SketchFlowServer {
         if (typeof exp === 'number') socket.data.sessionExpiresAt = exp * 1000;
         next();
       } catch (error) {
-        logger.warn('Socket authentication failed', { error: error instanceof Error ? error.message : String(error) });
+        logger.warn('Socket authentication failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
         next(new Error('Invalid authentication token'));
       }
     });
 
     // Track active cursors per room
-    const roomCursors = new Map<string, Map<string, { userId: string; username: string; x: number; y: number; color: string; timestamp: number }>>();
+    const roomCursors = new Map<
+      string,
+      Map<
+        string,
+        { userId: string; username: string; x: number; y: number; color: string; timestamp: number }
+      >
+    >();
 
     // Generate color for user
     const getUserColor = (userId: string): string => {
@@ -579,7 +716,10 @@ export class SketchFlowServer {
       let currentRoom: string | null = null;
       const currentUserId = socket.data.userId ?? null;
       const sessionExpiryTimer = socket.data.sessionExpiresAt
-        ? setTimeout(() => socket.disconnect(true), Math.max(0, socket.data.sessionExpiresAt - Date.now()))
+        ? setTimeout(
+            () => socket.disconnect(true),
+            Math.max(0, socket.data.sessionExpiresAt - Date.now()),
+          )
         : null;
       let operationWindowStartedAt = Date.now();
       let operationCount = 0;
@@ -617,7 +757,11 @@ export class SketchFlowServer {
         if (!currentRoom || !currentUserId) return false;
 
         // Check permission
-        const canEdit = await this.projectService.checkPermission(currentRoom, currentUserId, 'edit');
+        const canEdit = await this.projectService.checkPermission(
+          currentRoom,
+          currentUserId,
+          'edit',
+        );
         return canEdit;
       };
 
@@ -629,8 +773,10 @@ export class SketchFlowServer {
         }
 
         // Check if user has edit permission
-        if (!currentRoom || !currentUserId || !await canUserEdit()) {
-          logger.warn(`User ${currentUserId ?? clientId} attempted to draw without project edit permission`);
+        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
+          logger.warn(
+            `User ${currentUserId ?? clientId} attempted to draw without project edit permission`,
+          );
           return;
         }
 
@@ -650,14 +796,16 @@ export class SketchFlowServer {
         if (!Array.isArray(strokes) || strokes.length === 0) return;
 
         // Check edit permission
-        if (!currentRoom || !currentUserId || !await canUserEdit()) {
-          logger.warn(`User ${currentUserId ?? clientId} attempted to draw without project edit permission`);
+        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
+          logger.warn(
+            `User ${currentUserId ?? clientId} attempted to draw without project edit permission`,
+          );
           return;
         }
 
         const validStrokes = strokes
           .slice(0, 100) // Limit batch size
-          .filter(s => this.isValidStroke(s));
+          .filter((s) => this.isValidStroke(s));
 
         if (validStrokes.length === 0) return;
 
@@ -680,8 +828,10 @@ export class SketchFlowServer {
         }
 
         // Check edit permission
-        if (!currentRoom || !currentUserId || !await canUserEdit()) {
-          logger.warn(`User ${currentUserId ?? clientId} attempted to draw without project edit permission`);
+        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
+          logger.warn(
+            `User ${currentUserId ?? clientId} attempted to draw without project edit permission`,
+          );
           return;
         }
 
@@ -699,7 +849,7 @@ export class SketchFlowServer {
       // Handle canvas snapshots
       socket.on('canvas:snapshot', async (snapshot: CanvasSnapshot) => {
         if (!currentRoom || !currentUserId) return;
-        if (!await canUserEdit()) return;
+        if (!(await canUserEdit())) return;
         if (!this.isValidSnapshot(snapshot)) {
           logger.warn(`Invalid snapshot from ${clientId}`);
           return;
@@ -722,8 +872,10 @@ export class SketchFlowServer {
       // Handle clear canvas
       socket.on('canvas:clear', async () => {
         // Check edit permission
-        if (!currentRoom || !currentUserId || !await canUserEdit()) {
-          logger.warn(`User ${currentUserId ?? clientId} attempted to clear without project edit permission`);
+        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
+          logger.warn(
+            `User ${currentUserId ?? clientId} attempted to clear without project edit permission`,
+          );
           return;
         }
 
@@ -740,13 +892,23 @@ export class SketchFlowServer {
       });
 
       socket.on('project:state', async (data: { objects: unknown[]; timestamp: number }) => {
-        if (!currentRoom || !currentUserId || !Array.isArray(data?.objects) || !await canUserEdit()) return;
+        if (
+          !currentRoom ||
+          !currentUserId ||
+          !Array.isArray(data?.objects) ||
+          !(await canUserEdit())
+        )
+          return;
         socket.to(currentRoom).emit('project:state', data);
       });
 
       // Handle room join
       socket.on('room:join', async (projectId: string) => {
-        if (typeof projectId !== 'string' || !currentUserId || !await this.projectService.checkPermission(projectId, currentUserId, 'view')) {
+        if (
+          typeof projectId !== 'string' ||
+          !currentUserId ||
+          !(await this.projectService.checkPermission(projectId, currentUserId, 'view'))
+        ) {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
         }
@@ -764,7 +926,9 @@ export class SketchFlowServer {
         currentRoom = projectId;
         socket.join(projectId);
 
-        const currentSnapshot = this.drawingService.getCurrentSnapshot(projectId) ?? await this.projectService.getCollaborationSnapshot(projectId);
+        const currentSnapshot =
+          this.drawingService.getCurrentSnapshot(projectId) ??
+          (await this.projectService.getCollaborationSnapshot(projectId));
         if (currentSnapshot) socket.emit('canvas:snapshot', currentSnapshot);
 
         // Log room join for debugging
@@ -803,8 +967,12 @@ export class SketchFlowServer {
         if (!currentRoom) return;
 
         // Validate cursor data
-        if (!cursor || typeof cursor.userId !== 'string' ||
-          typeof cursor.x !== 'number' || typeof cursor.y !== 'number') {
+        if (
+          !cursor ||
+          typeof cursor.userId !== 'string' ||
+          typeof cursor.x !== 'number' ||
+          typeof cursor.y !== 'number'
+        ) {
           return;
         }
 
@@ -825,7 +993,7 @@ export class SketchFlowServer {
             x: cursor.x,
             y: cursor.y,
             color: cursor.color,
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
         }
 
@@ -939,13 +1107,18 @@ export class SketchFlowServer {
 
         logger.info(`Server running on:`);
         logger.info(`   - http://localhost:${env.PORT}`);
-        ips.forEach(ip => logger.info(`   - http://${ip}:${env.PORT}`));
+        ips.forEach((ip) => logger.info(`   - http://${ip}:${env.PORT}`));
 
         // Log configured CORS origins for verification in production
         try {
-          const corsInfo = Array.isArray(env.CORS_ORIGINS) && env.CORS_ORIGINS.length > 0
-            ? env.CORS_ORIGINS
-            : (process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean) : ['*']);
+          const corsInfo =
+            Array.isArray(env.CORS_ORIGINS) && env.CORS_ORIGINS.length > 0
+              ? env.CORS_ORIGINS
+              : process.env.CORS_ORIGINS
+                ? process.env.CORS_ORIGINS.split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                : ['*'];
           logger.info('Configured CORS origins', { corsOrigins: corsInfo });
         } catch (e) {
           logger.warn('Failed to parse CORS_ORIGINS for logging', { error: String(e) });

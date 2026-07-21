@@ -47,12 +47,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
               <AlertTriangle className="w-8 h-8 text-red-500" />
             </div>
-            
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Something went wrong</h1>
+
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+              Something went wrong
+            </h1>
             <p className="text-slate-600 dark:text-slate-400 mb-6">
               The application encountered an unexpected error. Please try refreshing the page.
             </p>
-            
+
             {this.state.error && (
               <details className="text-left mb-6 p-4 bg-slate-100 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-white/10">
                 <summary className="text-sm font-medium cursor-pointer text-slate-700 dark:text-slate-300">
@@ -65,7 +67,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 </pre>
               </details>
             )}
-            
+
             <div className="flex gap-3 justify-center">
               <Button
                 variant="outline"

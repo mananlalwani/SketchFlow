@@ -1,4 +1,10 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useSearchParams,
+} from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { DrawingCanvas } from '@/components/DrawingCanvas';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -16,16 +22,16 @@ import { getSharedProject } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 function EditorRoute() {
-  const { 
-    objectCount, 
-    currentProjectId, 
-    setObjects, 
-    replaceHistory, 
-    setProjectTitle, 
-    requestFullRedraw, 
+  const {
+    objectCount,
+    currentProjectId,
+    setObjects,
+    replaceHistory,
+    setProjectTitle,
+    requestFullRedraw,
     setCurrentProject,
     setProjectRole,
-    projectRole
+    projectRole,
   } = useDrawingStore();
   const { userId, isLoaded } = useAuth();
   const [initialized, setInitialized] = useState(false);
@@ -36,7 +42,7 @@ function EditorRoute() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    
+
     // If we have a share token, prioritize loading that
     if (shareToken) {
       // If we are already displaying this project, don't reload
@@ -45,7 +51,7 @@ function EditorRoute() {
       const loadShared = async () => {
         try {
           const record = await getSharedProject<string>(shareToken);
-          
+
           // Skip if this project is already loaded
           if (currentProjectId === record.id) {
             setInitialized(true);
@@ -53,21 +59,21 @@ function EditorRoute() {
           }
 
           const objects = deserializeProject(record.data);
-          
+
           setObjects(objects);
           replaceHistory(objects);
           setProjectTitle(record.title || 'Shared Project');
-          setCurrentProject(record.id); 
+          setCurrentProject(record.id);
           setProjectRole(record.role || 'viewer');
           requestFullRedraw();
-          
+
           setInitialized(true);
         } catch (e) {
           console.error('Failed to load shared project', e);
-          toast({ 
-            title: 'Failed to load shared project', 
+          toast({
+            title: 'Failed to load shared project',
             description: 'The project may no longer be available.',
-            variant: 'destructive' 
+            variant: 'destructive',
           });
           setInitialized(true);
         }
@@ -86,25 +92,37 @@ function EditorRoute() {
 
     // Try to restore local work if not logged in or no last cloud project
     if (!userId && localWork) {
-       try {
-         const { title, data } = JSON.parse(localWork);
-         const objects = deserializeProject(data);
-         setObjects(objects);
-         replaceHistory(objects);
-         setProjectTitle(title);
-         requestFullRedraw();
-         // Don't set currentProjectId for local work to keep it "unsaved" relative to cloud
-       } catch (e) {
-         console.error('Failed to restore local work', e);
-       }
-       setInitialized(true);
-       return;
+      try {
+        const { title, data } = JSON.parse(localWork);
+        const objects = deserializeProject(data);
+        setObjects(objects);
+        replaceHistory(objects);
+        setProjectTitle(title);
+        requestFullRedraw();
+        // Don't set currentProjectId for local work to keep it "unsaved" relative to cloud
+      } catch (e) {
+        console.error('Failed to restore local work', e);
+      }
+      setInitialized(true);
+      return;
     }
 
     // If we have a last project ID and are logged in, we might want to load it (handled by user usually, or auto-load?)
     // For now, let's just show the welcome screen if no active project
     setInitialized(true);
-  }, [isLoaded, userId, currentProjectId, setObjects, replaceHistory, setProjectTitle, setProjectRole, requestFullRedraw, shareToken, setCurrentProject, toast]);
+  }, [
+    isLoaded,
+    userId,
+    currentProjectId,
+    setObjects,
+    replaceHistory,
+    setProjectTitle,
+    setProjectRole,
+    requestFullRedraw,
+    shareToken,
+    setCurrentProject,
+    toast,
+  ]);
 
   // Show tutorial on first visit
   useEffect(() => {
@@ -120,11 +138,11 @@ function EditorRoute() {
 
   // Show ProjectManager (Welcome Screen) if no content and no active project
   if (!currentProjectId && objectCount === 0) {
-     return (
-        <Layout hideDrawingTools>
-           <ProjectManager onSelect={() => {}} />
-        </Layout>
-     );
+    return (
+      <Layout hideDrawingTools>
+        <ProjectManager onSelect={() => {}} />
+      </Layout>
+    );
   }
 
   return (
@@ -140,7 +158,7 @@ function EditorRoute() {
 function App() {
   const { isConnected } = useSocket();
   const { setConnectionStatus } = useDrawingStore();
-  
+
   // Handle automatic migration of guest projects when user signs in
   useProjectMigration();
 
@@ -153,13 +171,10 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<Navigate to="/draw" replace />} />
-          
+
           {/* Editor Route wrapped in Layout with logic */}
-          <Route 
-            path="/draw" 
-            element={<EditorRoute />} 
-          />
-          
+          <Route path="/draw" element={<EditorRoute />} />
+
           <Route path="*" element={<Navigate to="/draw" replace />} />
         </Routes>
         <Toaster />

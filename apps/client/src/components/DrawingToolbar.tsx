@@ -3,24 +3,36 @@ import { useDrawingStore, type Tool } from '@/store/drawingStore';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
 import { ColorPicker } from './ColorPicker';
-import { 
-  Pen, 
-  Eraser, 
-  Minus, 
-  Square, 
-  Circle, 
+import {
+  Pen,
+  Eraser,
+  Minus,
+  Square,
+  Circle,
   Triangle,
   Star,
-  Type, 
+  Type,
   Palette,
   Hand,
-  Move
+  Move,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDrawingSocket } from '@/hooks/useSocket';
 import { useToast } from '@/hooks/use-toast';
-import { serializeProject, deserializeProject, saveEncryptedOffline, loadEncryptedOffline, listOfflineProjects } from '@/lib/utils';
-import { createProject, updateProject, getProject, listProjects, type ProjectListItem } from '@/lib/api';
+import {
+  serializeProject,
+  deserializeProject,
+  saveEncryptedOffline,
+  loadEncryptedOffline,
+  listOfflineProjects,
+} from '@/lib/utils';
+import {
+  createProject,
+  updateProject,
+  getProject,
+  listProjects,
+  type ProjectListItem,
+} from '@/lib/api';
 import { announceToScreenReader } from '@/hooks/useAccessibility';
 import { FEATURES } from '@/config/features';
 
@@ -30,9 +42,21 @@ const tools = [
   { id: 'pen', icon: Pen, label: 'Pen', shortcut: 'P', ariaLabel: 'Pen tool (P)' },
   { id: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E', ariaLabel: 'Eraser tool (E)' },
   { id: 'line', icon: Minus, label: 'Line', shortcut: 'L', ariaLabel: 'Line tool (L)' },
-  { id: 'rectangle', icon: Square, label: 'Rectangle', shortcut: 'R', ariaLabel: 'Rectangle tool (R)' },
+  {
+    id: 'rectangle',
+    icon: Square,
+    label: 'Rectangle',
+    shortcut: 'R',
+    ariaLabel: 'Rectangle tool (R)',
+  },
   { id: 'ellipse', icon: Circle, label: 'Ellipse', shortcut: 'O', ariaLabel: 'Ellipse tool (O)' },
-  { id: 'triangle', icon: Triangle, label: 'Triangle', shortcut: 'T', ariaLabel: 'Triangle tool (T)' },
+  {
+    id: 'triangle',
+    icon: Triangle,
+    label: 'Triangle',
+    shortcut: 'T',
+    ariaLabel: 'Triangle tool (T)',
+  },
   { id: 'star', icon: Star, label: 'Star', shortcut: 'S', ariaLabel: 'Star tool (S)' },
   { id: 'text', icon: Type, label: 'Text', shortcut: 'X', ariaLabel: 'Text tool (X)' },
 ] as const;
@@ -53,7 +77,7 @@ export function DrawingToolbar() {
     unsavedChanges,
     eraserMode,
     showToolbar,
-    
+
     setTool,
     setEraserMode,
     setBrushSize,
@@ -62,14 +86,14 @@ export function DrawingToolbar() {
     setTriangleMode,
     setAutoShape,
     setAutoShapeThresholds,
-    
+
     clearCanvas,
     toggleToolbar,
     setProjectTitle,
     markSaved,
-    newProject
+    newProject,
   } = useDrawingStore();
-  
+
   const safeT = {
     closureFactor: autoShapeThresholds?.closureFactor ?? 0.3,
     rectCornerMin: autoShapeThresholds?.rectCornerMin ?? 2,
@@ -80,14 +104,16 @@ export function DrawingToolbar() {
     winnerMargin: autoShapeThresholds?.winnerMargin ?? 0.1,
     minSizePx: autoShapeThresholds?.minSizePx ?? 10,
     resampleStep: autoShapeThresholds?.resampleStep ?? 2,
-    minParabolaCurvature: autoShapeThresholds?.minParabolaCurvature ?? 1.4
+    minParabolaCurvature: autoShapeThresholds?.minParabolaCurvature ?? 1.4,
   } as const;
 
   const { emitClear } = useDrawingSocket();
   const { toast } = useToast();
 
   const handleClearCanvas = () => {
-    const userConfirmed = window.confirm('Are you sure you want to clear the canvas? This action cannot be undone.');
+    const userConfirmed = window.confirm(
+      'Are you sure you want to clear the canvas? This action cannot be undone.',
+    );
     if (userConfirmed) {
       clearCanvas();
       emitClear();
@@ -115,21 +141,42 @@ export function DrawingToolbar() {
     } catch (e) {
       console.warn('Server save failed, saving offline encrypted cache', e);
       if (state.currentProjectId) {
-        await saveEncryptedOffline(`project:${state.currentProjectId}`, { id: state.currentProjectId, title: state.projectTitle, data: payload, updatedAt: Date.now(), createdAt: state.lastSavedAt ?? Date.now() });
-        toast({ title: 'Saved offline', description: 'Will sync when online.', variant: 'default' });
+        await saveEncryptedOffline(`project:${state.currentProjectId}`, {
+          id: state.currentProjectId,
+          title: state.projectTitle,
+          data: payload,
+          updatedAt: Date.now(),
+          createdAt: state.lastSavedAt ?? Date.now(),
+        });
+        toast({
+          title: 'Saved offline',
+          description: 'Will sync when online.',
+          variant: 'default',
+        });
         markSaved();
       } else {
         const tempId = `offline-${Date.now().toString(36)}`;
         useDrawingStore.getState().setCurrentProject(tempId);
-        await saveEncryptedOffline(`project:${tempId}`, { id: tempId, title: state.projectTitle, data: payload, updatedAt: Date.now(), createdAt: Date.now() });
-        toast({ title: 'Saved offline', description: 'Will create on server when online.', variant: 'default' });
+        await saveEncryptedOffline(`project:${tempId}`, {
+          id: tempId,
+          title: state.projectTitle,
+          data: payload,
+          updatedAt: Date.now(),
+          createdAt: Date.now(),
+        });
+        toast({
+          title: 'Saved offline',
+          description: 'Will create on server when online.',
+          variant: 'default',
+        });
         markSaved();
       }
     }
   }, [markSaved, toast]);
 
   const handleLoadProject = useCallback(async () => {
-    if (unsavedChanges && !window.confirm('You have unsaved changes. Continue and discard them?')) return;
+    if (unsavedChanges && !window.confirm('You have unsaved changes. Continue and discard them?'))
+      return;
     const id = prompt('Enter Project ID');
     if (!id) return;
     try {
@@ -145,7 +192,9 @@ export function DrawingToolbar() {
       toast({ title: 'Project loaded', description: 'Loaded from server.' });
     } catch {
       console.warn('Server load failed, trying offline cache');
-      const cached = await loadEncryptedOffline<import('@/lib/api').ProjectRecord<ReturnType<typeof serializeProject>>>(`project:${id}`);
+      const cached = await loadEncryptedOffline<
+        import('@/lib/api').ProjectRecord<ReturnType<typeof serializeProject>>
+      >(`project:${id}`);
       if (cached && cached.data) {
         const objects = deserializeProject(cached.data);
         const { setObjects, replaceHistory, requestFullRedraw } = useDrawingStore.getState();
@@ -157,7 +206,11 @@ export function DrawingToolbar() {
         markSaved();
         toast({ title: 'Project loaded (offline)', description: 'Loaded from encrypted cache.' });
       } else {
-        toast({ title: 'Load failed', description: 'Not found on server or offline cache.', variant: 'destructive' });
+        toast({
+          title: 'Load failed',
+          description: 'Not found on server or offline cache.',
+          variant: 'destructive',
+        });
       }
     }
   }, [unsavedChanges, toast, setProjectTitle, markSaved]);
@@ -173,7 +226,8 @@ export function DrawingToolbar() {
         handleLoadProject();
       } else if ((e.ctrlKey || e.metaKey) && key === 'n') {
         e.preventDefault();
-        if (!unsavedChanges || window.confirm('Discard current project and create a new one?')) newProject();
+        if (!unsavedChanges || window.confirm('Discard current project and create a new one?'))
+          newProject();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -199,16 +253,16 @@ export function DrawingToolbar() {
 
       const key = e.key.toLowerCase();
       const toolMap: Record<string, Tool> = {
-        'h': 'hand',
-        'v': 'move',
-        'p': 'pen',
-        'e': 'eraser',
-        'l': 'line',
-        'r': 'rectangle',
-        'o': 'ellipse',
-        't': 'triangle',
-        's': 'star',
-        'x': 'text',
+        h: 'hand',
+        v: 'move',
+        p: 'pen',
+        e: 'eraser',
+        l: 'line',
+        r: 'rectangle',
+        o: 'ellipse',
+        t: 'triangle',
+        s: 'star',
+        x: 'text',
       };
 
       const tool = toolMap[key];
@@ -229,8 +283,13 @@ export function DrawingToolbar() {
     unsaved,
     onSave,
     onNew,
-    onClear
-  }: { unsaved: boolean; onSave: () => void; onNew: () => void; onClear: () => void }) {
+    onClear,
+  }: {
+    unsaved: boolean;
+    onSave: () => void;
+    onNew: () => void;
+    onClear: () => void;
+  }) {
     const [open, setOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
@@ -257,7 +316,7 @@ export function DrawingToolbar() {
           title="Project actions"
           aria-haspopup="menu"
           aria-expanded={open}
-          onClick={() => setOpen(prev => !prev)}
+          onClick={() => setOpen((prev) => !prev)}
         >
           Project
         </Button>
@@ -268,7 +327,10 @@ export function DrawingToolbar() {
             aria-label="Project"
           >
             <button
-              onClick={() => { onSave(); setOpen(false); }}
+              onClick={() => {
+                onSave();
+                setOpen(false);
+              }}
               className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-50 text-slate-900 dark:text-slate-100"
               role="menuitem"
               disabled={!unsaved}
@@ -276,9 +338,22 @@ export function DrawingToolbar() {
             >
               Save
             </button>
-            <button onClick={() => { setProjectsModal(true); setOpen(false); }} className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-slate-100" role="menuitem" title="Browse and load projects">Browse…</button>
             <button
-              onClick={() => { onNew(); setOpen(false); }}
+              onClick={() => {
+                setProjectsModal(true);
+                setOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-slate-100"
+              role="menuitem"
+              title="Browse and load projects"
+            >
+              Browse…
+            </button>
+            <button
+              onClick={() => {
+                onNew();
+                setOpen(false);
+              }}
               className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-slate-100"
               role="menuitem"
               title="New project (Ctrl/Cmd+N)"
@@ -287,7 +362,10 @@ export function DrawingToolbar() {
             </button>
             <div className="h-px bg-slate-200 dark:bg-white/10 my-1" />
             <button
-              onClick={() => { onClear(); setOpen(false); }}
+              onClick={() => {
+                onClear();
+                setOpen(false);
+              }}
               className="w-full text-left px-3 py-2 rounded hover:bg-red-100 dark:hover:bg-red-500/10 text-red-600 dark:text-red-300"
               role="menuitem"
               title="Clear canvas"
@@ -302,26 +380,42 @@ export function DrawingToolbar() {
 
   function ProjectsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const [query, setQuery] = useState('');
-    const [items, setItems] = useState<{ id: string; title: string; source: 'server' | 'offline'; updatedAt: number }[]>([]);
+    const [items, setItems] = useState<
+      { id: string; title: string; source: 'server' | 'offline'; updatedAt: number }[]
+    >([]);
     useEffect(() => {
       if (!open) return;
       let mounted = true;
       (async () => {
         const [server, offline] = await Promise.all([
           listProjects().catch(() => []),
-          listOfflineProjects().catch(() => [])
+          listOfflineProjects().catch(() => []),
         ]);
         if (!mounted) return;
         const merged = [
-          ...server.map((s: ProjectListItem) => ({ id: s.id, title: s.title, source: 'server' as const, updatedAt: s.updatedAt })),
-          ...offline.map((o: ProjectListItem) => ({ id: o.id, title: `${o.title} (offline)`, source: 'offline' as const, updatedAt: o.updatedAt }))
+          ...server.map((s: ProjectListItem) => ({
+            id: s.id,
+            title: s.title,
+            source: 'server' as const,
+            updatedAt: s.updatedAt,
+          })),
+          ...offline.map((o: ProjectListItem) => ({
+            id: o.id,
+            title: `${o.title} (offline)`,
+            source: 'offline' as const,
+            updatedAt: o.updatedAt,
+          })),
         ].sort((a, b) => b.updatedAt - a.updatedAt);
         setItems(merged);
       })();
-      return () => { mounted = false; };
+      return () => {
+        mounted = false;
+      };
     }, [open]);
 
-    const filtered = items.filter(i => i.title.toLowerCase().includes(query.toLowerCase()) || i.id.includes(query));
+    const filtered = items.filter(
+      (i) => i.title.toLowerCase().includes(query.toLowerCase()) || i.id.includes(query),
+    );
 
     if (!open) return null;
     return (
@@ -330,7 +424,9 @@ export function DrawingToolbar() {
         <div className="relative bg-white dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-white/10">
             <div className="font-semibold text-slate-900 dark:text-slate-100">Projects</div>
-            <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Close
+            </Button>
           </div>
           <div className="p-4">
             <input
@@ -342,19 +438,26 @@ export function DrawingToolbar() {
             />
             <div className="mt-3 max-h-[55vh] overflow-auto">
               {filtered.length === 0 && (
-                <div className="text-sm text-slate-500 dark:text-gray-400 px-2 py-8 text-center">No projects found</div>
+                <div className="text-sm text-slate-500 dark:text-gray-400 px-2 py-8 text-center">
+                  No projects found
+                </div>
               )}
-              {filtered.map(item => (
+              {filtered.map((item) => (
                 <button
                   key={`${item.source}:${item.id}`}
                   className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-sm"
                   onClick={async () => {
                     try {
-                      if (unsavedChanges && !window.confirm('Discard current changes and load this project?')) return;
+                      if (
+                        unsavedChanges &&
+                        !window.confirm('Discard current changes and load this project?')
+                      )
+                        return;
                       if (item.source === 'server') {
                         const rec = await getProject<ReturnType<typeof serializeProject>>(item.id);
                         const objects = deserializeProject(rec.data);
-                        const { setObjects, replaceHistory, requestFullRedraw } = useDrawingStore.getState();
+                        const { setObjects, replaceHistory, requestFullRedraw } =
+                          useDrawingStore.getState();
                         setObjects(objects);
                         replaceHistory(objects);
                         requestFullRedraw();
@@ -363,31 +466,47 @@ export function DrawingToolbar() {
                         markSaved();
                         toast({ title: 'Project loaded', description: 'Loaded from server.' });
                       } else {
-                        const cached = await loadEncryptedOffline<import('@/lib/api').ProjectRecord<ReturnType<typeof serializeProject>>>(`project:${item.id}`);
+                        const cached = await loadEncryptedOffline<
+                          import('@/lib/api').ProjectRecord<ReturnType<typeof serializeProject>>
+                        >(`project:${item.id}`);
                         if (cached && cached.data) {
                           const objects = deserializeProject(cached.data);
-                          const { setObjects, replaceHistory, requestFullRedraw } = useDrawingStore.getState();
+                          const { setObjects, replaceHistory, requestFullRedraw } =
+                            useDrawingStore.getState();
                           setObjects(objects);
                           replaceHistory(objects);
                           requestFullRedraw();
                           setProjectTitle(cached.title || 'Offline Project');
                           useDrawingStore.getState().setCurrentProject(cached.id);
                           markSaved();
-                          toast({ title: 'Project loaded (offline)', description: 'Loaded from encrypted cache.' });
+                          toast({
+                            title: 'Project loaded (offline)',
+                            description: 'Loaded from encrypted cache.',
+                          });
                         }
                       }
                       onClose();
                     } catch {
-                      toast({ title: 'Load failed', description: 'Could not load project.', variant: 'destructive' });
+                      toast({
+                        title: 'Load failed',
+                        description: 'Could not load project.',
+                        variant: 'destructive',
+                      });
                     }
                   }}
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-slate-900 dark:text-slate-100">{item.title}</div>
-                      <div className="text-xs text-slate-500 dark:text-gray-400">{item.source === 'server' ? 'Server' : 'Offline encrypted'} • {item.id}</div>
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        {item.title}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-gray-400">
+                        {item.source === 'server' ? 'Server' : 'Offline encrypted'} • {item.id}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-gray-400">{new Date(item.updatedAt).toLocaleString()}</div>
+                    <div className="text-xs text-slate-500 dark:text-gray-400">
+                      {new Date(item.updatedAt).toLocaleString()}
+                    </div>
                   </div>
                 </button>
               ))}
@@ -419,7 +538,7 @@ export function DrawingToolbar() {
     >
       <div className="flex flex-wrap items-center gap-4 max-w-7xl mx-auto">
         {/* Tool Selection */}
-        <div 
+        <div
           className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-white/10"
           role="toolbar"
           aria-label="Drawing tools"
@@ -431,11 +550,11 @@ export function DrawingToolbar() {
                 setTool(id as Tool);
                 announceToScreenReader(`${label} tool selected`);
               }}
-              variant={currentTool === id ? "default" : "ghost"}
+              variant={currentTool === id ? 'default' : 'ghost'}
               size="sm"
               className={cn(
-                "transition-all duration-200 focus-visible-ring",
-                currentTool === id && "bg-blue-600 hover:bg-blue-700"
+                'transition-all duration-200 focus-visible-ring',
+                currentTool === id && 'bg-blue-600 hover:bg-blue-700',
               )}
               title={`${label} (${shortcut})`}
               aria-label={ariaLabel}
@@ -451,24 +570,61 @@ export function DrawingToolbar() {
         {/* Shape constraint hint */}
         {['rectangle', 'ellipse'].includes(currentTool) && (
           <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-gray-400">
-            <span>💡 Hold Shift for perfect {currentTool === 'ellipse' ? 'circles' : 'squares'}</span>
+            <span>
+              💡 Hold Shift for perfect {currentTool === 'ellipse' ? 'circles' : 'squares'}
+            </span>
           </div>
         )}
         {currentTool === 'triangle' && (
           <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-gray-400">
-            <span>💡 {triangleMode === 'custom' ? 'Click three times to place triangle vertices' : 'Click and drag to draw triangle'}</span>
+            <span>
+              💡{' '}
+              {triangleMode === 'custom'
+                ? 'Click three times to place triangle vertices'
+                : 'Click and drag to draw triangle'}
+            </span>
           </div>
         )}
 
         {/* Triangle Mode Selector */}
         {currentTool === 'triangle' && (
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[80px]">Triangle Type:</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[80px]">
+              Triangle Type:
+            </label>
             <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded border border-slate-200 dark:border-white/10">
-              <Button onClick={() => setTriangleMode('custom')} variant={triangleMode === 'custom' ? 'default' : 'ghost'} size="sm" title="Free-form triangle (click 3 points)">Custom</Button>
-              <Button onClick={() => setTriangleMode('right')} variant={triangleMode === 'right' ? 'default' : 'ghost'} size="sm" title="Right triangle (90°)">Right</Button>
-              <Button onClick={() => setTriangleMode('45-45-90')} variant={triangleMode === '45-45-90' ? 'default' : 'ghost'} size="sm" title="45-45-90 triangle">45-45-90</Button>
-              <Button onClick={() => setTriangleMode('30-60-90')} variant={triangleMode === '30-60-90' ? 'default' : 'ghost'} size="sm" title="30-60-90 triangle">30-60-90</Button>
+              <Button
+                onClick={() => setTriangleMode('custom')}
+                variant={triangleMode === 'custom' ? 'default' : 'ghost'}
+                size="sm"
+                title="Free-form triangle (click 3 points)"
+              >
+                Custom
+              </Button>
+              <Button
+                onClick={() => setTriangleMode('right')}
+                variant={triangleMode === 'right' ? 'default' : 'ghost'}
+                size="sm"
+                title="Right triangle (90°)"
+              >
+                Right
+              </Button>
+              <Button
+                onClick={() => setTriangleMode('45-45-90')}
+                variant={triangleMode === '45-45-90' ? 'default' : 'ghost'}
+                size="sm"
+                title="45-45-90 triangle"
+              >
+                45-45-90
+              </Button>
+              <Button
+                onClick={() => setTriangleMode('30-60-90')}
+                variant={triangleMode === '30-60-90' ? 'default' : 'ghost'}
+                size="sm"
+                title="30-60-90 triangle"
+              >
+                30-60-90
+              </Button>
             </div>
           </div>
         )}
@@ -481,22 +637,56 @@ export function DrawingToolbar() {
                 Eraser:
               </label>
               <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded border border-slate-200 dark:border-white/10">
-                <Button onClick={() => setEraserMode('partial')} variant={eraserMode === 'partial' ? 'default' : 'ghost'} size="sm">Partial</Button>
-                <Button onClick={() => setEraserMode('object')} variant={eraserMode === 'object' ? 'default' : 'ghost'} size="sm">Object</Button>
+                <Button
+                  onClick={() => setEraserMode('partial')}
+                  variant={eraserMode === 'partial' ? 'default' : 'ghost'}
+                  size="sm"
+                >
+                  Partial
+                </Button>
+                <Button
+                  onClick={() => setEraserMode('object')}
+                  variant={eraserMode === 'object' ? 'default' : 'ghost'}
+                  size="sm"
+                >
+                  Object
+                </Button>
               </div>
             </div>
           )}
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[40px]">Size:</label>
-            <Slider value={[brushSize]} onValueChange={([value]) => setBrushSize(value)} min={1} max={100} step={1} className="w-24" />
-            <span className="text-sm font-mono text-slate-500 dark:text-gray-400 min-w-[40px]">{brushSize}px</span>
+            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[40px]">
+              Size:
+            </label>
+            <Slider
+              value={[brushSize]}
+              onValueChange={([value]) => setBrushSize(value)}
+              min={1}
+              max={100}
+              step={1}
+              className="w-24"
+            />
+            <span className="text-sm font-mono text-slate-500 dark:text-gray-400 min-w-[40px]">
+              {brushSize}px
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[60px]">Opacity:</label>
-            <Slider value={[brushOpacity * 100]} onValueChange={([value]) => setBrushOpacity(value / 100)} min={10} max={100} step={1} className="w-24" />
-            <span className="text-sm font-mono text-slate-500 dark:text-gray-400 min-w-[40px]">{Math.round(brushOpacity * 100)}%</span>
+            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[60px]">
+              Opacity:
+            </label>
+            <Slider
+              value={[brushOpacity * 100]}
+              onValueChange={([value]) => setBrushOpacity(value / 100)}
+              min={10}
+              max={100}
+              step={1}
+              className="w-24"
+            />
+            <span className="text-sm font-mono text-slate-500 dark:text-gray-400 min-w-[40px]">
+              {Math.round(brushOpacity * 100)}%
+            </span>
           </div>
         </div>
 
@@ -505,7 +695,9 @@ export function DrawingToolbar() {
 
         {/* Fill toggle for shapes */}
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">Fill:</label>
+          <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">
+            Fill:
+          </label>
           <Button
             onClick={() => setShapeFilled(!shapeFilled)}
             variant={shapeFilled ? 'default' : 'ghost'}
@@ -519,41 +711,130 @@ export function DrawingToolbar() {
         {/* Auto Shape toggle + settings - Hidden when feature is disabled */}
         {FEATURES.AUTO_SHAPE && (
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">Auto Shape:</label>
-            <Button onClick={() => setAutoShape(!autoShape)} variant={autoShape ? 'default' : 'ghost'} size="sm" title={autoShape ? 'Auto-convert closed pen loops' : 'Draw normal strokes'}>
+            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">
+              Auto Shape:
+            </label>
+            <Button
+              onClick={() => setAutoShape(!autoShape)}
+              variant={autoShape ? 'default' : 'ghost'}
+              size="sm"
+              title={autoShape ? 'Auto-convert closed pen loops' : 'Draw normal strokes'}
+            >
               {autoShape ? 'On' : 'Off'}
             </Button>
             <details className="ml-1">
-              <summary className="cursor-pointer text-xs text-slate-500 dark:text-gray-400">Settings</summary>
+              <summary className="cursor-pointer text-xs text-slate-500 dark:text-gray-400">
+                Settings
+              </summary>
               <div className="mt-2 p-2 bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-md shadow-lg space-y-2 w-[260px]">
-                <div className="text-xs text-slate-500 dark:text-gray-400">Closure tolerance ({(safeT.closureFactor*100).toFixed(0)}% diag)</div>
-                <Slider value={[Math.round(safeT.closureFactor*100)]} onValueChange={([v]) => setAutoShapeThresholds({ closureFactor: v/100 })} min={5} max={60} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Closure tolerance ({(safeT.closureFactor * 100).toFixed(0)}% diag)
+                </div>
+                <Slider
+                  value={[Math.round(safeT.closureFactor * 100)]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ closureFactor: v / 100 })}
+                  min={5}
+                  max={60}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Rectangle straight ratio ({Math.round(safeT.rectStraightRatio*100)}%)</div>
-                <Slider value={[Math.round(safeT.rectStraightRatio*100)]} onValueChange={([v]) => setAutoShapeThresholds({ rectStraightRatio: v/100 })} min={30} max={90} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Rectangle straight ratio ({Math.round(safeT.rectStraightRatio * 100)}%)
+                </div>
+                <Slider
+                  value={[Math.round(safeT.rectStraightRatio * 100)]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ rectStraightRatio: v / 100 })}
+                  min={30}
+                  max={90}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Rectangle corners (≥{safeT.rectCornerMin})</div>
-                <Slider value={[safeT.rectCornerMin]} onValueChange={([v]) => setAutoShapeThresholds({ rectCornerMin: v })} min={1} max={4} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Rectangle corners (≥{safeT.rectCornerMin})
+                </div>
+                <Slider
+                  value={[safeT.rectCornerMin]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ rectCornerMin: v })}
+                  min={1}
+                  max={4}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Ellipse error (≤{Math.round(safeT.ellipseError*100)}%)</div>
-                <Slider value={[Math.round(safeT.ellipseError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ ellipseError: v/100 })} min={10} max={90} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Ellipse error (≤{Math.round(safeT.ellipseError * 100)}%)
+                </div>
+                <Slider
+                  value={[Math.round(safeT.ellipseError * 100)]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ ellipseError: v / 100 })}
+                  min={10}
+                  max={90}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Parabola error (≤{Math.round(safeT.parabolaError*100)}%)</div>
-                <Slider value={[Math.round(safeT.parabolaError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ parabolaError: v/100 })} min={10} max={90} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Parabola error (≤{Math.round(safeT.parabolaError * 100)}%)
+                </div>
+                <Slider
+                  value={[Math.round(safeT.parabolaError * 100)]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ parabolaError: v / 100 })}
+                  min={10}
+                  max={90}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Line error (≤{Math.round(safeT.lineError*100)}%)</div>
-                <Slider value={[Math.round(safeT.lineError*100)]} onValueChange={([v]) => setAutoShapeThresholds({ lineError: v/100 })} min={5} max={60} step={1} />
-                <div className="text-xs text-slate-500 dark:text-gray-400">Winner margin (≥{Math.round(safeT.winnerMargin*100)}%)</div>
-                <Slider value={[Math.round(safeT.winnerMargin*100)]} onValueChange={([v]) => setAutoShapeThresholds({ winnerMargin: v/100 })} min={0} max={30} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Line error (≤{Math.round(safeT.lineError * 100)}%)
+                </div>
+                <Slider
+                  value={[Math.round(safeT.lineError * 100)]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ lineError: v / 100 })}
+                  min={5}
+                  max={60}
+                  step={1}
+                />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Winner margin (≥{Math.round(safeT.winnerMargin * 100)}%)
+                </div>
+                <Slider
+                  value={[Math.round(safeT.winnerMargin * 100)]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ winnerMargin: v / 100 })}
+                  min={0}
+                  max={30}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Min size (≥{safeT.minSizePx}px)</div>
-                <Slider value={[safeT.minSizePx]} onValueChange={([v]) => setAutoShapeThresholds({ minSizePx: v })} min={6} max={40} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Min size (≥{safeT.minSizePx}px)
+                </div>
+                <Slider
+                  value={[safeT.minSizePx]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ minSizePx: v })}
+                  min={6}
+                  max={40}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Resample step ({safeT.resampleStep}px)</div>
-                <Slider value={[safeT.resampleStep]} onValueChange={([v]) => setAutoShapeThresholds({ resampleStep: v })} min={1} max={8} step={1} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Resample step ({safeT.resampleStep}px)
+                </div>
+                <Slider
+                  value={[safeT.resampleStep]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ resampleStep: v })}
+                  min={1}
+                  max={8}
+                  step={1}
+                />
 
-                <div className="text-xs text-slate-500 dark:text-gray-400">Parabola curvature (≥{safeT.minParabolaCurvature.toFixed(2)} rad)</div>
-                <Slider value={[Math.round(safeT.minParabolaCurvature*100)]} onValueChange={([v]) => setAutoShapeThresholds({ minParabolaCurvature: v/100 })} min={50} max={300} step={5} />
+                <div className="text-xs text-slate-500 dark:text-gray-400">
+                  Parabola curvature (≥{safeT.minParabolaCurvature.toFixed(2)} rad)
+                </div>
+                <Slider
+                  value={[Math.round(safeT.minParabolaCurvature * 100)]}
+                  onValueChange={([v]) => setAutoShapeThresholds({ minParabolaCurvature: v / 100 })}
+                  min={50}
+                  max={300}
+                  step={5}
+                />
               </div>
             </details>
           </div>
@@ -573,21 +854,55 @@ export function DrawingToolbar() {
             aria-label="Project title"
           />
           {!canDraw && role === 'viewer' && (
-            <span className="flex items-center gap-1 px-2 py-1 rounded bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/30 text-xs text-amber-700 dark:text-amber-300 font-semibold" aria-label="View only mode">
+            <span
+              className="flex items-center gap-1 px-2 py-1 rounded bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/30 text-xs text-amber-700 dark:text-amber-300 font-semibold"
+              aria-label="View only mode"
+            >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                />
               </svg>
               View Only
             </span>
           )}
-          {unsavedChanges && <span className="text-xs text-yellow-600 dark:text-yellow-400" aria-live="polite" aria-label="Unsaved changes">● Unsaved</span>}
+          {unsavedChanges && (
+            <span
+              className="text-xs text-yellow-600 dark:text-yellow-400"
+              aria-live="polite"
+              aria-label="Unsaved changes"
+            >
+              ● Unsaved
+            </span>
+          )}
 
-          <ProjectMenu unsaved={unsavedChanges} onSave={handleSaveProject} onNew={() => { if (!unsavedChanges || window.confirm('Discard current project and create a new one?')) newProject(); }} onClear={handleClearCanvas} />
+          <ProjectMenu
+            unsaved={unsavedChanges}
+            onSave={handleSaveProject}
+            onNew={() => {
+              if (
+                !unsavedChanges ||
+                window.confirm('Discard current project and create a new one?')
+              )
+                newProject();
+            }}
+            onClear={handleClearCanvas}
+          />
         </div>
 
         {/* Mobile Toggle */}
-        <Button onClick={toggleToolbar} variant="ghost" size="sm" className="md:hidden ml-auto">Hide</Button>
+        <Button onClick={toggleToolbar} variant="ghost" size="sm" className="md:hidden ml-auto">
+          Hide
+        </Button>
       </div>
       <ProjectsModal open={projectsModal} onClose={() => setProjectsModal(false)} />
     </div>

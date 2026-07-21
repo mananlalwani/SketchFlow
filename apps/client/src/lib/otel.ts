@@ -10,10 +10,7 @@ import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { XMLHttpRequestInstrumentation } from '@opentelemetry/instrumentation-xml-http-request';
 import { DocumentLoadInstrumentation } from '@opentelemetry/instrumentation-document-load';
-import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from '@opentelemetry/semantic-conventions';
+import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { trace, context } from '@opentelemetry/api';
 import { clientEnv } from '../config/env';
 
@@ -69,7 +66,9 @@ export function initOtel(): void {
 
   const config = getOtlpConfig();
   if (!config) {
-    console.log('[OTel] OpenTelemetry disabled (no VITE_HONEYCOMB_API_KEY or VITE_OTEL_EXPORTER_OTLP_ENDPOINT set)');
+    console.log(
+      '[OTel] OpenTelemetry disabled (no VITE_HONEYCOMB_API_KEY or VITE_OTEL_EXPORTER_OTLP_ENDPOINT set)',
+    );
     return;
   }
 
@@ -113,12 +112,7 @@ export function initOtel(): void {
         // Clear timing resources to avoid memory leaks
         clearTimingResources: true,
         // Ignore tracking endpoints to avoid noise
-        ignoreUrls: [
-          /honeycomb\.io/,
-          /otel/,
-          /analytics/,
-          /telemetry/,
-        ],
+        ignoreUrls: [/honeycomb\.io/, /otel/, /analytics/, /telemetry/],
       }),
       new XMLHttpRequestInstrumentation({
         propagateTraceHeaderCorsUrls: [
@@ -126,12 +120,7 @@ export function initOtel(): void {
           ...(clientEnv.API_URL ? [new RegExp(`^${clientEnv.API_URL}`)] : []),
         ],
         clearTimingResources: true,
-        ignoreUrls: [
-          /honeycomb\.io/,
-          /otel/,
-          /analytics/,
-          /telemetry/,
-        ],
+        ignoreUrls: [/honeycomb\.io/, /otel/, /analytics/, /telemetry/],
       }),
       new DocumentLoadInstrumentation(),
     ],

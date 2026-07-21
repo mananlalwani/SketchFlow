@@ -2,10 +2,10 @@ import { describe, it } from 'vitest';
 
 /**
  * TODO Tests - Prioritized for Demo/Portfolio Release
- * 
+ *
  * Priority Legend:
  * 🔥 CRITICAL - Must have for demo
- * ⭐ HIGH - Impressive for recruiters/hiring managers  
+ * ⭐ HIGH - Impressive for recruiters/hiring managers
  * 💡 NICE - Polish that elevates the experience
  * 🔮 FUTURE - Post-demo improvements
  */
@@ -119,15 +119,15 @@ describe('🔮 FUTURE - Post-Demo Roadmap', () => {
 
 /**
  * DEMO CHECKLIST - What to show recruiters:
- * 
+ *
  * 1. Draw something quickly - shows smooth performance
- * 2. Use shape detection - shows ML/algorithms knowledge  
+ * 2. Use shape detection - shows ML/algorithms knowledge
  * 3. Export to PDF/PNG - shows practical utility
  * 4. Share with someone - shows real-time sync (if implemented)
  * 5. Show project management - shows full-stack capability
  * 6. Open on mobile - shows responsive design
  * 7. Use keyboard shortcuts - shows attention to UX
- * 
+ *
  * KEY TALKING POINTS:
  * - "Built with React, TypeScript, and Canvas API"
  * - "Real-time collaboration using WebSockets"

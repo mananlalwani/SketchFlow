@@ -9,7 +9,7 @@ describe('export', () => {
   describe('exportAsSVG', () => {
     it('should export empty canvas with background', () => {
       const svg = exportAsSVG([], { width: 100, height: 100, background: '#000' });
-      
+
       expect(svg).toContain('<?xml version="1.0"');
       expect(svg).toContain('width="100"');
       expect(svg).toContain('height="100"');
@@ -21,15 +21,19 @@ describe('export', () => {
         {
           id: '1',
           type: 'stroke',
-          points: [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }],
+          points: [
+            { x: 0, y: 0 },
+            { x: 10, y: 10 },
+            { x: 20, y: 0 },
+          ],
           color: '#ff0000',
           size: 2,
           alpha: 1,
         },
       ];
-      
+
       const svg = exportAsSVG(objects, { width: 100, height: 100 });
-      
+
       expect(svg).toContain('<path');
       expect(svg).toContain('M0,0');
       expect(svg).toContain('L10,10');
@@ -51,9 +55,9 @@ describe('export', () => {
           size: 3,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<line');
       expect(svg).toContain('x1="10"');
       expect(svg).toContain('y1="20"');
@@ -75,9 +79,9 @@ describe('export', () => {
           filled: true,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<rect');
       expect(svg).toContain('fill="#0000ff"');
       expect(svg).not.toContain('fill="none"');
@@ -97,9 +101,9 @@ describe('export', () => {
           filled: false,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<rect');
       expect(svg).toContain('fill="none"');
       expect(svg).toContain('stroke="#0000ff"');
@@ -118,9 +122,9 @@ describe('export', () => {
           size: 2,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<ellipse');
       expect(svg).toContain('cx="50"');
       expect(svg).toContain('cy="30"');
@@ -141,9 +145,9 @@ describe('export', () => {
           size: 2,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<polygon');
       expect(svg).toContain('points="50,0 100,80 0,80"');
     });
@@ -157,7 +161,11 @@ describe('export', () => {
           y: 20,
           width: 90,
           height: 80,
-          points: [{ x: 10, y: 20 }, { x: 100, y: 40 }, { x: 35, y: 100 }],
+          points: [
+            { x: 10, y: 20 },
+            { x: 100, y: 40 },
+            { x: 35, y: 100 },
+          ],
           color: '#123456',
           size: 3,
           alpha: 1,
@@ -181,9 +189,9 @@ describe('export', () => {
           size: 1,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<text');
       expect(svg).toContain('Hello World');
       expect(svg).toContain('font-size="32"');
@@ -202,9 +210,9 @@ describe('export', () => {
           size: 1,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<tspan');
       expect(svg).toContain('Line 1');
       expect(svg).toContain('Line 2');
@@ -224,9 +232,9 @@ describe('export', () => {
           size: 1,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).not.toContain('<script>');
       expect(svg).toContain('&lt;script&gt;');
     });
@@ -246,21 +254,41 @@ describe('export', () => {
           filled: true,
         },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('opacity="0.5"');
     });
 
     it('should handle multiple objects', () => {
       const objects: DrawingObject[] = [
-        { id: '1', type: 'rectangle', x: 0, y: 0, width: 50, height: 50, color: '#f00', size: 1, filled: true },
-        { id: '2', type: 'ellipse', x: 60, y: 0, width: 50, height: 50, color: '#0f0', size: 1, filled: true },
+        {
+          id: '1',
+          type: 'rectangle',
+          x: 0,
+          y: 0,
+          width: 50,
+          height: 50,
+          color: '#f00',
+          size: 1,
+          filled: true,
+        },
+        {
+          id: '2',
+          type: 'ellipse',
+          x: 60,
+          y: 0,
+          width: 50,
+          height: 50,
+          color: '#0f0',
+          size: 1,
+          filled: true,
+        },
         { id: '3', type: 'line', x: 0, y: 60, width: 100, height: 0, color: '#00f', size: 2 },
       ];
-      
+
       const svg = exportAsSVG(objects);
-      
+
       expect(svg).toContain('<rect');
       expect(svg).toContain('<ellipse');
       expect(svg).toContain('<line');

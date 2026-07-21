@@ -17,8 +17,13 @@ type InitMessage = {
 };
 
 type Stroke = {
-  x0: number; y0: number; x1: number; y1: number;
-  color: string; size: number; alpha?: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  color: string;
+  size: number;
+  alpha?: number;
   groupId?: string;
 };
 
@@ -29,7 +34,17 @@ type StrokeMessage = {
 
 type Shape = {
   id: string;
-  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'arrow' | 'star';
+  type:
+    | 'line'
+    | 'rectangle'
+    | 'ellipse'
+    | 'circle'
+    | 'triangle'
+    | 'parabola'
+    | 'text'
+    | 'image'
+    | 'arrow'
+    | 'star';
   x: number;
   y: number;
   width: number;
@@ -84,22 +99,45 @@ type ViewportMessage = {
 };
 
 type ClearMessage = { type: 'clear' };
-type ClearRegionMessage = { type: 'clear-region'; x: number; y: number; width: number; height: number };
+type ClearRegionMessage = {
+  type: 'clear-region';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 type RemoveGroupMessage = { type: 'remove-group'; groupId: string };
 type SnapshotMessage = { type: 'snapshot' };
-type SnapshotImageMessage = { type: 'snapshot-image'; dataUrl: string; worldWidth?: number; worldHeight?: number };
+type SnapshotImageMessage = {
+  type: 'snapshot-image';
+  dataUrl: string;
+  worldWidth?: number;
+  worldHeight?: number;
+};
 type ThemeMessage = { type: 'theme'; bgColor: string };
 type LoadObjectsMessage = { type: 'load-objects'; data: Shape[] };
 
-type Inbound = InitMessage | StrokeMessage | ShapeMessage | ViewportMessage | ClearMessage | ClearRegionMessage | RemoveGroupMessage | ClearShapeMessage | SnapshotMessage | SnapshotImageMessage | ThemeMessage | LoadObjectsMessage;
+type Inbound =
+  | InitMessage
+  | StrokeMessage
+  | ShapeMessage
+  | ViewportMessage
+  | ClearMessage
+  | ClearRegionMessage
+  | RemoveGroupMessage
+  | ClearShapeMessage
+  | SnapshotMessage
+  | SnapshotImageMessage
+  | ThemeMessage
+  | LoadObjectsMessage;
 
 type Outbound = { type: 'snapshot'; dataUrl: string };
 
 let screenCtx: OffscreenCanvasRenderingContext2D | null = null;
 let world: OffscreenCanvas | null = null;
 let worldCtx: OffscreenCanvasRenderingContext2D | null = null;
-let worldW = 51200;  // 20x 1440p width (2560 × 20)
-let worldH = 28800;  // 20x 1440p height (1440 × 20)
+let worldW = 51200; // 20x 1440p width (2560 × 20)
+let worldH = 28800; // 20x 1440p height (1440 × 20)
 
 // Retained vector model for precise zoom rendering
 const retainedShapes: Shape[] = [];
@@ -121,7 +159,7 @@ let lastViewport = {
   viewY: 0,
   canvasWidth: 0,
   canvasHeight: 0,
-  dpr: 1
+  dpr: 1,
 };
 
 let lastBlitTime = 0;
@@ -138,20 +176,27 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   // Handle shorthand hex
   const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
   hex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b);
-  
+
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null;
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : null;
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
-  return '#' + [r, g, b].map(x => {
-    const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16);
-    return hex.length === 1 ? '0' + hex : hex;
-  }).join('');
+  return (
+    '#' +
+    [r, g, b]
+      .map((x) => {
+        const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+      })
+      .join('')
+  );
 }
 
 function getLuminance(r: number, g: number, b: number): number {
@@ -176,10 +221,10 @@ function adjustColorForTheme(color: string): string {
   if (isBackgroundColor(normalizedColor)) {
     return canvasBgColor;
   }
-  
+
   // If we're in dark mode, no adjustment needed (colors drawn as-is)
   if (!isLightMode) return color;
-  
+
   // Handle rgba colors
   const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
   if (rgbaMatch) {
@@ -187,9 +232,9 @@ function adjustColorForTheme(color: string): string {
     const g = parseInt(rgbaMatch[2]);
     const b = parseInt(rgbaMatch[3]);
     const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
-    
+
     const luminance = getLuminance(r, g, b);
-    
+
     // Invert colors based on luminance for light mode
     // High luminance colors (light colors like white) become dark
     // Low luminance colors (dark colors like black) become light
@@ -207,16 +252,16 @@ function adjustColorForTheme(color: string): string {
       const newB = Math.min(255, b + 180);
       return a < 1 ? `rgba(${newR}, ${newG}, ${newB}, ${a})` : `rgb(${newR}, ${newG}, ${newB})`;
     }
-    
+
     return color;
   }
-  
+
   // Handle hex colors
   const rgb = hexToRgb(color);
   if (!rgb) return color;
-  
+
   const luminance = getLuminance(rgb.r, rgb.g, rgb.b);
-  
+
   // Invert based on luminance
   if (luminance > 0.7) {
     // Light color -> make it dark (invert)
@@ -224,40 +269,38 @@ function adjustColorForTheme(color: string): string {
     return rgbToHex(
       Math.round(rgb.r * factor * 0.3),
       Math.round(rgb.g * factor * 0.3),
-      Math.round(rgb.b * factor * 0.3)
+      Math.round(rgb.b * factor * 0.3),
     );
   } else if (luminance < 0.15) {
     // Very dark color -> make it lighter
     return rgbToHex(
       Math.min(255, rgb.r + 180),
       Math.min(255, rgb.g + 180),
-      Math.min(255, rgb.b + 180)
+      Math.min(255, rgb.b + 180),
     );
   }
-  
+
   // Mid-range colors: slight adjustment for better contrast
   if (luminance > 0.4 && luminance <= 0.7) {
     // Slightly darken mid-light colors
-    return rgbToHex(
-      Math.round(rgb.r * 0.7),
-      Math.round(rgb.g * 0.7),
-      Math.round(rgb.b * 0.7)
-    );
+    return rgbToHex(Math.round(rgb.r * 0.7), Math.round(rgb.g * 0.7), Math.round(rgb.b * 0.7));
   }
-  
+
   return color;
 }
 
 function getStarPointCount(shape: { properties?: Record<string, unknown> }): number {
   const value = shape.properties?.pointCount;
-  return typeof value === 'number' && Number.isInteger(value) && value >= 3 && value <= 64 ? value : 5;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 3 && value <= 64
+    ? value
+    : 5;
 }
 
 // Supersampled anti-aliased vector rendering
 // Base factor; actual factor is dynamic per frame
 const SSAA_FACTOR = 1; // default, may be overridden dynamically
 const MAX_SSAA_PIXELS = 8000000; // ~8MP budget to avoid OOM
-const MAX_OFFSCREEN_DIM = 8192;  // max width/height for offscreen buffers
+const MAX_OFFSCREEN_DIM = 8192; // max width/height for offscreen buffers
 let vectorSS: OffscreenCanvas | null = null;
 let vectorSSCtx: OffscreenCanvasRenderingContext2D | null = null;
 function ensureVectorSS(targetW: number, targetH: number, ss: number) {
@@ -314,7 +357,7 @@ function drawStrokeToWorld(stroke: Stroke) {
     console.warn('Stroke without groupId - skipping consolidation');
     return;
   }
-  
+
   const groupId = stroke.groupId;
   let path = consolidatedPaths.get(groupId);
   if (!path) {
@@ -324,7 +367,7 @@ function drawStrokeToWorld(stroke: Stroke) {
       size: stroke.size,
       alpha: stroke.alpha ?? 1,
       points: [{ x: stroke.x0, y: stroke.y0 }],
-      bounds: { minX: stroke.x0, minY: stroke.y0, maxX: stroke.x0, maxY: stroke.y0 }
+      bounds: { minX: stroke.x0, minY: stroke.y0, maxX: stroke.x0, maxY: stroke.y0 },
     };
     consolidatedPaths.set(groupId, path);
   }
@@ -338,7 +381,7 @@ function drawStrokeToWorld(stroke: Stroke) {
 
 function drawShapeToWorld(shape: Shape) {
   // Check if shape already exists (for updates during dragging)
-  const existingIndex = retainedShapes.findIndex(s => s.id === shape.id);
+  const existingIndex = retainedShapes.findIndex((s) => s.id === shape.id);
   if (existingIndex >= 0) {
     // Update existing shape
     retainedShapes[existingIndex] = shape;
@@ -346,22 +389,24 @@ function drawShapeToWorld(shape: Shape) {
     // Add new shape
     retainedShapes.push(shape);
   }
-  
+
   // Preload image if it's an image shape - load immediately
   if (shape.type === 'image' && shape.imageData) {
     if (!imageBitmapCache.has(shape.imageData)) {
-      loadImageBitmap(shape.imageData).then(() => {
-        scheduleBlit(); // Re-render once image is loaded
-      }).catch(() => {
-        // Failed to load, but don't block rendering
-      });
+      loadImageBitmap(shape.imageData)
+        .then(() => {
+          scheduleBlit(); // Re-render once image is loaded
+        })
+        .catch(() => {
+          // Failed to load, but don't block rendering
+        });
     }
   }
 }
 
 function blit() {
   if (!screenCtx) return;
-  
+
   const { zoom, viewX, viewY, canvasWidth, canvasHeight, dpr } = lastViewport;
 
   const safeDpr = dpr || 1;
@@ -387,15 +432,25 @@ function blit() {
   // Compute safe ssaa factor under pixel budget and dimension caps
   const desiredFactor = Math.max(SSAA_FACTOR, dynamicSSAA);
   let ssaaFactor = desiredFactor;
-  const capByDim = (dim: number, target: number) => Math.max(1, Math.floor(dim / Math.max(1, target)));
-  if (Math.floor(targetW * ssaaFactor) > MAX_OFFSCREEN_DIM) ssaaFactor = Math.min(ssaaFactor, capByDim(MAX_OFFSCREEN_DIM, targetW));
-  if (Math.floor(targetH * ssaaFactor) > MAX_OFFSCREEN_DIM) ssaaFactor = Math.min(ssaaFactor, capByDim(MAX_OFFSCREEN_DIM, targetH));
-  while ((Math.floor(targetW * ssaaFactor) * Math.floor(targetH * ssaaFactor)) > MAX_SSAA_PIXELS && ssaaFactor > 1) ssaaFactor--;
+  const capByDim = (dim: number, target: number) =>
+    Math.max(1, Math.floor(dim / Math.max(1, target)));
+  if (Math.floor(targetW * ssaaFactor) > MAX_OFFSCREEN_DIM)
+    ssaaFactor = Math.min(ssaaFactor, capByDim(MAX_OFFSCREEN_DIM, targetW));
+  if (Math.floor(targetH * ssaaFactor) > MAX_OFFSCREEN_DIM)
+    ssaaFactor = Math.min(ssaaFactor, capByDim(MAX_OFFSCREEN_DIM, targetH));
+  while (
+    Math.floor(targetW * ssaaFactor) * Math.floor(targetH * ssaaFactor) > MAX_SSAA_PIXELS &&
+    ssaaFactor > 1
+  )
+    ssaaFactor--;
 
   // Draw raster world in screen space with adaptive smoothing unless we choose to skip
   const shouldSkipRaster = vectorCount > 0 && zoom >= 1.15;
   if (world && !shouldSkipRaster) {
-    const anyCtx = screenCtx as unknown as { imageSmoothingEnabled?: boolean; imageSmoothingQuality?: 'low' | 'medium' | 'high' };
+    const anyCtx = screenCtx as unknown as {
+      imageSmoothingEnabled?: boolean;
+      imageSmoothingQuality?: 'low' | 'medium' | 'high';
+    };
     const scale = zoom * safeDpr;
     const frac = Math.abs(scale - Math.round(scale));
     const shouldSmooth = frac > 0.05 || scale < 1;
@@ -416,8 +471,8 @@ function blit() {
   // Compute current world viewport for culling
   const vx1 = viewX;
   const vy1 = viewY;
-  const vx2 = viewX + (canvasWidth / Math.max(zoom, 0.0001));
-  const vy2 = viewY + (canvasHeight / Math.max(zoom, 0.0001));
+  const vx2 = viewX + canvasWidth / Math.max(zoom, 0.0001);
+  const vy2 = viewY + canvasHeight / Math.max(zoom, 0.0001);
 
   // Supersampled vector render, then composite
   if (ssaaFactor > 1 && ensureVectorSS(targetW, targetH, ssaaFactor) && vectorSSCtx && vectorSS) {
@@ -442,10 +497,29 @@ function blit() {
     // Draw images first (in background)
     for (let i = 0; i < retainedShapes.length; i++) {
       const sh = retainedShapes[i] as unknown as {
-        type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'arrow' | 'star';
-        x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
+        type:
+          | 'line'
+          | 'rectangle'
+          | 'ellipse'
+          | 'circle'
+          | 'triangle'
+          | 'parabola'
+          | 'text'
+          | 'image'
+          | 'arrow'
+          | 'star';
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        color: string;
+        size: number;
+        alpha?: number;
+        filled?: boolean;
+        orientation?: 'up' | 'down' | 'left' | 'right';
         points?: { x: number; y: number }[];
-        text?: string; fontSize?: number;
+        text?: string;
+        fontSize?: number;
         imageData?: string;
         properties?: Record<string, unknown>;
       };
@@ -472,11 +546,16 @@ function blit() {
     for (const [, path] of consolidatedPaths) {
       // Viewport culling using bounds
       const margin = path.size;
-      if (path.bounds.maxX + margin < vx1 || path.bounds.minX - margin > vx2 ||
-          path.bounds.maxY + margin < vy1 || path.bounds.minY - margin > vy2) continue;
-      
+      if (
+        path.bounds.maxX + margin < vx1 ||
+        path.bounds.minX - margin > vx2 ||
+        path.bounds.maxY + margin < vy1 ||
+        path.bounds.minY - margin > vy2
+      )
+        continue;
+
       const isEraserPath = isBackgroundColor(path.color);
-      
+
       vectorSSCtx.save();
       if (isEraserPath) {
         vectorSSCtx.globalCompositeOperation = 'destination-out';
@@ -488,7 +567,7 @@ function blit() {
       vectorSSCtx.globalAlpha = path.alpha;
       vectorSSCtx.lineCap = 'round';
       vectorSSCtx.lineJoin = 'round';
-      
+
       // Draw entire path in one go - much faster than individual segments
       if (path.points.length > 0) {
         vectorSSCtx.beginPath();
@@ -503,10 +582,29 @@ function blit() {
 
     for (let i = 0; i < retainedShapes.length; i++) {
       const sh = retainedShapes[i] as unknown as {
-        type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'arrow' | 'star';
-        x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
+        type:
+          | 'line'
+          | 'rectangle'
+          | 'ellipse'
+          | 'circle'
+          | 'triangle'
+          | 'parabola'
+          | 'text'
+          | 'image'
+          | 'arrow'
+          | 'star';
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        color: string;
+        size: number;
+        alpha?: number;
+        filled?: boolean;
+        orientation?: 'up' | 'down' | 'left' | 'right';
         points?: { x: number; y: number }[];
-        text?: string; fontSize?: number;
+        text?: string;
+        fontSize?: number;
         imageData?: string;
         properties?: Record<string, unknown>;
       };
@@ -545,7 +643,7 @@ function blit() {
       } else if (sh.type === 'triangle') {
         // Draw triangle using custom vertices if available, otherwise default isosceles
         let x1, y1, x2, y2, x3, y3;
-        
+
         if (sh.points && sh.points.length === 3) {
           // Use custom vertices
           x1 = sh.points[0].x;
@@ -563,18 +661,21 @@ function blit() {
           x3 = sh.x + sh.width; // bottom right
           y3 = sh.y + sh.height;
         }
-        
+
         vectorSSCtx.moveTo(x1, y1);
         vectorSSCtx.lineTo(x2, y2);
         vectorSSCtx.lineTo(x3, y3);
         vectorSSCtx.closePath();
-        
+
         if (sh.filled) vectorSSCtx.fill();
         vectorSSCtx.stroke();
       } else if (sh.type === 'parabola') {
         // Draw parabola inside bbox; orientation selects axis
         const steps = 64;
-        const x0 = sh.x, y0 = sh.y, w = sh.width, h = sh.height;
+        const x0 = sh.x,
+          y0 = sh.y,
+          w = sh.width,
+          h = sh.height;
         if (sh.orientation === 'left' || sh.orientation === 'right') {
           // x as function of y: x = a*(y^2)
           const dir = sh.orientation === 'right' ? 1 : -1;
@@ -582,8 +683,9 @@ function blit() {
             const t = i / steps; // y normalized [0,1]
             const yy = y0 + t * h;
             const ny = (t - 0.5) * 2; // [-1,1]
-            const xx = x0 + (dir > 0 ? 0 : w) + dir * (w) * (ny * ny);
-            if (i === 0) vectorSSCtx.moveTo(xx, yy); else vectorSSCtx.lineTo(xx, yy);
+            const xx = x0 + (dir > 0 ? 0 : w) + dir * w * (ny * ny);
+            if (i === 0) vectorSSCtx.moveTo(xx, yy);
+            else vectorSSCtx.lineTo(xx, yy);
           }
         } else {
           // y as function of x: y = a*(x^2)
@@ -592,8 +694,9 @@ function blit() {
             const t = i / steps; // x normalized [0,1]
             const xx = x0 + t * w;
             const nx = (t - 0.5) * 2; // [-1,1]
-            const yy = y0 + (dir > 0 ? 0 : h) + dir * (h) * (nx * nx);
-            if (i === 0) vectorSSCtx.moveTo(xx, yy); else vectorSSCtx.lineTo(xx, yy);
+            const yy = y0 + (dir > 0 ? 0 : h) + dir * h * (nx * nx);
+            if (i === 0) vectorSSCtx.moveTo(xx, yy);
+            else vectorSSCtx.lineTo(xx, yy);
           }
         }
         vectorSSCtx.stroke();
@@ -614,10 +717,10 @@ function blit() {
         const outerRadius = Math.min(sh.width, sh.height) / 2;
         const innerRadius = outerRadius * 0.38;
         const pointCount = getStarPointCount(sh);
-        
+
         vectorSSCtx.beginPath();
         for (let i = 0; i < pointCount * 2; i++) {
-          const angle = (i * Math.PI / pointCount) - Math.PI / 2;
+          const angle = (i * Math.PI) / pointCount - Math.PI / 2;
           const radius = i % 2 === 0 ? outerRadius : innerRadius;
           const x = cx + radius * Math.cos(angle);
           const y = cy + radius * Math.sin(angle);
@@ -628,7 +731,7 @@ function blit() {
           }
         }
         vectorSSCtx.closePath();
-        
+
         if (sh.filled) vectorSSCtx.fill();
         vectorSSCtx.stroke();
       } else if (sh.type === 'arrow') {
@@ -636,27 +739,27 @@ function blit() {
         if (sh.points && sh.points.length >= 2) {
           const start = sh.points[0];
           const end = sh.points[1];
-          
+
           // Draw shaft
           vectorSSCtx.beginPath();
           vectorSSCtx.moveTo(start.x, start.y);
           vectorSSCtx.lineTo(end.x, end.y);
           vectorSSCtx.stroke();
-          
+
           // Draw arrowhead
           const angle = Math.atan2(end.y - start.y, end.x - start.x);
           const headLength = 15;
           const headAngle = Math.PI / 6;
-          
+
           const wing1 = {
             x: end.x - headLength * Math.cos(angle - headAngle),
-            y: end.y - headLength * Math.sin(angle - headAngle)
+            y: end.y - headLength * Math.sin(angle - headAngle),
           };
           const wing2 = {
             x: end.x - headLength * Math.cos(angle + headAngle),
-            y: end.y - headLength * Math.sin(angle + headAngle)
+            y: end.y - headLength * Math.sin(angle + headAngle),
           };
-          
+
           vectorSSCtx.beginPath();
           vectorSSCtx.moveTo(wing1.x, wing1.y);
           vectorSSCtx.lineTo(end.x, end.y);
@@ -671,7 +774,10 @@ function blit() {
     vectorSSCtx.restore();
 
     // Composite SS buffer to screen at device resolution
-    const anyCtx = screenCtx as unknown as { imageSmoothingEnabled?: boolean; imageSmoothingQuality?: 'low' | 'medium' | 'high' };
+    const anyCtx = screenCtx as unknown as {
+      imageSmoothingEnabled?: boolean;
+      imageSmoothingQuality?: 'low' | 'medium' | 'high';
+    };
     anyCtx.imageSmoothingEnabled = true;
     anyCtx.imageSmoothingQuality = 'high';
     screenCtx.save();
@@ -695,10 +801,29 @@ function blit() {
   // Draw images first (in background)
   for (let i = 0; i < retainedShapes.length; i++) {
     const sh = retainedShapes[i] as unknown as {
-      type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'arrow' | 'star';
-      x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
+      type:
+        | 'line'
+        | 'rectangle'
+        | 'ellipse'
+        | 'circle'
+        | 'triangle'
+        | 'parabola'
+        | 'text'
+        | 'image'
+        | 'arrow'
+        | 'star';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      color: string;
+      size: number;
+      alpha?: number;
+      filled?: boolean;
+      orientation?: 'up' | 'down' | 'left' | 'right';
       points?: { x: number; y: number }[];
-      text?: string; fontSize?: number;
+      text?: string;
+      fontSize?: number;
       imageData?: string;
       properties?: Record<string, unknown>;
     };
@@ -722,11 +847,16 @@ function blit() {
   for (const [, path] of consolidatedPaths) {
     // Viewport culling using bounds
     const margin = path.size;
-    if (path.bounds.maxX + margin < vx1 || path.bounds.minX - margin > vx2 ||
-        path.bounds.maxY + margin < vy1 || path.bounds.minY - margin > vy2) continue;
-    
+    if (
+      path.bounds.maxX + margin < vx1 ||
+      path.bounds.minX - margin > vx2 ||
+      path.bounds.maxY + margin < vy1 ||
+      path.bounds.minY - margin > vy2
+    )
+      continue;
+
     const isEraserPath = isBackgroundColor(path.color);
-    
+
     screenCtx.save();
     if (isEraserPath) {
       screenCtx.globalCompositeOperation = 'destination-out';
@@ -742,7 +872,7 @@ function blit() {
     if (snap.snapped && snap.offset !== 0) {
       screenCtx.translate(snap.offset, snap.offset);
     }
-    
+
     // Draw entire path in one go
     if (path.points.length > 0) {
       screenCtx.beginPath();
@@ -757,10 +887,29 @@ function blit() {
 
   for (let i = 0; i < retainedShapes.length; i++) {
     const sh = retainedShapes[i] as unknown as {
-      type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'arrow' | 'star';
-      x: number; y: number; width: number; height: number; color: string; size: number; alpha?: number; filled?: boolean; orientation?: 'up' | 'down' | 'left' | 'right';
+      type:
+        | 'line'
+        | 'rectangle'
+        | 'ellipse'
+        | 'circle'
+        | 'triangle'
+        | 'parabola'
+        | 'text'
+        | 'image'
+        | 'arrow'
+        | 'star';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      color: string;
+      size: number;
+      alpha?: number;
+      filled?: boolean;
+      orientation?: 'up' | 'down' | 'left' | 'right';
       points?: { x: number; y: number }[];
-      text?: string; fontSize?: number;
+      text?: string;
+      fontSize?: number;
       imageData?: string;
       properties?: Record<string, unknown>;
     };
@@ -812,7 +961,7 @@ function blit() {
     } else if (sh.type === 'triangle') {
       // Draw triangle using custom vertices if available, otherwise default isosceles
       let x1, y1, x2, y2, x3, y3;
-      
+
       if (sh.points && sh.points.length === 3) {
         // Use custom vertices
         x1 = sh.points[0].x;
@@ -830,25 +979,29 @@ function blit() {
         x3 = sh.x + sh.width; // bottom right
         y3 = sh.y + sh.height;
       }
-      
+
       screenCtx.moveTo(x1, y1);
       screenCtx.lineTo(x2, y2);
       screenCtx.lineTo(x3, y3);
       screenCtx.closePath();
-      
+
       if (sh.filled) screenCtx.fill();
       screenCtx.stroke();
     } else if (sh.type === 'parabola') {
       const steps = 64;
-      const x0 = sh.x, y0 = sh.y, w = sh.width, h = sh.height;
+      const x0 = sh.x,
+        y0 = sh.y,
+        w = sh.width,
+        h = sh.height;
       if (sh.orientation === 'left' || sh.orientation === 'right') {
         const dir = sh.orientation === 'right' ? 1 : -1;
         for (let i = 0; i <= steps; i++) {
           const t = i / steps;
           const yy = y0 + t * h;
           const ny = (t - 0.5) * 2;
-          const xx = x0 + (dir > 0 ? 0 : w) + dir * (w) * (ny * ny);
-          if (i === 0) screenCtx.moveTo(xx, yy); else screenCtx.lineTo(xx, yy);
+          const xx = x0 + (dir > 0 ? 0 : w) + dir * w * (ny * ny);
+          if (i === 0) screenCtx.moveTo(xx, yy);
+          else screenCtx.lineTo(xx, yy);
         }
       } else {
         const dir = sh.orientation === 'down' ? 1 : -1;
@@ -856,8 +1009,9 @@ function blit() {
           const t = i / steps;
           const xx = x0 + t * w;
           const nx = (t - 0.5) * 2;
-          const yy = y0 + (dir > 0 ? 0 : h) + dir * (h) * (nx * nx);
-          if (i === 0) screenCtx.moveTo(xx, yy); else screenCtx.lineTo(xx, yy);
+          const yy = y0 + (dir > 0 ? 0 : h) + dir * h * (nx * nx);
+          if (i === 0) screenCtx.moveTo(xx, yy);
+          else screenCtx.lineTo(xx, yy);
         }
       }
       screenCtx.stroke();
@@ -879,10 +1033,10 @@ function blit() {
       const outerRadius = Math.min(sh.width, sh.height) / 2;
       const innerRadius = outerRadius * 0.38;
       const pointCount = getStarPointCount(sh);
-      
+
       screenCtx.beginPath();
       for (let i = 0; i < pointCount * 2; i++) {
-        const angle = (i * Math.PI / pointCount) - Math.PI / 2;
+        const angle = (i * Math.PI) / pointCount - Math.PI / 2;
         const radius = i % 2 === 0 ? outerRadius : innerRadius;
         const x = cx + radius * Math.cos(angle);
         const y = cy + radius * Math.sin(angle);
@@ -893,7 +1047,7 @@ function blit() {
         }
       }
       screenCtx.closePath();
-      
+
       if (sh.filled) screenCtx.fill();
       screenCtx.stroke();
     } else if (sh.type === 'arrow') {
@@ -901,27 +1055,27 @@ function blit() {
       if (sh.points && sh.points.length >= 2) {
         const start = sh.points[0];
         const end = sh.points[1];
-        
+
         // Draw shaft
         screenCtx.beginPath();
         screenCtx.moveTo(start.x, start.y);
         screenCtx.lineTo(end.x, end.y);
         screenCtx.stroke();
-        
+
         // Draw arrowhead
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         const headLength = 15;
         const headAngle = Math.PI / 6;
-        
+
         const wing1 = {
           x: end.x - headLength * Math.cos(angle - headAngle),
-          y: end.y - headLength * Math.sin(angle - headAngle)
+          y: end.y - headLength * Math.sin(angle - headAngle),
         };
         const wing2 = {
           x: end.x - headLength * Math.cos(angle + headAngle),
-          y: end.y - headLength * Math.sin(angle + headAngle)
+          y: end.y - headLength * Math.sin(angle + headAngle),
         };
-        
+
         screenCtx.beginPath();
         screenCtx.moveTo(wing1.x, wing1.y);
         screenCtx.lineTo(end.x, end.y);
@@ -1031,7 +1185,10 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         worldCtx.restore();
       }
       // Remove any retained items whose bbox intersects the cleared region
-      const rx1 = m.x, ry1 = m.y, rx2 = m.x + m.width, ry2 = m.y + m.height;
+      const rx1 = m.x,
+        ry1 = m.y,
+        rx2 = m.x + m.width,
+        ry2 = m.y + m.height;
       function lineBBox(x0: number, y0: number, x1: number, y1: number) {
         const minX = Math.min(x0, x1);
         const minY = Math.min(y0, y1);
@@ -1058,10 +1215,16 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         if (sh.type === 'image') {
           continue;
         }
-        let minX = 0, minY = 0, maxX = 0, maxY = 0;
+        let minX = 0,
+          minY = 0,
+          maxX = 0,
+          maxY = 0;
         if (sh.type === 'line') {
           const bb = lineBBox(sh.x, sh.y, sh.x + sh.width, sh.y + sh.height);
-          minX = bb.minX; minY = bb.minY; maxX = bb.maxX; maxY = bb.maxY;
+          minX = bb.minX;
+          minY = bb.minY;
+          maxX = bb.maxX;
+          maxY = bb.maxY;
         } else {
           const rx = sh.x + sh.width;
           const ry = sh.y + sh.height;
@@ -1126,7 +1289,10 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         worldCtx.stroke();
       } else if (sh.type === 'parabola') {
         const steps = 64;
-        const x0 = sh.x, y0 = sh.y, w = sh.width, h = sh.height;
+        const x0 = sh.x,
+          y0 = sh.y,
+          w = sh.width,
+          h = sh.height;
         worldCtx.strokeStyle = bg;
         worldCtx.lineWidth = sh.size;
         worldCtx.lineCap = 'round';
@@ -1138,8 +1304,9 @@ function handleMessage(evt: MessageEvent<Inbound>) {
             const t = i / steps;
             const yy = y0 + t * h;
             const ny = (t - 0.5) * 2;
-            const xx = x0 + (dir > 0 ? 0 : w) + dir * (w) * (ny * ny);
-            if (i === 0) worldCtx.moveTo(xx, yy); else worldCtx.lineTo(xx, yy);
+            const xx = x0 + (dir > 0 ? 0 : w) + dir * w * (ny * ny);
+            if (i === 0) worldCtx.moveTo(xx, yy);
+            else worldCtx.lineTo(xx, yy);
           }
         } else {
           const dir = sh.orientation === 'down' ? 1 : -1;
@@ -1147,8 +1314,9 @@ function handleMessage(evt: MessageEvent<Inbound>) {
             const t = i / steps;
             const xx = x0 + t * w;
             const nx = (t - 0.5) * 2;
-            const yy = y0 + (dir > 0 ? 0 : h) + dir * (h) * (nx * nx);
-            if (i === 0) worldCtx.moveTo(xx, yy); else worldCtx.lineTo(xx, yy);
+            const yy = y0 + (dir > 0 ? 0 : h) + dir * h * (nx * nx);
+            if (i === 0) worldCtx.moveTo(xx, yy);
+            else worldCtx.lineTo(xx, yy);
           }
         }
         worldCtx.stroke();
@@ -1173,18 +1341,21 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       }
       ensureWorld();
       if (!worldCtx) break;
-      fetch(m.dataUrl).then(r => r.blob()).then(async (blob) => {
-        const bmp = await createImageBitmap(blob);
-        if (!worldCtx) return;
-        worldCtx.save();
-        worldCtx.setTransform(1, 0, 0, 1, 0, 0);
-        worldCtx.fillStyle = canvasBgColor;
-        worldCtx.fillRect(0, 0, worldW, worldH);
-        worldCtx.drawImage(bmp, 0, 0, worldW, worldH);
-        worldCtx.restore();
-        // Do NOT clear retained vectors; keep vector state for crisp rendering
-        scheduleBlit();
-      }).catch(() => {});
+      fetch(m.dataUrl)
+        .then((r) => r.blob())
+        .then(async (blob) => {
+          const bmp = await createImageBitmap(blob);
+          if (!worldCtx) return;
+          worldCtx.save();
+          worldCtx.setTransform(1, 0, 0, 1, 0, 0);
+          worldCtx.fillStyle = canvasBgColor;
+          worldCtx.fillRect(0, 0, worldW, worldH);
+          worldCtx.drawImage(bmp, 0, 0, worldW, worldH);
+          worldCtx.restore();
+          // Do NOT clear retained vectors; keep vector state for crisp rendering
+          scheduleBlit();
+        })
+        .catch(() => {});
       break;
     }
     case 'theme': {
@@ -1215,8 +1386,23 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       // Draw vectors in world space
       // Images first (in background)
       for (let i = 0; i < retainedShapes.length; i++) {
-        const sh = retainedShapes[i] as unknown as { type: string; imageData?: string; x?: number; y?: number; width?: number; height?: number; alpha?: number };
-        if (sh.type === 'image' && sh.imageData && sh.x !== undefined && sh.y !== undefined && sh.width !== undefined && sh.height !== undefined) {
+        const sh = retainedShapes[i] as unknown as {
+          type: string;
+          imageData?: string;
+          x?: number;
+          y?: number;
+          width?: number;
+          height?: number;
+          alpha?: number;
+        };
+        if (
+          sh.type === 'image' &&
+          sh.imageData &&
+          sh.x !== undefined &&
+          sh.y !== undefined &&
+          sh.width !== undefined &&
+          sh.height !== undefined
+        ) {
           const bitmap = imageBitmapCache.get(sh.imageData);
           if (bitmap) {
             ctx.save();
@@ -1229,7 +1415,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       // Draw consolidated paths first (batched strokes)
       for (const [, path] of consolidatedPaths) {
         const isEraserPath = isBackgroundColor(path.color);
-        
+
         ctx.save();
         if (isEraserPath) {
           ctx.globalCompositeOperation = 'destination-out';
@@ -1241,7 +1427,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         ctx.globalAlpha = path.alpha;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        
+
         if (path.points.length > 0) {
           ctx.beginPath();
           ctx.moveTo(path.points[0].x, path.points[0].y);
@@ -1293,14 +1479,17 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         }
         ctx.restore();
       }
-      snap.convertToBlob({ type: 'image/png' }).then((blob) => {
-        if (!blob) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          self.postMessage({ type: 'snapshot', dataUrl: String(reader.result) } as Outbound);
-        };
-        reader.readAsDataURL(blob);
-      }).catch(() => {});
+      snap
+        .convertToBlob({ type: 'image/png' })
+        .then((blob) => {
+          if (!blob) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            self.postMessage({ type: 'snapshot', dataUrl: String(reader.result) } as Outbound);
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => {});
       break;
     }
   }

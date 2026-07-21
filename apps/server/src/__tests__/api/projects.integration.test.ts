@@ -3,12 +3,26 @@ import request from 'supertest';
 
 const mocks = vi.hoisted(() => ({
   projectService: {
-    list: vi.fn(), create: vi.fn(), save: vi.fn(), delete: vi.fn(),
-    get: vi.fn(), getByShareToken: vi.fn(), shareProject: vi.fn(), unshareProject: vi.fn(),
-    getCollaborators: vi.fn(), addCollaborator: vi.fn(), removeCollaborator: vi.fn(),
-    moveToFolder: vi.fn(), listFolders: vi.fn(), createFolder: vi.fn(), updateFolder: vi.fn(),
-    deleteFolder: vi.fn(), checkPermission: vi.fn(), cleanupCorruptCollaborators: vi.fn(),
-    saveCollaborationSnapshot: vi.fn(), getCollaborationSnapshot: vi.fn(),
+    list: vi.fn(),
+    create: vi.fn(),
+    save: vi.fn(),
+    delete: vi.fn(),
+    get: vi.fn(),
+    getByShareToken: vi.fn(),
+    shareProject: vi.fn(),
+    unshareProject: vi.fn(),
+    getCollaborators: vi.fn(),
+    addCollaborator: vi.fn(),
+    removeCollaborator: vi.fn(),
+    moveToFolder: vi.fn(),
+    listFolders: vi.fn(),
+    createFolder: vi.fn(),
+    updateFolder: vi.fn(),
+    deleteFolder: vi.fn(),
+    checkPermission: vi.fn(),
+    cleanupCorruptCollaborators: vi.fn(),
+    saveCollaborationSnapshot: vi.fn(),
+    getCollaborationSnapshot: vi.fn(),
   },
 }));
 
@@ -19,22 +33,37 @@ vi.mock('../../config/env.js', () => ({
   clerkPublishableKey: 'pk_test',
 }));
 vi.mock('../../lib/prisma.js', () => ({
-  disconnectPrisma: vi.fn(), checkDatabaseHealth: vi.fn().mockResolvedValue(true),
+  disconnectPrisma: vi.fn(),
+  checkDatabaseHealth: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('../../utils/logger.js', () => ({
-  Logger: { setRequestId: vi.fn() }, getTraceContext: vi.fn(() => ({})),
+  Logger: { setRequestId: vi.fn() },
+  getTraceContext: vi.fn(() => ({})),
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn() },
 }));
 vi.mock('../../services/DrawingService.js', () => ({
-  DrawingService: class { getConnectionCount() { return 0; } getMaxConnections() { return 50; } },
+  DrawingService: class {
+    getConnectionCount() {
+      return 0;
+    }
+    getMaxConnections() {
+      return 50;
+    }
+  },
 }));
 vi.mock('../../services/ProjectService.js', () => ({
-  ProjectService: class { constructor() { return mocks.projectService; } },
+  ProjectService: class {
+    constructor() {
+      return mocks.projectService;
+    }
+  },
 }));
 vi.mock('@clerk/express', () => ({
   clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAuth: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  getAuth: (req: { headers: Record<string, string | undefined> }) => ({ userId: req.headers['x-test-user'] ?? null }),
+  getAuth: (req: { headers: Record<string, string | undefined> }) => ({
+    userId: req.headers['x-test-user'] ?? null,
+  }),
   clerkClient: { users: { getUser: vi.fn(), getUserList: vi.fn() } },
 }));
 
@@ -71,14 +100,20 @@ describe('project REST boundary', () => {
 
     expect(response.status).toBe(200);
     expect(mocks.projectService.save).toHaveBeenCalledWith(
-      'ckz1h2abc0000qwerty123456', 'owner-1', 'Board', { objects: [] }, 2,
+      'ckz1h2abc0000qwerty123456',
+      'owner-1',
+      'Board',
+      { objects: [] },
+      2,
     );
   });
 
   it('exposes stale writes as a conflict instead of a server error', async () => {
-    mocks.projectService.save.mockRejectedValue(Object.assign(new Error('Project has changed'), {
-      name: 'ProjectConflictError',
-    }));
+    mocks.projectService.save.mockRejectedValue(
+      Object.assign(new Error('Project has changed'), {
+        name: 'ProjectConflictError',
+      }),
+    );
 
     const response = await request(app)
       .put('/api/projects/ckz1h2abc0000qwerty123456')
@@ -90,9 +125,11 @@ describe('project REST boundary', () => {
   });
 
   it('exposes denied edits as forbidden instead of a server error', async () => {
-    mocks.projectService.save.mockRejectedValue(Object.assign(new Error('No permission to edit this project'), {
-      name: 'ProjectAccessError',
-    }));
+    mocks.projectService.save.mockRejectedValue(
+      Object.assign(new Error('No permission to edit this project'), {
+        name: 'ProjectAccessError',
+      }),
+    );
     const response = await request(app)
       .put('/api/projects/ckz1h2abc0000qwerty123456')
       .set('x-test-user', 'viewer-1')

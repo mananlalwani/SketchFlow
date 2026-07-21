@@ -14,7 +14,8 @@ vi.mock('../../config/env.js', () => ({
 }));
 vi.mock('../../lib/prisma.js', () => ({ disconnectPrisma: vi.fn(), checkDatabaseHealth: vi.fn() }));
 vi.mock('../../utils/logger.js', () => ({
-  Logger: { setRequestId: vi.fn() }, getTraceContext: vi.fn(() => ({})),
+  Logger: { setRequestId: vi.fn() },
+  getTraceContext: vi.fn(() => ({})),
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn() },
 }));
 vi.mock('../../services/ProjectService.js', () => ({
@@ -31,9 +32,10 @@ vi.mock('@clerk/express', () => ({
   getAuth: () => ({ userId: null }),
   clerkClient: {
     authenticateRequest: vi.fn(async (request: Request) => ({
-      toAuth: () => request.headers.get('Authorization') === 'Bearer valid-token'
-        ? { userId: 'user-1', sessionClaims: {} }
-        : { userId: null },
+      toAuth: () =>
+        request.headers.get('Authorization') === 'Bearer valid-token'
+          ? { userId: 'user-1', sessionClaims: {} }
+          : { userId: null },
     })),
     users: { getUser: vi.fn(), getUserList: vi.fn() },
   },
@@ -50,7 +52,8 @@ describe('Socket.IO boundary', () => {
   beforeAll(async () => {
     await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     const address = httpServer.address();
-    if (!address || typeof address === 'string') throw new Error('Test server did not bind a TCP port');
+    if (!address || typeof address === 'string')
+      throw new Error('Test server did not bind a TCP port');
     url = `http://127.0.0.1:${address.port}`;
   });
 
@@ -79,7 +82,9 @@ describe('Socket.IO boundary', () => {
     const client = await connect('valid-token');
 
     client.emit('room:join', 'project-1');
-    await vi.waitFor(() => expect(mocks.checkPermission).toHaveBeenCalledWith('project-1', 'user-1', 'view'));
+    await vi.waitFor(() =>
+      expect(mocks.checkPermission).toHaveBeenCalledWith('project-1', 'user-1', 'view'),
+    );
     await vi.waitFor(() => {
       const socket = sketchServer.getSocketServer().sockets.sockets.get(client.id);
       expect(socket?.rooms.has('project-1')).toBe(true);
@@ -91,21 +96,29 @@ describe('Socket.IO boundary', () => {
     const client = await connect('valid-token');
 
     client.emit('room:join', 'private-project');
-    await vi.waitFor(() => expect(mocks.checkPermission).toHaveBeenCalledWith('private-project', 'user-1', 'view'));
+    await vi.waitFor(() =>
+      expect(mocks.checkPermission).toHaveBeenCalledWith('private-project', 'user-1', 'view'),
+    );
     const socket = sketchServer.getSocketServer().sockets.sockets.get(client.id);
     expect(socket?.rooms.has('private-project')).toBe(false);
   });
 
   it('restores a persisted snapshot after reconnecting', async () => {
     mocks.checkPermission.mockResolvedValue(true);
-    mocks.getCollaborationSnapshot.mockResolvedValue({ dataUrl: 'data:image/png;base64,recovered' });
+    mocks.getCollaborationSnapshot.mockResolvedValue({
+      dataUrl: 'data:image/png;base64,recovered',
+    });
     const first = await connect('valid-token');
     first.emit('room:join', 'recovery-room');
-    await vi.waitFor(() => expect(mocks.getCollaborationSnapshot).toHaveBeenCalledWith('recovery-room'));
+    await vi.waitFor(() =>
+      expect(mocks.getCollaborationSnapshot).toHaveBeenCalledWith('recovery-room'),
+    );
     first.disconnect();
 
     const second = await connect('valid-token');
-    const snapshot = new Promise<{ dataUrl: string }>((resolve) => second.once('canvas:snapshot', resolve));
+    const snapshot = new Promise<{ dataUrl: string }>((resolve) =>
+      second.once('canvas:snapshot', resolve),
+    );
     second.emit('room:join', 'recovery-room');
     await expect(snapshot).resolves.toEqual({ dataUrl: 'data:image/png;base64,recovered' });
   });

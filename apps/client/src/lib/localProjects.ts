@@ -62,16 +62,24 @@ class LocalProjectsService {
       const projects = await (db as any).getAllFromIndex(STORE_NAME, 'updatedAt');
 
       return projects
-        .map((p: { id: string; title: string; updatedAt: number; createdAt: number; thumbnail?: string }) => ({
-          id: p.id,
-          userId: 'guest',
-          title: p.title,
-          updatedAt: p.updatedAt,
-          createdAt: p.createdAt,
-          shared: false,
-          role: 'owner' as const,
-          thumbnail: p.thumbnail,
-        }))
+        .map(
+          (p: {
+            id: string;
+            title: string;
+            updatedAt: number;
+            createdAt: number;
+            thumbnail?: string;
+          }) => ({
+            id: p.id,
+            userId: 'guest',
+            title: p.title,
+            updatedAt: p.updatedAt,
+            createdAt: p.createdAt,
+            shared: false,
+            role: 'owner' as const,
+            thumbnail: p.thumbnail,
+          }),
+        )
         .sort((a: { updatedAt: number }, b: { updatedAt: number }) => b.updatedAt - a.updatedAt);
     } catch (error) {
       console.error('Failed to list local projects from IndexedDB:', error);
@@ -216,7 +224,12 @@ class LocalProjectsService {
     }
   }
 
-  private saveToLocalStorage(id: string, title: string, data: unknown, thumbnail?: string): ProjectRecord {
+  private saveToLocalStorage(
+    id: string,
+    title: string,
+    data: unknown,
+    thumbnail?: string,
+  ): ProjectRecord {
     const existing = this.getFromLocalStorage(id);
 
     const project = {
@@ -310,7 +323,7 @@ class LocalProjectsService {
       const db = await this.initDB();
       const projects = await db.getAll(STORE_NAME);
 
-      return projects.map(p => ({
+      return projects.map((p) => ({
         id: p.id,
         userId: 'guest',
         title: p.title,
@@ -351,7 +364,7 @@ class LocalProjectsService {
           keys.push(key);
         }
       }
-      keys.forEach(key => localStorage.removeItem(key));
+      keys.forEach((key) => localStorage.removeItem(key));
     } catch (error) {
       console.error('Failed to clear local projects:', error);
     }

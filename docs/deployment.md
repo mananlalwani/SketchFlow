@@ -90,12 +90,14 @@ VITE_OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer your-token
 ### What Gets Instrumented
 
 **Server (Node.js):**
+
 - HTTP requests/responses (Express)
 - Database queries (Prisma)
 - Socket.IO events
 - Custom application logs with trace correlation
 
 **Client (Browser):**
+
 - Fetch/XHR requests
 - Document load timing
 - User interactions
@@ -106,6 +108,7 @@ VITE_OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer your-token
 All server logs automatically include `traceId` and `spanId` when OpenTelemetry is active. This allows you to correlate logs with traces in Honeycomb.
 
 Example log output (JSON format):
+
 ```json
 {
   "timestamp": "2024-01-15T10:30:00.000Z",
@@ -124,6 +127,7 @@ Example log output (JSON format):
 ### Security & Redaction
 
 The logger automatically redacts sensitive fields from logs:
+
 - Authorization headers
 - Cookies
 - Tokens (API keys, JWTs, session tokens)

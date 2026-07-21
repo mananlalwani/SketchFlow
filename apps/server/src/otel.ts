@@ -6,19 +6,13 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from '@opentelemetry/semantic-conventions';
+import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
 // Deployment environment attribute (use raw string if not available in installed version)
 const ATTR_DEPLOYMENT_ENVIRONMENT = 'deployment.environment';
 
 // Check if OTel is enabled via env vars
-const isOtelEnabled = !!(
-  process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
-  process.env.HONEYCOMB_API_KEY
-);
+const isOtelEnabled = !!(process.env.OTEL_EXPORTER_OTLP_ENDPOINT || process.env.HONEYCOMB_API_KEY);
 
 // Build OTLP endpoint and headers from env
 function getOtlpConfig(): { endpoint: string; headers: Record<string, string> } {
@@ -58,7 +52,8 @@ if (isOtelEnabled) {
   const { endpoint, headers } = getOtlpConfig();
 
   const serviceName = process.env.OTEL_SERVICE_NAME || 'sketchflow-server';
-  const serviceVersion = process.env.OTEL_SERVICE_VERSION || process.env.npm_package_version || '1.0.0';
+  const serviceVersion =
+    process.env.OTEL_SERVICE_VERSION || process.env.npm_package_version || '1.0.0';
   const environment = process.env.NODE_ENV || 'development';
 
   // Create resource with service info
@@ -87,7 +82,11 @@ if (isOtelEnabled) {
           ignoreIncomingRequestHook: (req) => {
             // Ignore health checks to reduce noise
             const url = req.url || '';
-            return url.includes('/api/health') || url.includes('/api/healthz') || url.includes('/api/readyz');
+            return (
+              url.includes('/api/health') ||
+              url.includes('/api/healthz') ||
+              url.includes('/api/readyz')
+            );
           },
         },
       }),
@@ -113,7 +112,9 @@ if (isOtelEnabled) {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 } else {
-  console.log('[OTel] OpenTelemetry disabled (no OTEL_EXPORTER_OTLP_ENDPOINT or HONEYCOMB_API_KEY set)');
+  console.log(
+    '[OTel] OpenTelemetry disabled (no OTEL_EXPORTER_OTLP_ENDPOINT or HONEYCOMB_API_KEY set)',
+  );
 }
 
 export { sdk, isOtelEnabled };

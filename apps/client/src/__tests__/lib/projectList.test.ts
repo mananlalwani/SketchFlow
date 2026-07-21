@@ -9,11 +9,15 @@ const projects = [
 
 describe('project list helpers', () => {
   it('filters the selected folder when no search query is present', () => {
-    expect(filterAndSortProjects(projects, '', 'folder-1', 'name', 'asc').map((project) => project.id)).toEqual(['b']);
+    expect(
+      filterAndSortProjects(projects, '', 'folder-1', 'name', 'asc').map((project) => project.id),
+    ).toEqual(['b']);
   });
 
   it('searches all folders and sorts without mutating the source list', () => {
-    expect(filterAndSortProjects(projects, 'a', null, 'updated', 'desc').map((project) => project.id)).toEqual(['a', 'c', 'b']);
+    expect(
+      filterAndSortProjects(projects, 'a', null, 'updated', 'desc').map((project) => project.id),
+    ).toEqual(['a', 'c', 'b']);
     expect(projects.map((project) => project.id)).toEqual(['a', 'b', 'c']);
   });
 });

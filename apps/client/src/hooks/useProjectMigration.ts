@@ -24,10 +24,7 @@ export function useProjectMigration() {
       }
 
       // Check if migration is needed
-      const needsMigration = await projectMigrationService.needsMigration(
-        isAuthenticated,
-        guestId
-      );
+      const needsMigration = await projectMigrationService.needsMigration(isAuthenticated, guestId);
 
       if (!needsMigration) {
         return;
@@ -48,7 +45,7 @@ export function useProjectMigration() {
 
         if (result.success) {
           setMigrationComplete(true);
-          
+
           if (result.migratedCount > 0) {
             toast({
               title: 'Projects migrated!',
@@ -67,7 +64,6 @@ export function useProjectMigration() {
             duration: 7000,
           });
         }
-
       } catch (error) {
         console.error('Migration error:', error);
         toast({

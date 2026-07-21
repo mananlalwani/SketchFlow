@@ -1,17 +1,12 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  listProjects, 
-  type ProjectListItem,
-  getProject,
-  getSharedProject
-} from '@/lib/api';
+import { listProjects, type ProjectListItem, getProject, getSharedProject } from '@/lib/api';
 import { useDrawingStore } from '@/store/drawingStore';
 import { deserializeProject, serializeProject } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
+import {
   Eye,
   Loader2,
   Search,
@@ -23,7 +18,7 @@ import {
   ExternalLink,
   Share2,
   FileEdit,
-  Sparkles
+  Sparkles,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -44,52 +39,64 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [loadingProject, setLoadingProject] = useState<string | null>(null);
-  const { 
-    setObjects, 
-    replaceHistory, 
-    requestFullRedraw, 
-    setProjectTitle,
-    setCurrentProject
-  } = useDrawingStore();
+  const { setObjects, replaceHistory, requestFullRedraw, setProjectTitle, setCurrentProject } =
+    useDrawingStore();
 
-  const loadSharedProject = useCallback(async (shareToken: string) => {
-    setLoadingProject(shareToken);
-    try {
-      const record = await getSharedProject<string>(shareToken);
-      // Data is a serialized string, so we deserialize it to count objects
-      const projectData = deserializeProject(record.data);
-      console.log('Loaded shared project:', record.id, record.title, `(${Array.isArray(projectData) ? projectData.length : 0} objects)`);
+  const loadSharedProject = useCallback(
+    async (shareToken: string) => {
+      setLoadingProject(shareToken);
+      try {
+        const record = await getSharedProject<string>(shareToken);
+        // Data is a serialized string, so we deserialize it to count objects
+        const projectData = deserializeProject(record.data);
+        console.log(
+          'Loaded shared project:',
+          record.id,
+          record.title,
+          `(${Array.isArray(projectData) ? projectData.length : 0} objects)`,
+        );
 
-      // Set project title immediately for better UX
-      setProjectTitle(record.title || 'Shared Project');
-      setCurrentProject(record.id); // Set the current project ID for socket connections
+        // Set project title immediately for better UX
+        setProjectTitle(record.title || 'Shared Project');
+        setCurrentProject(record.id); // Set the current project ID for socket connections
 
-      // Clear current canvas and show loading state
-      setObjects([]);
-      requestFullRedraw();
+        // Clear current canvas and show loading state
+        setObjects([]);
+        requestFullRedraw();
 
-      // Deserialize objects (this can be heavy for large projects)
-      const objects = deserializeProject(record.data);
+        // Deserialize objects (this can be heavy for large projects)
+        const objects = deserializeProject(record.data);
 
-      // Load objects and trigger redraw
-      setObjects(objects);
-      replaceHistory(objects);
-      requestFullRedraw();
+        // Load objects and trigger redraw
+        setObjects(objects);
+        replaceHistory(objects);
+        requestFullRedraw();
 
-      toast({ title: 'Shared project loaded', description: `Viewing "${record.title}"` });
-      onProjectLoad?.();
-    } catch (e) {
-      console.error('Failed to load shared project:', e);
-      const errorMessage = e instanceof Error ? e.message : 'The shared project could not be found.';
-      toast({
-        title: 'Failed to load shared project',
-        description: errorMessage,
-        variant: 'destructive'
-      });
-    } finally {
-      setLoadingProject(null);
-    }
-  }, [setObjects, replaceHistory, setCurrentProject, requestFullRedraw, setProjectTitle, toast, onProjectLoad]);
+        toast({ title: 'Shared project loaded', description: `Viewing "${record.title}"` });
+        onProjectLoad?.();
+      } catch (e) {
+        console.error('Failed to load shared project:', e);
+        const errorMessage =
+          e instanceof Error ? e.message : 'The shared project could not be found.';
+        toast({
+          title: 'Failed to load shared project',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      } finally {
+        setLoadingProject(null);
+      }
+    },
+    [
+      setObjects,
+      replaceHistory,
+      setCurrentProject,
+      requestFullRedraw,
+      setProjectTitle,
+      toast,
+      onProjectLoad,
+    ],
+  );
 
   useEffect(() => {
     const shareToken = searchParams.get('share');
@@ -104,13 +111,13 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
     try {
       const token = await getToken();
       const list = await listProjects(token);
-      const sharedProjects = list.filter(p => 
-        p && p.id && (p.shared || p.role === 'editor' || p.role === 'viewer')
-      ).map(p => ({
-        ...p,
-        shared: p.shared ?? false,
-        role: p.role ?? 'owner'
-      }));
+      const sharedProjects = list
+        .filter((p) => p && p.id && (p.shared || p.role === 'editor' || p.role === 'viewer'))
+        .map((p) => ({
+          ...p,
+          shared: p.shared ?? false,
+          role: p.role ?? 'owner',
+        }));
       setProjects(sharedProjects);
     } catch (e) {
       console.error('Failed to load projects:', e);
@@ -128,43 +135,53 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
 
   const filteredProjects = useMemo(() => {
     let result = [...projects];
-    
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(p => 
-        p.title?.toLowerCase().includes(query)
-      );
+      result = result.filter((p) => p.title?.toLowerCase().includes(query));
     }
-    
+
     return result.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }, [projects, searchQuery]);
 
-  const handleViewProject = useCallback(async (project: ProjectListItem) => {
-    setLoadingProject(project.id);
-    try {
-      const token = await getToken();
-      const record = await getProject<ReturnType<typeof serializeProject>>(project.id, token);
-      console.log('Loaded project:', record.id, record.title);
-      const objects = deserializeProject(record.data);
-      setObjects(objects);
-      replaceHistory(objects);
-      setCurrentProject(record.id); // Set the current project ID for socket connections
-      requestFullRedraw();
-      setProjectTitle(record.title || 'Project');
-      toast({ title: 'Project loaded', description: `Viewing "${record.title}"` });
-      onProjectLoad?.();
-    } catch (e) {
-      console.error('Failed to load project:', e);
-      const errorMessage = e instanceof Error ? e.message : 'Failed to load project';
-      toast({ 
-        title: 'Failed to load project', 
-        description: errorMessage,
-        variant: 'destructive' 
-      });
-    } finally {
-      setLoadingProject(null);
-    }
-  }, [getToken, setObjects, replaceHistory, setCurrentProject, requestFullRedraw, setProjectTitle, toast, onProjectLoad]);
+  const handleViewProject = useCallback(
+    async (project: ProjectListItem) => {
+      setLoadingProject(project.id);
+      try {
+        const token = await getToken();
+        const record = await getProject<ReturnType<typeof serializeProject>>(project.id, token);
+        console.log('Loaded project:', record.id, record.title);
+        const objects = deserializeProject(record.data);
+        setObjects(objects);
+        replaceHistory(objects);
+        setCurrentProject(record.id); // Set the current project ID for socket connections
+        requestFullRedraw();
+        setProjectTitle(record.title || 'Project');
+        toast({ title: 'Project loaded', description: `Viewing "${record.title}"` });
+        onProjectLoad?.();
+      } catch (e) {
+        console.error('Failed to load project:', e);
+        const errorMessage = e instanceof Error ? e.message : 'Failed to load project';
+        toast({
+          title: 'Failed to load project',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      } finally {
+        setLoadingProject(null);
+      }
+    },
+    [
+      getToken,
+      setObjects,
+      replaceHistory,
+      setCurrentProject,
+      requestFullRedraw,
+      setProjectTitle,
+      toast,
+      onProjectLoad,
+    ],
+  );
 
   if (!isLoaded) {
     return (
@@ -191,7 +208,9 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
       <div className="mb-6 p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 shadow-sm transition-colors duration-200">
         <div className="flex items-center gap-2 mb-2">
           <Link2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Open Shared Link</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            Open Shared Link
+          </span>
         </div>
         <div className="flex gap-2">
           <Input
@@ -209,11 +228,13 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
               }
             }}
           />
-          <Button 
+          <Button
             variant="default"
             className="bg-emerald-600 hover:bg-emerald-500"
             onClick={() => {
-              const input = document.querySelector('input[placeholder*="share"]') as HTMLInputElement;
+              const input = document.querySelector(
+                'input[placeholder*="share"]',
+              ) as HTMLInputElement;
               if (input?.value) {
                 const match = input.value.match(/[?&]share=([^&]+)/);
                 const token = match ? match[1] : input.value.trim();
@@ -273,16 +294,18 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
             ) : filteredProjects.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-300 dark:border-white/10 rounded-2xl bg-white/50 dark:bg-white/5 p-12">
                 <Sparkles className="w-12 h-12 text-emerald-500 dark:text-emerald-400 mb-4" />
-                <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">No Shared Projects</h3>
+                <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">
+                  No Shared Projects
+                </h3>
                 <p className="text-slate-500 text-center max-w-sm mt-2">
-                  Projects shared with you or marked as public will appear here.
-                  You can also paste a share link above to view a project.
+                  Projects shared with you or marked as public will appear here. You can also paste
+                  a share link above to view a project.
                 </p>
               </div>
             ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProjects.map(project => (
-                  <div 
+                {filteredProjects.map((project) => (
+                  <div
                     key={project.id}
                     onClick={() => handleViewProject(project)}
                     className="group relative bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 hover:border-emerald-400 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl p-4 cursor-pointer transition-all duration-200 flex flex-col gap-3 shadow-sm hover:shadow-md"
@@ -292,7 +315,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
                         <Loader2 className="w-6 h-6 animate-spin text-emerald-500 dark:text-emerald-400" />
                       </div>
                     )}
-                    
+
                     {/* Thumbnail placeholder */}
                     <div className="aspect-video bg-slate-100 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-white/5 flex items-center justify-center mb-2 group-hover:border-emerald-400/20 dark:group-hover:border-emerald-500/20 transition-colors">
                       <FileEdit className="w-8 h-8 text-slate-400 dark:text-slate-700 group-hover:text-slate-500 dark:group-hover:text-slate-600 transition-colors" />
@@ -301,7 +324,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
                     <div className="font-semibold truncate text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                       {project.title || 'Untitled'}
                     </div>
-                    
+
                     <div className="mt-auto flex items-center justify-between text-xs text-slate-500">
                       <div className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
@@ -327,8 +350,8 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredProjects.map(project => (
-                  <div 
+                {filteredProjects.map((project) => (
+                  <div
                     key={project.id}
                     onClick={() => handleViewProject(project)}
                     className="group flex items-center gap-4 bg-white dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 hover:border-emerald-400 dark:hover:border-emerald-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg p-3 cursor-pointer transition-all duration-200 shadow-sm"
@@ -336,8 +359,10 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
                     {loadingProject === project.id && (
                       <Loader2 className="w-5 h-5 animate-spin text-emerald-500 dark:text-emerald-400" />
                     )}
-                    <FileEdit className={`w-5 h-5 text-slate-400 dark:text-slate-600 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition-colors ${loadingProject === project.id ? 'hidden' : ''}`} />
-                    
+                    <FileEdit
+                      className={`w-5 h-5 text-slate-400 dark:text-slate-600 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition-colors ${loadingProject === project.id ? 'hidden' : ''}`}
+                    />
+
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                         {project.title || 'Untitled'}
@@ -374,7 +399,9 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
       ) : (
         <div className="flex flex-col items-center justify-center flex-1 text-center">
           <Eye className="w-16 h-16 text-slate-400 dark:text-slate-600 mb-4" />
-          <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">Sign in to see your shared projects</h3>
+          <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">
+            Sign in to see your shared projects
+          </h3>
           <p className="text-slate-500 max-w-sm">
             You can still view projects by pasting a share link above.
           </p>

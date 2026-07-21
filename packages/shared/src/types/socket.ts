@@ -15,7 +15,17 @@ export interface StrokeData {
 
 export interface ShapeData {
   id: string;
-  type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'star' | 'arrow';
+  type:
+    | 'line'
+    | 'rectangle'
+    | 'ellipse'
+    | 'circle'
+    | 'triangle'
+    | 'parabola'
+    | 'text'
+    | 'image'
+    | 'star'
+    | 'arrow';
   x: number;
   y: number;
   width: number;
@@ -68,50 +78,90 @@ export interface ProjectStroke {
 export interface ProjectShapeLine {
   id: string;
   type: 'line';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
 }
 
 export interface ProjectShapeRect {
   id: string;
   type: 'rectangle';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number; filled?: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
+  filled?: boolean;
 }
 
 export interface ProjectShapeEllipse {
   id: string;
   type: 'ellipse';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number; filled?: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
+  filled?: boolean;
 }
 
 export interface ProjectShapeParabola {
   id: string;
   type: 'parabola';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number; orientation?: 'up' | 'down' | 'left' | 'right';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
+  orientation?: 'up' | 'down' | 'left' | 'right';
 }
 
 export interface ProjectShapeCircle {
   id: string;
   type: 'circle';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number; filled?: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
+  filled?: boolean;
 }
 
 export interface ProjectShapeTriangle {
   id: string;
   type: 'triangle';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number; filled?: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
+  filled?: boolean;
 }
 
 export interface ProjectShapeText {
   id: string;
   type: 'text';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
   text: string;
   fontSize: number;
 }
@@ -119,12 +169,26 @@ export interface ProjectShapeText {
 export interface ProjectShapeImage {
   id: string;
   type: 'image';
-  x: number; y: number; width: number; height: number;
-  color: string; size: number; alpha?: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  size: number;
+  alpha?: number;
   imageData: string;
 }
 
-export type ProjectObject = ProjectStroke | ProjectShapeLine | ProjectShapeRect | ProjectShapeEllipse | ProjectShapeCircle | ProjectShapeTriangle | ProjectShapeParabola | ProjectShapeText | ProjectShapeImage;
+export type ProjectObject =
+  | ProjectStroke
+  | ProjectShapeLine
+  | ProjectShapeRect
+  | ProjectShapeEllipse
+  | ProjectShapeCircle
+  | ProjectShapeTriangle
+  | ProjectShapeParabola
+  | ProjectShapeText
+  | ProjectShapeImage;
 
 export interface ProjectFile {
   version: ProjectVersion;

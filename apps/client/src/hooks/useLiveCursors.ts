@@ -9,7 +9,8 @@ export function useLiveCursors(projectId: string | null) {
   const { user, isAuthenticated, isGuest, guestId } = useAuthStore();
   const lastEmitTime = useRef<number>(0);
   const THROTTLE_MS = 33; // ~30fps
-  const allowGuestSocket = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('share');
+  const allowGuestSocket =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('share');
   const canUseRealtime = isAuthenticated || (isGuest && allowGuestSocket);
   const selfCursorId = isAuthenticated ? user?.id : guestId;
 
@@ -29,7 +30,7 @@ export function useLiveCursors(projectId: string | null) {
     if (!canUseRealtime) return;
 
     const unsubscribeMove = on('cursor:move', (cursor: CursorData) => {
-      setCursors(prev => {
+      setCursors((prev) => {
         const next = new Map(prev);
         next.set(cursor.userId, cursor);
         return next;
@@ -37,7 +38,7 @@ export function useLiveCursors(projectId: string | null) {
     });
 
     const unsubscribeJoin = on('cursor:join', (cursor: CursorData) => {
-      setCursors(prev => {
+      setCursors((prev) => {
         const next = new Map(prev);
         next.set(cursor.userId, cursor);
         return next;
@@ -45,7 +46,7 @@ export function useLiveCursors(projectId: string | null) {
     });
 
     const unsubscribeLeave = on('cursor:leave', (userId: string) => {
-      setCursors(prev => {
+      setCursors((prev) => {
         const next = new Map(prev);
         next.delete(userId);
         return next;
@@ -53,7 +54,7 @@ export function useLiveCursors(projectId: string | null) {
     });
 
     const unsubscribeAll = on('cursors:all', (allCursors: CursorData[]) => {
-      setCursors(new Map(allCursors.map(c => [c.userId, c])));
+      setCursors(new Map(allCursors.map((c) => [c.userId, c])));
     });
 
     return () => {
@@ -65,28 +66,31 @@ export function useLiveCursors(projectId: string | null) {
   }, [on, canUseRealtime]);
 
   // Emit cursor position (throttled)
-  const emitCursor = useCallback((x: number, y: number) => {
-    if (!canUseRealtime || !isConnected || !projectId) return;
-    if (!selfCursorId) return;
+  const emitCursor = useCallback(
+    (x: number, y: number) => {
+      if (!canUseRealtime || !isConnected || !projectId) return;
+      if (!selfCursorId) return;
 
-    const now = Date.now();
-    if (now - lastEmitTime.current < THROTTLE_MS) return;
-    lastEmitTime.current = now;
+      const now = Date.now();
+      if (now - lastEmitTime.current < THROTTLE_MS) return;
+      lastEmitTime.current = now;
 
-    const cursorData: CursorData = {
-      userId: selfCursorId,
-      username: user?.username || 'Guest',
-      x,
-      y,
-      color: '', // Server will assign
-      timestamp: now
-    };
+      const cursorData: CursorData = {
+        userId: selfCursorId,
+        username: user?.username || 'Guest',
+        x,
+        y,
+        color: '', // Server will assign
+        timestamp: now,
+      };
 
-    emit('cursor:move', cursorData);
-  }, [canUseRealtime, isConnected, projectId, emit, selfCursorId, user?.username]);
+      emit('cursor:move', cursorData);
+    },
+    [canUseRealtime, isConnected, projectId, emit, selfCursorId, user?.username],
+  );
 
   return {
-    cursors: Array.from(cursors.values()).filter(c => c.userId !== selfCursorId), // Exclude own cursor
+    cursors: Array.from(cursors.values()).filter((c) => c.userId !== selfCursorId), // Exclude own cursor
     emitCursor,
   };
 }

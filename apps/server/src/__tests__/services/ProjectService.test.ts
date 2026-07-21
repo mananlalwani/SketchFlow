@@ -53,16 +53,32 @@ describe('ProjectService', () => {
 
   describe('permission matrix', () => {
     const project = {
-      id: 'proj-1', userId: 'owner', title: 'Board', data: {},
-      updatedAt: new Date(), createdAt: new Date(), shared: true, shareToken: 'token',
-      collaborators: [{ userId: 'editor', role: 'editor' }, { userId: 'viewer', role: 'viewer' }],
+      id: 'proj-1',
+      userId: 'owner',
+      title: 'Board',
+      data: {},
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      shared: true,
+      shareToken: 'token',
+      collaborators: [
+        { userId: 'editor', role: 'editor' },
+        { userId: 'viewer', role: 'viewer' },
+      ],
     };
 
     it.each([
-      ['owner', 'view', true], ['owner', 'edit', true], ['owner', 'share', true],
-      ['editor', 'view', true], ['editor', 'edit', true], ['editor', 'share', false],
-      ['viewer', 'view', true], ['viewer', 'edit', false], ['viewer', 'delete', false],
-      ['anonymous', 'view', false], ['anonymous', 'edit', false],
+      ['owner', 'view', true],
+      ['owner', 'edit', true],
+      ['owner', 'share', true],
+      ['editor', 'view', true],
+      ['editor', 'edit', true],
+      ['editor', 'share', false],
+      ['viewer', 'view', true],
+      ['viewer', 'edit', false],
+      ['viewer', 'delete', false],
+      ['anonymous', 'view', false],
+      ['anonymous', 'edit', false],
     ] as const)('%s %s permission is %s', async (userId, action, expected) => {
       vi.mocked(prisma.project.findUnique).mockResolvedValue(project as never);
       await expect(service.checkPermission('proj-1', userId, action)).resolves.toBe(expected);
@@ -71,22 +87,35 @@ describe('ProjectService', () => {
 
   describe('public share links', () => {
     const sharedProject = {
-      id: 'proj-1', userId: 'owner', title: 'Shared board', data: {},
-      updatedAt: new Date(), createdAt: new Date(), shared: true, shareToken: 'a'.repeat(43),
-      shareExpiresAt: new Date(Date.now() + 60_000), shareRevokedAt: null, collaborators: [],
+      id: 'proj-1',
+      userId: 'owner',
+      title: 'Shared board',
+      data: {},
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      shared: true,
+      shareToken: 'a'.repeat(43),
+      shareExpiresAt: new Date(Date.now() + 60_000),
+      shareRevokedAt: null,
+      collaborators: [],
     };
 
     it('only resolves active, non-revoked share tokens', async () => {
       vi.mocked(prisma.project.findUnique).mockResolvedValue(sharedProject as never);
-      await expect(service.getByShareToken('a'.repeat(43))).resolves.toMatchObject({ id: 'proj-1', role: 'viewer' });
+      await expect(service.getByShareToken('a'.repeat(43))).resolves.toMatchObject({
+        id: 'proj-1',
+        role: 'viewer',
+      });
 
       vi.mocked(prisma.project.findUnique).mockResolvedValue({
-        ...sharedProject, shareExpiresAt: new Date(Date.now() - 1),
+        ...sharedProject,
+        shareExpiresAt: new Date(Date.now() - 1),
       } as never);
       await expect(service.getByShareToken('a'.repeat(43))).resolves.toBeNull();
 
       vi.mocked(prisma.project.findUnique).mockResolvedValue({
-        ...sharedProject, shareRevokedAt: new Date(),
+        ...sharedProject,
+        shareRevokedAt: new Date(),
       } as never);
       await expect(service.getByShareToken('a'.repeat(43))).resolves.toBeNull();
     });
@@ -97,20 +126,24 @@ describe('ProjectService', () => {
       const snapshot = { dataUrl: 'data:image/png;base64,recovery', timestamp: 1 };
       vi.mocked(prisma.collaborationSnapshot.upsert).mockResolvedValue({} as never);
       vi.mocked(prisma.collaborationSnapshot.findUnique).mockResolvedValue({
-        projectId: 'proj-1', data: snapshot, updatedAt: new Date(),
+        projectId: 'proj-1',
+        data: snapshot,
+        updatedAt: new Date(),
       } as never);
 
       await expect(service.saveCollaborationSnapshot('proj-1', snapshot)).resolves.toBeUndefined();
-      await expect(new ProjectService().getCollaborationSnapshot('proj-1')).resolves.toEqual(snapshot);
+      await expect(new ProjectService().getCollaborationSnapshot('proj-1')).resolves.toEqual(
+        snapshot,
+      );
     });
   });
 
   describe('list', () => {
     it('should return empty array when no projects', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([]);
-      
+
       const result = await service.list('user-123');
-      
+
       expect(result).toEqual([]);
       expect(prisma.project.findMany).toHaveBeenCalled();
     });
@@ -129,13 +162,13 @@ describe('ProjectService', () => {
           collaborators: [],
         },
       ];
-      
+
       vi.mocked(prisma.project.findMany)
         .mockResolvedValueOnce(mockProjects as never)
         .mockResolvedValueOnce([] as never);
-      
+
       const result = await service.list('user-123');
-      
+
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('proj-1');
       expect(result[0].role).toBe('owner');
@@ -145,9 +178,9 @@ describe('ProjectService', () => {
   describe('get', () => {
     it('should return null for non-existent project', async () => {
       vi.mocked(prisma.project.findUnique).mockResolvedValue(null);
-      
+
       const result = await service.get('nonexistent', 'user-123');
-      
+
       expect(result).toBeNull();
     });
 
@@ -163,11 +196,11 @@ describe('ProjectService', () => {
         shareToken: null,
         collaborators: [],
       };
-      
+
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
-      
+
       const result = await service.get('proj-1', 'user-123');
-      
+
       expect(result).not.toBeNull();
       expect(result?.id).toBe('proj-1');
       expect(result?.role).toBe('owner');
@@ -185,11 +218,11 @@ describe('ProjectService', () => {
         shareToken: null,
         collaborators: [],
       };
-      
+
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
-      
+
       const result = await service.get('proj-1', 'user-123');
-      
+
       expect(result).toBeNull();
     });
 
@@ -205,11 +238,11 @@ describe('ProjectService', () => {
         shareToken: 'abc123',
         collaborators: [],
       };
-      
+
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
-      
+
       const result = await service.get('proj-1', 'user-123');
-      
+
       expect(result).toBeNull();
     });
   });
@@ -227,11 +260,11 @@ describe('ProjectService', () => {
         shareToken: null,
         collaborators: [],
       };
-      
+
       vi.mocked(prisma.project.create).mockResolvedValue(mockCreated as never);
-      
+
       const result = await service.create('user-123', 'New Project', { objects: [] });
-      
+
       expect(result.id).toBe('new-proj');
       expect(result.title).toBe('New Project');
       expect(result.role).toBe('owner');
@@ -250,12 +283,12 @@ describe('ProjectService', () => {
         shared: false,
         shareToken: null,
       };
-      
+
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
       vi.mocked(prisma.project.delete).mockResolvedValue(mockProject as never);
-      
+
       const result = await service.delete('proj-1', 'user-123');
-      
+
       expect(result).toBe(true);
       expect(prisma.project.delete).toHaveBeenCalledWith({ where: { id: 'proj-1' } });
     });
@@ -271,11 +304,11 @@ describe('ProjectService', () => {
         shared: false,
         shareToken: null,
       };
-      
+
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
-      
+
       const result = await service.delete('proj-1', 'user-123');
-      
+
       expect(result).toBe(false);
       expect(prisma.project.delete).not.toHaveBeenCalled();
     });
@@ -293,19 +326,19 @@ describe('ProjectService', () => {
         shared: false,
         shareToken: null,
       };
-      
+
       const updatedProject = {
         ...mockProject,
         shared: true,
         shareToken: 'generated-token',
         collaborators: [],
       };
-      
+
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
       vi.mocked(prisma.project.update).mockResolvedValue(updatedProject as never);
-      
+
       const result = await service.shareProject('proj-1', 'user-123');
-      
+
       expect(result).not.toBeNull();
       expect(result?.shared).toBe(true);
       expect(result?.shareToken).toBeTruthy();
@@ -322,11 +355,11 @@ describe('ProjectService', () => {
         shared: false,
         shareToken: null,
       };
-      
+
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
-      
+
       const result = await service.shareProject('proj-1', 'user-123');
-      
+
       expect(result).toBeNull();
     });
   });
@@ -345,11 +378,11 @@ describe('ProjectService', () => {
           _count: { projects: 5 },
         },
       ];
-      
+
       vi.mocked(prisma.folder.findMany).mockResolvedValue(mockFolders as never);
-      
+
       const result = await service.listFolders('user-123');
-      
+
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('Designs');
       expect(result[0].projectCount).toBe(5);
@@ -366,11 +399,11 @@ describe('ProjectService', () => {
         updatedAt: new Date(),
         _count: { projects: 0 },
       };
-      
+
       vi.mocked(prisma.folder.create).mockResolvedValue(mockFolder as never);
-      
+
       const result = await service.createFolder('user-123', 'New Folder', '#ff0000');
-      
+
       expect(result.id).toBe('new-folder');
       expect(result.name).toBe('New Folder');
       expect(result.color).toBe('#ff0000');

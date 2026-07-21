@@ -29,7 +29,7 @@ export class ProjectMigrationService {
 
     // User is authenticated - check if they were previously a guest
     const lastGuestId = localStorage.getItem(LAST_GUEST_ID_KEY);
-    
+
     if (!lastGuestId) {
       return false; // User was never a guest in this browser
     }
@@ -65,7 +65,7 @@ export class ProjectMigrationService {
     try {
       // Get all local projects
       const localProjects = await localProjectsService.getAllForMigration();
-      
+
       if (localProjects.length === 0) {
         result.success = true;
         return result;
@@ -93,21 +93,22 @@ export class ProjectMigrationService {
       // If all projects migrated successfully, clear local storage
       if (result.failedCount === 0) {
         await localProjectsService.clearAll();
-        
+
         // Mark migration as complete for this guest
         const lastGuestId = localStorage.getItem(LAST_GUEST_ID_KEY);
         if (lastGuestId) {
           localStorage.setItem(MIGRATION_STATUS_KEY, lastGuestId);
         }
-        
+
         console.log('Migration completed successfully, local projects cleared');
       } else {
-        console.warn(`Migration completed with ${result.failedCount} failures. Local projects retained.`);
+        console.warn(
+          `Migration completed with ${result.failedCount} failures. Local projects retained.`,
+        );
       }
 
       result.success = result.migratedCount > 0;
       return result;
-
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`Migration failed: ${errorMsg}`);

@@ -3,7 +3,19 @@ import { devtools, persist } from 'zustand/middleware';
 import { trackToolSelection, trackObjectCreated, trackFeatureUsage } from '../lib/analytics';
 import { FEATURES } from '../config/features';
 
-export type Tool = 'pen' | 'eraser' | 'line' | 'rectangle' | 'ellipse' | 'triangle' | 'star' | 'text' | 'eyedropper' | 'hand' | 'move' | 'image';
+export type Tool =
+  | 'pen'
+  | 'eraser'
+  | 'line'
+  | 'rectangle'
+  | 'ellipse'
+  | 'triangle'
+  | 'star'
+  | 'text'
+  | 'eyedropper'
+  | 'hand'
+  | 'move'
+  | 'image';
 
 export interface StrokeData {
   x0: number;
@@ -19,7 +31,18 @@ export interface StrokeData {
 
 export interface DrawingObject {
   id: string;
-  type: 'stroke' | 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'text' | 'image' | 'arrow' | 'star';
+  type:
+    | 'stroke'
+    | 'line'
+    | 'rectangle'
+    | 'ellipse'
+    | 'circle'
+    | 'triangle'
+    | 'parabola'
+    | 'text'
+    | 'image'
+    | 'arrow'
+    | 'star';
   points?: { x: number; y: number }[];
   x?: number;
   y?: number;
@@ -57,7 +80,7 @@ interface DrawingState {
   brushSize: number;
   brushColor: string;
   brushOpacity: number;
-  
+
   // UI state
   isConnected: boolean;
   showToolbar: boolean;
@@ -83,24 +106,24 @@ interface DrawingState {
     minConfidence: number; // minimum confidence threshold for any shape
     symmetryWeight: number; // weight given to symmetry in detection
   };
-  
+
   // Performance tracking
   fps: number;
   objectCount: number;
-  
+
   // History
   history: DrawingObject[][];
   historyIndex: number;
   maxHistorySize: number;
-  
+
   // Custom colors
   customColors: string[];
-  
+
   // View state (for panning/zooming)
   zoom: number;
   viewX: number;
   viewY: number;
-  
+
   // Actions
   setTool: (tool: Tool) => void;
   setEraserMode: (mode: 'partial' | 'object') => void;
@@ -119,11 +142,11 @@ interface DrawingState {
   setBrushSize: (size: number) => void;
   setBrushColor: (color: string) => void;
   setBrushOpacity: (opacity: number) => void;
-  
+
   addObject: (object: DrawingObject) => void;
   removeObject: (id: string) => void;
   clearCanvas: () => void;
-  
+
   setConnectionStatus: (connected: boolean) => void;
   toggleToolbar: () => void;
   setViewMode: (mode: 'draw' | 'view') => void;
@@ -132,20 +155,20 @@ interface DrawingState {
   setStarPoints: (points: 5 | 6 | 8) => void;
   setAutoShape: (enabled: boolean) => void;
   setAutoShapeThresholds: (t: Partial<DrawingState['autoShapeThresholds']>) => void;
-  
+
   updatePerformanceStats: (fps: number, objectCount: number) => void;
-  
+
   // History actions
   saveHistory: () => void;
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
-  
+
   // Color management
   addCustomColor: (color: string) => void;
   removeCustomColor: (color: string) => void;
-  
+
   // View actions
   setZoom: (zoom: number) => void;
   setView: (x: number, y: number) => void;
@@ -153,8 +176,16 @@ interface DrawingState {
 }
 
 const defaultColors = [
-  '#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff',
-  '#ffff00', '#ff00ff', '#00ffff', '#808080', '#ffa500'
+  '#ffffff',
+  '#000000',
+  '#ff0000',
+  '#00ff00',
+  '#0000ff',
+  '#ffff00',
+  '#ff00ff',
+  '#00ffff',
+  '#808080',
+  '#ffa500',
 ];
 
 export const useDrawingStore = create<DrawingState>()(
@@ -173,7 +204,7 @@ export const useDrawingStore = create<DrawingState>()(
         brushSize: 4,
         brushColor: '#ffffff',
         brushOpacity: 1,
-        
+
         isConnected: false,
         showToolbar: true,
         viewMode: 'draw',
@@ -196,23 +227,23 @@ export const useDrawingStore = create<DrawingState>()(
           triangleError: 0.2,
           circleRoundnessTolerance: 0.2,
           minConfidence: 0.6,
-          symmetryWeight: 0.3
+          symmetryWeight: 0.3,
         },
-        
+
         fps: 0,
         objectCount: 0,
-        
+
         history: [[]],
         historyIndex: 0,
         maxHistorySize: 50,
-        
+
         customColors: defaultColors,
-        
+
         zoom: 1,
         // Start centered in the world (will be adjusted precisely by canvas on mount)
         viewX: 1548,
         viewY: 1748,
-        
+
         // Actions
         setTool: (tool) => {
           const previousTool = get().currentTool;
@@ -220,25 +251,27 @@ export const useDrawingStore = create<DrawingState>()(
           set({ currentTool: tool });
         },
         setEraserMode: (mode) => set({ eraserMode: mode }),
-        setObjects: (objects) => set({ objects, objectCount: objects.length, unsavedChanges: true }),
+        setObjects: (objects) =>
+          set({ objects, objectCount: objects.length, unsavedChanges: true }),
         replaceHistory: (objects) => set({ history: [objects], historyIndex: 0 }),
         requestFullRedraw: () => set({ needsFullRedraw: true }),
         clearFullRedraw: () => set({ needsFullRedraw: false }),
         setProjectTitle: (title) => set({ projectTitle: title, unsavedChanges: true }),
-        markSaved: () => set({ unsavedChanges: false, lastSavedAt: Date.now(), saveStatus: 'saved' }),
+        markSaved: () =>
+          set({ unsavedChanges: false, lastSavedAt: Date.now(), saveStatus: 'saved' }),
         markDirty: () => set({ unsavedChanges: true }),
         setSaveStatus: (status) => set({ saveStatus: status }),
         setProjectRole: (role) => set({ projectRole: role }),
         newProject: () => {
-          set({ 
-            objects: [], 
-            objectCount: 0, 
-            history: [[]], 
-            historyIndex: 0, 
-            projectTitle: 'Untitled', 
-            unsavedChanges: false, 
+          set({
+            objects: [],
+            objectCount: 0,
+            history: [[]],
+            historyIndex: 0,
+            projectTitle: 'Untitled',
+            unsavedChanges: false,
             needsFullRedraw: true,
-            currentProjectId: undefined 
+            currentProjectId: undefined,
           });
           localStorage.removeItem('lastProjectId');
         },
@@ -247,36 +280,38 @@ export const useDrawingStore = create<DrawingState>()(
         setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(100, size)) }),
         setBrushColor: (color) => set({ brushColor: color }),
         setBrushOpacity: (opacity) => set({ brushOpacity: Math.max(0.1, Math.min(1, opacity)) }),
-        
-        addObject: (object) => set((state) => {
-          // Track object creation with current tool
-          trackObjectCreated(object.type, state.currentTool, {
-            hasText: !!object.text,
-            filled: object.filled,
-          });
-          const newObjects = [...state.objects, object];
-          return { objects: newObjects, objectCount: newObjects.length, unsavedChanges: true };
-        }),
-        
-        removeObject: (id) => set((state) => {
-          const newObjects = state.objects.filter(obj => obj.id !== id);
-          return { objects: newObjects, objectCount: newObjects.length, unsavedChanges: true };
-        }),
-        
+
+        addObject: (object) =>
+          set((state) => {
+            // Track object creation with current tool
+            trackObjectCreated(object.type, state.currentTool, {
+              hasText: !!object.text,
+              filled: object.filled,
+            });
+            const newObjects = [...state.objects, object];
+            return { objects: newObjects, objectCount: newObjects.length, unsavedChanges: true };
+          }),
+
+        removeObject: (id) =>
+          set((state) => {
+            const newObjects = state.objects.filter((obj) => obj.id !== id);
+            return { objects: newObjects, objectCount: newObjects.length, unsavedChanges: true };
+          }),
+
         clearCanvas: () => {
           const state = get();
           trackFeatureUsage('clear_canvas', { objectCount: state.objects.length });
           // Save current state to history before clearing
           state.saveHistory();
           // Clear objects and request full redraw
-          set({ 
-            objects: [], 
-            objectCount: 0, 
-            unsavedChanges: true, 
-            needsFullRedraw: true 
+          set({
+            objects: [],
+            objectCount: 0,
+            unsavedChanges: true,
+            needsFullRedraw: true,
           });
         },
-        
+
         setConnectionStatus: (connected) => set({ isConnected: connected }),
         toggleToolbar: () => set((state) => ({ showToolbar: !state.showToolbar })),
         setViewMode: (mode) => set({ viewMode: mode }),
@@ -284,76 +319,82 @@ export const useDrawingStore = create<DrawingState>()(
         setTriangleMode: (mode) => set({ triangleMode: mode }),
         setStarPoints: (points) => set({ starPoints: points }),
         setAutoShape: (enabled) => set({ autoShape: enabled }),
-        setAutoShapeThresholds: (t) => set((s) => ({ autoShapeThresholds: { ...s.autoShapeThresholds, ...t } })),
-        
+        setAutoShapeThresholds: (t) =>
+          set((s) => ({ autoShapeThresholds: { ...s.autoShapeThresholds, ...t } })),
+
         updatePerformanceStats: (fps, objectCount) => set({ fps, objectCount }),
-        
+
         // History actions
-        saveHistory: () => set((state) => {
-          const newHistory = state.history.slice(0, state.historyIndex + 1);
-          newHistory.push([...state.objects]);
-          
-          // Limit history size
-          if (newHistory.length > state.maxHistorySize) {
-            newHistory.shift();
-          } else {
+        saveHistory: () =>
+          set((state) => {
+            const newHistory = state.history.slice(0, state.historyIndex + 1);
+            newHistory.push([...state.objects]);
+
+            // Limit history size
+            if (newHistory.length > state.maxHistorySize) {
+              newHistory.shift();
+            } else {
+              return {
+                history: newHistory,
+                historyIndex: newHistory.length - 1,
+              };
+            }
+
             return {
               history: newHistory,
-              historyIndex: newHistory.length - 1
+              historyIndex: newHistory.length - 1,
             };
-          }
-          
-          return {
-            history: newHistory,
-            historyIndex: newHistory.length - 1
-          };
-        }),
-        
-        undo: () => set((state) => {
-          if (state.historyIndex > 0) {
-            trackFeatureUsage('undo', { historyIndex: state.historyIndex });
-            const newIndex = state.historyIndex - 1;
-            const objects = [...state.history[newIndex]];
-            return {
-              historyIndex: newIndex,
-              objects,
-              objectCount: objects.length,
-              needsFullRedraw: true,
-            };
-          }
-          return state;
-        }),
-        
-        redo: () => set((state) => {
-          if (state.historyIndex < state.history.length - 1) {
-            trackFeatureUsage('redo', { historyIndex: state.historyIndex });
-            const newIndex = state.historyIndex + 1;
-            const objects = [...state.history[newIndex]];
-            return {
-              historyIndex: newIndex,
-              objects,
-              objectCount: objects.length,
-              needsFullRedraw: true,
-            };
-          }
-          return state;
-        }),
-        
+          }),
+
+        undo: () =>
+          set((state) => {
+            if (state.historyIndex > 0) {
+              trackFeatureUsage('undo', { historyIndex: state.historyIndex });
+              const newIndex = state.historyIndex - 1;
+              const objects = [...state.history[newIndex]];
+              return {
+                historyIndex: newIndex,
+                objects,
+                objectCount: objects.length,
+                needsFullRedraw: true,
+              };
+            }
+            return state;
+          }),
+
+        redo: () =>
+          set((state) => {
+            if (state.historyIndex < state.history.length - 1) {
+              trackFeatureUsage('redo', { historyIndex: state.historyIndex });
+              const newIndex = state.historyIndex + 1;
+              const objects = [...state.history[newIndex]];
+              return {
+                historyIndex: newIndex,
+                objects,
+                objectCount: objects.length,
+                needsFullRedraw: true,
+              };
+            }
+            return state;
+          }),
+
         canUndo: () => get().historyIndex > 0,
         canRedo: () => get().historyIndex < get().history.length - 1,
-        
+
         // Color management
-        addCustomColor: (color) => set((state) => {
-          if (!state.customColors.includes(color)) {
-            return { customColors: [...state.customColors, color] };
-          }
-          return state;
-        }),
-        
-        removeCustomColor: (color) => set((state) => ({
-          customColors: state.customColors.filter(c => c !== color)
-        })),
-        
+        addCustomColor: (color) =>
+          set((state) => {
+            if (!state.customColors.includes(color)) {
+              return { customColors: [...state.customColors, color] };
+            }
+            return state;
+          }),
+
+        removeCustomColor: (color) =>
+          set((state) => ({
+            customColors: state.customColors.filter((c) => c !== color),
+          })),
+
         // View actions
         setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
         setView: (x, y) => set({ viewX: x, viewY: y }),
@@ -363,7 +404,7 @@ export const useDrawingStore = create<DrawingState>()(
           const centerX = 2048 - 500; // Approximate center
           const centerY = 2048 - 300;
           set({ zoom: 1, viewX: centerX, viewY: centerY });
-        }
+        },
       }),
       {
         name: 'drawing-store',
@@ -378,20 +419,20 @@ export const useDrawingStore = create<DrawingState>()(
             projectTitle: state.projectTitle,
             shapeFilled: state.shapeFilled,
           };
-          
+
           // Only persist autoShape settings if feature is enabled
           if (FEATURES.AUTO_SHAPE) {
             return {
               ...base,
               autoShape: state.autoShape,
-              autoShapeThresholds: state.autoShapeThresholds
+              autoShapeThresholds: state.autoShapeThresholds,
             };
           }
-          
+
           return base;
-        }
-      }
+        },
+      },
     ),
-    { name: 'drawing-store' }
-  )
+    { name: 'drawing-store' },
+  ),
 );

@@ -13,7 +13,8 @@ export const useFPSCounter = () => {
       const now = performance.now();
       const elapsed = now - lastTimeRef.current;
 
-      if (elapsed >= 1000) { // Update every second
+      if (elapsed >= 1000) {
+        // Update every second
         const currentFps = Math.round((frameCountRef.current * 1000) / elapsed);
         setFps(currentFps);
         frameCountRef.current = 0;
@@ -32,10 +33,3 @@ export const useFPSCounter = () => {
 
   return fps;
 };
-
-
-
-
-
-
-

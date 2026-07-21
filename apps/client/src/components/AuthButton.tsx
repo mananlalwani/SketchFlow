@@ -40,7 +40,9 @@ export function FloatingAuthButton() {
           size="sm"
           className="font-medium text-slate-600 dark:text-slate-300"
           onClick={() => {
-            alert('Clerk is not configured. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env file');
+            alert(
+              'Clerk is not configured. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env file',
+            );
           }}
         >
           <User className="w-4 h-4 mr-1.5" />

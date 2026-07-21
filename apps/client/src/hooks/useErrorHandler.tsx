@@ -23,15 +23,13 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
         context,
       });
 
-      const action = onRetry
-        ? (
-            <Button onClick={onRetry} size="sm" variant="outline">
-              Retry
-            </Button>
-          )
-        : suggestion
-        ? <div className="text-xs text-slate-400 mt-1">{suggestion}</div>
-        : undefined;
+      const action = onRetry ? (
+        <Button onClick={onRetry} size="sm" variant="outline">
+          Retry
+        </Button>
+      ) : suggestion ? (
+        <div className="text-xs text-slate-400 mt-1">{suggestion}</div>
+      ) : undefined;
 
       toast({
         title: customTitle || defaultTitle,
@@ -41,7 +39,7 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
         duration: 7000,
       });
     },
-    [toast, defaultTitle, context]
+    [toast, defaultTitle, context],
   );
 
   const showSuccess = useCallback(
@@ -52,7 +50,7 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
         duration: 3000,
       });
     },
-    [toast]
+    [toast],
   );
 
   const withErrorHandling = useCallback(
@@ -64,7 +62,7 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
         errorTitle?: string;
         successTitle?: string;
         successDescription?: string;
-      }
+      },
     ): Promise<T | undefined> => {
       return asyncFn()
         .then((result) => {
@@ -84,7 +82,7 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
           return undefined;
         });
     },
-    [showError, showSuccess]
+    [showError, showSuccess],
   );
 
   return {

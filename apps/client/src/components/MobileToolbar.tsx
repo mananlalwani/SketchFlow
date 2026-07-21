@@ -16,7 +16,7 @@ import {
   ChevronDown,
   SlidersHorizontal,
   Undo2,
-  Redo2
+  Redo2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MobilePropertiesDrawer } from './MobilePropertiesDrawer';
@@ -41,7 +41,7 @@ export function MobileToolbar() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Find current tool icon
-  const CurrentIcon = tools.find(t => t.id === currentTool)?.icon || Pen;
+  const CurrentIcon = tools.find((t) => t.id === currentTool)?.icon || Pen;
 
   const handleToolClick = (id: string) => {
     if (id === 'image') {
@@ -107,13 +107,13 @@ export function MobileToolbar() {
                   <Button
                     key={id}
                     onClick={() => handleToolClick(id)}
-                    variant={currentTool === id ? "default" : "ghost"}
+                    variant={currentTool === id ? 'default' : 'ghost'}
                     size="icon"
                     className={cn(
-                      "w-10 h-10 rounded-xl transition-all",
+                      'w-10 h-10 rounded-xl transition-all',
                       currentTool === id
-                        ? "bg-blue-600 text-white"
-                        : "text-slate-500 dark:text-slate-400"
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-500 dark:text-slate-400',
                     )}
                     title={label}
                   >

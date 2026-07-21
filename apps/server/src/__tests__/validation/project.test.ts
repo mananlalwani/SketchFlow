@@ -11,11 +11,13 @@ import {
 
 describe('project request validation', () => {
   it('accepts a bounded project save with a positive expected revision', () => {
-    expect(projectInputSchema.safeParse({
-      title: '  Architecture  ',
-      data: { objects: [] },
-      expectedRevision: 2,
-    }).data).toEqual({ title: 'Architecture', data: { objects: [] }, expectedRevision: 2 });
+    expect(
+      projectInputSchema.safeParse({
+        title: '  Architecture  ',
+        data: { objects: [] },
+        expectedRevision: 2,
+      }).data,
+    ).toEqual({ title: 'Architecture', data: { objects: [] }, expectedRevision: 2 });
   });
 
   it.each([
@@ -28,9 +30,12 @@ describe('project request validation', () => {
   });
 
   it('rejects project boards with more than 10,000 objects', () => {
-    expect(projectInputSchema.safeParse({
-      title: 'Large board', data: { objects: Array.from({ length: 10_001 }, () => ({})) },
-    }).success).toBe(false);
+    expect(
+      projectInputSchema.safeParse({
+        title: 'Large board',
+        data: { objects: Array.from({ length: 10_001 }, () => ({})) },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects deeply nested, oversized text, and oversized image payloads', () => {
@@ -38,15 +43,25 @@ describe('project request validation', () => {
     let cursor = nested;
     for (let depth = 0; depth < 21; depth++) cursor = cursor.value = {} as { value?: unknown };
     expect(projectInputSchema.safeParse({ title: 'Deep', data: nested }).success).toBe(false);
-    expect(projectInputSchema.safeParse({ title: 'Text', data: { text: 'x'.repeat(100_001) } }).success).toBe(false);
-    expect(projectInputSchema.safeParse({ title: 'Image', data: { imageData: 'x'.repeat(7 * 1024 * 1024 + 1) } }).success).toBe(false);
+    expect(
+      projectInputSchema.safeParse({ title: 'Text', data: { text: 'x'.repeat(100_001) } }).success,
+    ).toBe(false);
+    expect(
+      projectInputSchema.safeParse({
+        title: 'Image',
+        data: { imageData: 'x'.repeat(7 * 1024 * 1024 + 1) },
+      }).success,
+    ).toBe(false);
   });
 
   it('normalizes a collaborator role and rejects unknown roles', () => {
     expect(collaboratorInputSchema.parse({ email: ' person@example.com ' })).toEqual({
-      email: 'person@example.com', role: 'editor',
+      email: 'person@example.com',
+      role: 'editor',
     });
-    expect(collaboratorInputSchema.safeParse({ email: 'person@example.com', role: 'owner' }).success).toBe(false);
+    expect(
+      collaboratorInputSchema.safeParse({ email: 'person@example.com', role: 'owner' }).success,
+    ).toBe(false);
   });
 
   it('only accepts safe folder and move payloads', () => {

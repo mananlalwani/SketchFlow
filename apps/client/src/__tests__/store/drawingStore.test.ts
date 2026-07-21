@@ -30,10 +30,10 @@ describe('drawingStore', () => {
   describe('tool selection', () => {
     it('should change current tool', () => {
       const { setTool } = useDrawingStore.getState();
-      
+
       setTool('eraser');
       expect(useDrawingStore.getState().currentTool).toBe('eraser');
-      
+
       setTool('rectangle');
       expect(useDrawingStore.getState().currentTool).toBe('rectangle');
     });
@@ -42,33 +42,33 @@ describe('drawingStore', () => {
   describe('brush settings', () => {
     it('should set brush size within bounds', () => {
       const { setBrushSize } = useDrawingStore.getState();
-      
+
       setBrushSize(50);
       expect(useDrawingStore.getState().brushSize).toBe(50);
-      
+
       setBrushSize(0);
       expect(useDrawingStore.getState().brushSize).toBe(1);
-      
+
       setBrushSize(200);
       expect(useDrawingStore.getState().brushSize).toBe(100);
     });
 
     it('should set brush color', () => {
       const { setBrushColor } = useDrawingStore.getState();
-      
+
       setBrushColor('#ff0000');
       expect(useDrawingStore.getState().brushColor).toBe('#ff0000');
     });
 
     it('should set brush opacity within bounds', () => {
       const { setBrushOpacity } = useDrawingStore.getState();
-      
+
       setBrushOpacity(0.5);
       expect(useDrawingStore.getState().brushOpacity).toBe(0.5);
-      
+
       setBrushOpacity(0);
       expect(useDrawingStore.getState().brushOpacity).toBe(0.1);
-      
+
       setBrushOpacity(2);
       expect(useDrawingStore.getState().brushOpacity).toBe(1);
     });
@@ -77,15 +77,18 @@ describe('drawingStore', () => {
   describe('objects', () => {
     it('should add an object', () => {
       const { addObject } = useDrawingStore.getState();
-      
+
       addObject({
         id: 'obj-1',
         type: 'stroke',
-        points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 10, y: 10 },
+        ],
         color: '#fff',
         size: 2,
       });
-      
+
       expect(useDrawingStore.getState().objects).toHaveLength(1);
       expect(useDrawingStore.getState().objectCount).toBe(1);
       expect(useDrawingStore.getState().unsavedChanges).toBe(true);
@@ -93,12 +96,12 @@ describe('drawingStore', () => {
 
     it('should remove an object', () => {
       const { addObject, removeObject } = useDrawingStore.getState();
-      
+
       addObject({ id: 'obj-1', type: 'stroke', points: [], color: '#fff', size: 2 });
       addObject({ id: 'obj-2', type: 'stroke', points: [], color: '#000', size: 2 });
-      
+
       removeObject('obj-1');
-      
+
       expect(useDrawingStore.getState().objects).toHaveLength(1);
       expect(useDrawingStore.getState().objects[0].id).toBe('obj-2');
     });
@@ -106,12 +109,30 @@ describe('drawingStore', () => {
     it('should set objects', () => {
       const { setObjects } = useDrawingStore.getState();
       const objects = [
-        { id: '1', type: 'line' as const, x: 0, y: 0, width: 10, height: 0, color: '#fff', size: 1 },
-        { id: '2', type: 'rectangle' as const, x: 5, y: 5, width: 20, height: 20, color: '#000', size: 2 },
+        {
+          id: '1',
+          type: 'line' as const,
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 0,
+          color: '#fff',
+          size: 1,
+        },
+        {
+          id: '2',
+          type: 'rectangle' as const,
+          x: 5,
+          y: 5,
+          width: 20,
+          height: 20,
+          color: '#000',
+          size: 2,
+        },
       ];
-      
+
       setObjects(objects);
-      
+
       expect(useDrawingStore.getState().objects).toHaveLength(2);
       expect(useDrawingStore.getState().objectCount).toBe(2);
     });
@@ -120,56 +141,56 @@ describe('drawingStore', () => {
   describe('history', () => {
     it('should save history', () => {
       const { addObject, saveHistory } = useDrawingStore.getState();
-      
+
       addObject({ id: 'obj-1', type: 'stroke', points: [], color: '#fff', size: 2 });
       saveHistory();
-      
+
       expect(useDrawingStore.getState().history).toHaveLength(2);
       expect(useDrawingStore.getState().historyIndex).toBe(1);
     });
 
     it('should undo', () => {
       const { addObject, saveHistory, undo } = useDrawingStore.getState();
-      
+
       addObject({ id: 'obj-1', type: 'stroke', points: [], color: '#fff', size: 2 });
       saveHistory();
       addObject({ id: 'obj-2', type: 'stroke', points: [], color: '#000', size: 2 });
       saveHistory();
-      
+
       undo();
-      
+
       expect(useDrawingStore.getState().objects).toHaveLength(1);
       expect(useDrawingStore.getState().historyIndex).toBe(1);
     });
 
     it('should redo', () => {
       const { addObject, saveHistory, undo, redo } = useDrawingStore.getState();
-      
+
       addObject({ id: 'obj-1', type: 'stroke', points: [], color: '#fff', size: 2 });
       saveHistory();
       addObject({ id: 'obj-2', type: 'stroke', points: [], color: '#000', size: 2 });
       saveHistory();
-      
+
       undo();
       redo();
-      
+
       expect(useDrawingStore.getState().objects).toHaveLength(2);
     });
 
     it('should report canUndo and canRedo correctly', () => {
       const { addObject, saveHistory, canUndo, canRedo } = useDrawingStore.getState();
-      
+
       expect(canUndo()).toBe(false);
       expect(canRedo()).toBe(false);
-      
+
       addObject({ id: 'obj-1', type: 'stroke', points: [], color: '#fff', size: 2 });
       saveHistory();
-      
+
       expect(useDrawingStore.getState().canUndo()).toBe(true);
       expect(useDrawingStore.getState().canRedo()).toBe(false);
-      
+
       useDrawingStore.getState().undo();
-      
+
       expect(useDrawingStore.getState().canUndo()).toBe(false);
       expect(useDrawingStore.getState().canRedo()).toBe(true);
     });
@@ -178,31 +199,31 @@ describe('drawingStore', () => {
   describe('project management', () => {
     it('should set project title and mark as unsaved', () => {
       const { setProjectTitle } = useDrawingStore.getState();
-      
+
       setProjectTitle('My Project');
-      
+
       expect(useDrawingStore.getState().projectTitle).toBe('My Project');
       expect(useDrawingStore.getState().unsavedChanges).toBe(true);
     });
 
     it('should mark as saved', () => {
       const { setProjectTitle, markSaved } = useDrawingStore.getState();
-      
+
       setProjectTitle('Test');
       markSaved();
-      
+
       expect(useDrawingStore.getState().unsavedChanges).toBe(false);
       expect(useDrawingStore.getState().lastSavedAt).toBeDefined();
     });
 
     it('should create new project', () => {
       const { addObject, setProjectTitle, newProject } = useDrawingStore.getState();
-      
+
       addObject({ id: 'obj-1', type: 'stroke', points: [], color: '#fff', size: 2 });
       setProjectTitle('Old Project');
-      
+
       newProject();
-      
+
       expect(useDrawingStore.getState().objects).toHaveLength(0);
       expect(useDrawingStore.getState().projectTitle).toBe('Untitled');
       expect(useDrawingStore.getState().unsavedChanges).toBe(false);
@@ -213,33 +234,33 @@ describe('drawingStore', () => {
   describe('view', () => {
     it('should set zoom within bounds', () => {
       const { setZoom } = useDrawingStore.getState();
-      
+
       setZoom(2);
       expect(useDrawingStore.getState().zoom).toBe(2);
-      
+
       setZoom(0.05);
       expect(useDrawingStore.getState().zoom).toBe(0.1);
-      
+
       setZoom(10);
       expect(useDrawingStore.getState().zoom).toBe(5);
     });
 
     it('should set view position', () => {
       const { setView } = useDrawingStore.getState();
-      
+
       setView(100, 200);
-      
+
       expect(useDrawingStore.getState().viewX).toBe(100);
       expect(useDrawingStore.getState().viewY).toBe(200);
     });
 
     it('should reset view', () => {
       const { setZoom, setView, resetView } = useDrawingStore.getState();
-      
+
       setZoom(3);
       setView(500, 600);
       resetView();
-      
+
       // resetView centers the view in the middle of the world canvas (2048 - 500, 2048 - 300)
       expect(useDrawingStore.getState().zoom).toBe(1);
       expect(useDrawingStore.getState().viewX).toBe(1548);
@@ -250,36 +271,36 @@ describe('drawingStore', () => {
   describe('UI state', () => {
     it('should toggle toolbar', () => {
       const { toggleToolbar } = useDrawingStore.getState();
-      
+
       expect(useDrawingStore.getState().showToolbar).toBe(true);
-      
+
       toggleToolbar();
       expect(useDrawingStore.getState().showToolbar).toBe(false);
-      
+
       toggleToolbar();
       expect(useDrawingStore.getState().showToolbar).toBe(true);
     });
 
     it('should set connection status', () => {
       const { setConnectionStatus } = useDrawingStore.getState();
-      
+
       setConnectionStatus(true);
       expect(useDrawingStore.getState().isConnected).toBe(true);
-      
+
       setConnectionStatus(false);
       expect(useDrawingStore.getState().isConnected).toBe(false);
     });
 
     it('should set shape filled', () => {
       const { setShapeFilled } = useDrawingStore.getState();
-      
+
       setShapeFilled(true);
       expect(useDrawingStore.getState().shapeFilled).toBe(true);
     });
 
     it('should set eraser mode', () => {
       const { setEraserMode } = useDrawingStore.getState();
-      
+
       setEraserMode('object');
       expect(useDrawingStore.getState().eraserMode).toBe('object');
     });

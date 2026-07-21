@@ -21,15 +21,15 @@ export default defineConfig({
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
-          }
-        ]
+            purpose: 'any maskable',
+          },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
@@ -41,26 +41,28 @@ export default defineConfig({
               cacheName: 'google-fonts-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              }
-            }
-          }
-        ]
-      }
-    })
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+              },
+            },
+          },
+        ],
+      },
+    }),
   ],
   resolve: {
     alias: {
-      ...(process.env.VITE_E2E === 'true' ? {
-        '@clerk/clerk-react': path.resolve(__dirname, './src/test/clerkE2E.tsx'),
-      } : {}),
+      ...(process.env.VITE_E2E === 'true'
+        ? {
+            '@clerk/clerk-react': path.resolve(__dirname, './src/test/clerkE2E.tsx'),
+          }
+        : {}),
       '@': path.resolve(__dirname, './src'),
       '@/components': path.resolve(__dirname, './src/components'),
       '@/lib': path.resolve(__dirname, './src/lib'),
       '@/hooks': path.resolve(__dirname, './src/hooks'),
       '@/store': path.resolve(__dirname, './src/store'),
-      '@/types': path.resolve(__dirname, './src/types')
-    }
+      '@/types': path.resolve(__dirname, './src/types'),
+    },
   },
   server: {
     port: 5173,
@@ -68,13 +70,13 @@ export default defineConfig({
       '/socket.io': {
         target: 'http://localhost:3000',
         ws: true,
-        changeOrigin: true
+        changeOrigin: true,
       },
       '/api': {
         target: 'http://localhost:3000',
-        changeOrigin: true
-      }
-    }
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     outDir: 'dist',
@@ -92,13 +94,13 @@ export default defineConfig({
           socket: ['socket.io-client'],
           ui: ['lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-select'],
           clerk: ['@clerk/clerk-react'],
-        }
-      }
+        },
+      },
     },
     // Increase chunk size warning limit for production
     chunkSizeWarningLimit: 500,
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'socket.io-client']
-  }
+    include: ['react', 'react-dom', 'socket.io-client'],
+  },
 });

@@ -10,7 +10,14 @@ interface LiveCursorsProps {
   canvasHeight: number;
 }
 
-export function LiveCursors({ cursors, zoom, viewX, viewY, canvasWidth, canvasHeight }: LiveCursorsProps) {
+export function LiveCursors({
+  cursors,
+  zoom,
+  viewX,
+  viewY,
+  canvasWidth,
+  canvasHeight,
+}: LiveCursorsProps) {
   const cursorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Convert world coordinates to screen coordinates
@@ -22,13 +29,17 @@ export function LiveCursors({ cursors, zoom, viewX, viewY, canvasWidth, canvasHe
 
   // Check if cursor is in viewport
   const isInViewport = (screenX: number, screenY: number) => {
-    return screenX >= -50 && screenX <= canvasWidth + 50 &&
-           screenY >= -50 && screenY <= canvasHeight + 50;
+    return (
+      screenX >= -50 &&
+      screenX <= canvasWidth + 50 &&
+      screenY >= -50 &&
+      screenY <= canvasHeight + 50
+    );
   };
 
   useEffect(() => {
     // Clean up old cursors that are no longer active
-    const activeCursorIds = new Set(cursors.map(c => c.userId));
+    const activeCursorIds = new Set(cursors.map((c) => c.userId));
     for (const [userId, element] of cursorRefs.current.entries()) {
       if (!activeCursorIds.has(userId)) {
         element.remove();
@@ -67,7 +78,7 @@ export function LiveCursors({ cursors, zoom, viewX, viewY, canvasWidth, canvasHe
                 backgroundColor: cursor.color,
               }}
             />
-            
+
             {/* Username label */}
             <div
               className="absolute top-5 left-0 whitespace-nowrap px-2 py-1 rounded text-xs font-medium text-white shadow-lg"

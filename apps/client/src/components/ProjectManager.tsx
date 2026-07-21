@@ -13,7 +13,7 @@ import {
   createFolder,
   updateFolder,
   deleteFolder,
-  moveProjectToFolder
+  moveProjectToFolder,
 } from '@/lib/api';
 import { useDrawingStore } from '@/store/drawingStore';
 import { deserializeProject, serializeProject, generateId } from '@/lib/utils';
@@ -50,7 +50,7 @@ import {
   FolderInput,
   Share2,
   X,
-  Info
+  Info,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -72,7 +72,15 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerClose, DrawerTrigger } from '@/components/ui/drawer';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerFooter,
+  DrawerClose,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
 import { useMobile } from '@/hooks/useMobile';
 import {
   filterAndSortProjects,
@@ -167,7 +175,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     setCurrentProject,
     markSaved,
     currentProjectId,
-    setProjectRole
+    setProjectRole,
   } = useDrawingStore();
 
   const handleDismissBanner = () => {
@@ -181,39 +189,47 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       if (isGuest) {
         // For guests, load local projects only
         const projectList = await listProjects(null);
-        setProjects(projectList.filter(p => p && p.id).map(p => ({
-          ...p,
-          shared: p.shared ?? false,
-          role: p.role ?? 'owner'
-        })));
+        setProjects(
+          projectList
+            .filter((p) => p && p.id)
+            .map((p) => ({
+              ...p,
+              shared: p.shared ?? false,
+              role: p.role ?? 'owner',
+            })),
+        );
         setFolders([]);
       } else if (userId) {
         // For authenticated users, load from server
         const token = await getToken();
         const [projectList, folderList] = await Promise.all([
           listProjects(token),
-          listFolders(token).catch(() => [] as FolderRecord[])
+          listFolders(token).catch(() => [] as FolderRecord[]),
         ]);
-        setProjects(projectList.filter(p => p && p.id).map(p => {
-          // Correct the role if it's wrong: if userId matches project userId, user is owner
-          let correctedRole = p.role ?? 'owner';
-          if (p.userId === userId) {
-            correctedRole = 'owner';
-            if (p.role && p.role !== 'owner') {
-              console.warn(`Corrected role for project ${p.id}: was ${p.role}, now owner`, {
-                projectId: p.id,
-                userId,
-                projectUserId: p.userId
-              });
-            }
-          }
+        setProjects(
+          projectList
+            .filter((p) => p && p.id)
+            .map((p) => {
+              // Correct the role if it's wrong: if userId matches project userId, user is owner
+              let correctedRole = p.role ?? 'owner';
+              if (p.userId === userId) {
+                correctedRole = 'owner';
+                if (p.role && p.role !== 'owner') {
+                  console.warn(`Corrected role for project ${p.id}: was ${p.role}, now owner`, {
+                    projectId: p.id,
+                    userId,
+                    projectUserId: p.userId,
+                  });
+                }
+              }
 
-          return {
-            ...p,
-            shared: p.shared ?? false,
-            role: correctedRole
-          };
-        }));
+              return {
+                ...p,
+                shared: p.shared ?? false,
+                role: correctedRole,
+              };
+            }),
+        );
         setFolders(folderList);
       }
     } catch (e) {
@@ -253,7 +269,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
   const currentFolderName = useMemo(() => {
     if (selectedFolderId === null) return 'All Projects';
-    const folder = folders.find(f => f.id === selectedFolderId);
+    const folder = folders.find((f) => f.id === selectedFolderId);
     return folder?.name || 'Unknown Folder';
   }, [selectedFolderId, folders]);
 
@@ -306,25 +322,25 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       await moveProjectToFolder(projectId, folderId, token);
 
       // Get the old folderId before updating
-      const oldFolderId = projects.find(p => p.id === projectId)?.folderId;
+      const oldFolderId = projects.find((p) => p.id === projectId)?.folderId;
 
       // Update projects state
-      setProjects(prev => prev.map(p =>
-        p.id === projectId ? { ...p, folderId } : p
-      ));
+      setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, folderId } : p)));
 
       // Update folder counts
-      setFolders(prev => prev.map(f => {
-        if (f.id === oldFolderId) {
-          // Decrement old folder count
-          return { ...f, projectCount: Math.max(0, (f.projectCount || 1) - 1) };
-        }
-        if (f.id === folderId) {
-          // Increment new folder count
-          return { ...f, projectCount: (f.projectCount || 0) + 1 };
-        }
-        return f;
-      }));
+      setFolders((prev) =>
+        prev.map((f) => {
+          if (f.id === oldFolderId) {
+            // Decrement old folder count
+            return { ...f, projectCount: Math.max(0, (f.projectCount || 1) - 1) };
+          }
+          if (f.id === folderId) {
+            // Increment new folder count
+            return { ...f, projectCount: (f.projectCount || 0) + 1 };
+          }
+          return f;
+        }),
+      );
 
       toast({ title: folderId ? 'Moved to folder' : 'Moved to All Projects' });
     } catch {
@@ -398,7 +414,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       markSaved();
 
       // Set project role - guests always get 'owner' role for local projects
-      const role = isGuest ? 'owner' : (record.role || 'owner');
+      const role = isGuest ? 'owner' : record.role || 'owner';
       setProjectRole(role);
 
       localStorage.setItem('lastProjectId', record.id);
@@ -419,9 +435,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       const token = await getToken();
       const record = await getProject<ReturnType<typeof serializeProject>>(id, token);
       await updateProject(id, renameValue.trim(), record.data, token);
-      setProjects(prev => prev.map(p =>
-        p.id === id ? { ...p, title: renameValue.trim() } : p
-      ));
+      setProjects((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, title: renameValue.trim() } : p)),
+      );
       setRenamingId(null);
       toast({ title: 'Project renamed' });
     } catch {
@@ -478,7 +494,15 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           }
         } else if (obj.type === 'ellipse') {
           ctx.beginPath();
-          ctx.ellipse(x + width / 2, y + height / 2, Math.abs(width / 2), Math.abs(height / 2), 0, 0, Math.PI * 2);
+          ctx.ellipse(
+            x + width / 2,
+            y + height / 2,
+            Math.abs(width / 2),
+            Math.abs(height / 2),
+            0,
+            0,
+            Math.PI * 2,
+          );
           if (obj.filled) {
             ctx.fill();
           } else {
@@ -552,7 +576,15 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           }
         } else if (obj.type === 'ellipse') {
           ctx.beginPath();
-          ctx.ellipse(x + width / 2, y + height / 2, Math.abs(width / 2), Math.abs(height / 2), 0, 0, Math.PI * 2);
+          ctx.ellipse(
+            x + width / 2,
+            y + height / 2,
+            Math.abs(width / 2),
+            Math.abs(height / 2),
+            0,
+            0,
+            Math.PI * 2,
+          );
           if (obj.filled) {
             ctx.fill();
           } else {
@@ -638,7 +670,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         const data = await decodeDrawFormat(buffer);
 
         const token = await getToken();
-        const title = file.name.replace(new RegExp(`\\${DRAW_FORMAT_EXTENSION}$`), '') || 'Imported Project';
+        const title =
+          file.name.replace(new RegExp(`\\${DRAW_FORMAT_EXTENSION}$`), '') || 'Imported Project';
         await createProject(title, data, token);
         await loadData();
         toast({ title: 'Project imported successfully' });
@@ -674,7 +707,13 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         let yOffset = 100; // Start with some margin
 
         // Calculate all page positions first
-        const pageData: Array<{ imageData: string; x: number; y: number; width: number; height: number }> = [];
+        const pageData: Array<{
+          imageData: string;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }> = [];
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
@@ -704,14 +743,18 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             x: (CANVAS_SIZE - scaledWidth) / 2, // Center horizontally
             y: yOffset,
             width: scaledWidth,
-            height: scaledHeight
+            height: scaledHeight,
           });
 
           yOffset += scaledHeight + 50; // Add spacing between pages
         }
 
         if (pageData.length === 0) {
-          toast({ title: 'Import failed', description: 'No pages found in PDF', variant: 'destructive' });
+          toast({
+            title: 'Import failed',
+            description: 'No pages found in PDF',
+            variant: 'destructive',
+          });
           return;
         }
 
@@ -729,7 +772,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             color: '#000000',
             size: 1,
             alpha: 1,
-            imageData: page.imageData
+            imageData: page.imageData,
           });
         }
 
@@ -738,7 +781,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         const title = file.name.replace(/\.pdf$/i, '') || 'Imported PDF';
         await createProject(title, projectData, token);
         await loadData();
-        toast({ title: 'PDF imported successfully', description: `${pdf.numPages} page(s) imported.` });
+        toast({
+          title: 'PDF imported successfully',
+          description: `${pdf.numPages} page(s) imported.`,
+        });
       } catch (err) {
         console.error('PDF import error:', err);
         const message = err instanceof Error ? err.message : 'Failed to process PDF';
@@ -750,14 +796,19 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
   const toggleSort = (option: SortOption) => {
     if (sortBy === option) {
-      setSortDirection(d => d === 'desc' ? 'asc' : 'desc');
+      setSortDirection((d) => (d === 'desc' ? 'asc' : 'desc'));
     } else {
       setSortBy(option);
       setSortDirection('desc');
     }
   };
 
-  if (!isLoaded) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-400" /></div>;
+  if (!isLoaded)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="animate-spin text-slate-400" />
+      </div>
+    );
 
   // Don't block guests - they can use local storage
   // if (!userId && !isGuest) {
@@ -808,7 +859,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           <div className="w-56 border-r border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-900/30 flex flex-col shrink-0 transition-colors duration-200">
             <div className="p-3 border-b border-slate-200 dark:border-white/10">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{isGuest ? 'Local Projects' : 'Folders'}</span>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  {isGuest ? 'Local Projects' : 'Folders'}
+                </span>
                 {!isGuest && (
                   <Button
                     variant="ghost"
@@ -831,7 +884,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleCreateFolder();
-                      if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName(''); }
+                      if (e.key === 'Escape') {
+                        setCreatingFolder(false);
+                        setNewFolderName('');
+                      }
                     }}
                   />
                   <Button size="sm" className="h-7 px-2" onClick={handleCreateFolder}>
@@ -844,21 +900,22 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               <button
                 onClick={() => setSelectedFolderId(null)}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${selectedFolderId === null && !searchQuery
-                  ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
-                  }`}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                  selectedFolderId === null && !searchQuery
+                    ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
               >
                 <Home className="w-4 h-4" />
                 <span className="truncate flex-1">Unsorted</span>
                 <span className="text-xs opacity-60">
-                  {projects.filter(p => !p.folderId).length}
+                  {projects.filter((p) => !p.folderId).length}
                 </span>
                 {/* Spacer to align with folder dropdown buttons */}
                 <div className="w-6 h-6" />
               </button>
 
-              {folders.map(folder => (
+              {folders.map((folder) => (
                 <div key={folder.id} className="group">
                   {renamingFolderId === folder.id ? (
                     <Input
@@ -875,16 +932,20 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   ) : (
                     <button
                       onClick={() => setSelectedFolderId(folder.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${selectedFolderId === folder.id
-                        ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
-                        }`}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                        selectedFolderId === folder.id
+                          ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
                     >
                       <Folder className="w-4 h-4" style={{ color: folder.color }} />
                       <span className="truncate flex-1">{folder.name}</span>
                       <span className="text-xs opacity-60">{folder.projectCount || 0}</span>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                        <DropdownMenuTrigger
+                          asChild
+                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        >
                           <Button
                             variant="ghost"
                             size="icon"
@@ -894,29 +955,43 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem onSelect={() => {
-                            setFolderRenameValue(folder.name);
-                            setRenamingFolderId(folder.id);
-                          }}>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setFolderRenameValue(folder.name);
+                              setRenamingFolderId(folder.id);
+                            }}
+                          >
                             <Pencil className="w-4 h-4 mr-2" />
                             Rename
                           </DropdownMenuItem>
                           <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
-                              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: folder.color }} />
+                              <div
+                                className="w-3 h-3 rounded-full mr-2"
+                                style={{ backgroundColor: folder.color }}
+                              />
                               Color
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
-                              {FOLDER_COLORS.map(c => (
+                              {FOLDER_COLORS.map((c) => (
                                 <DropdownMenuItem
                                   key={c.value}
                                   onSelect={async () => {
                                     const token = await getToken();
-                                    await updateFolder(folder.id, folder.name, c.value, folder.parentId, token);
+                                    await updateFolder(
+                                      folder.id,
+                                      folder.name,
+                                      c.value,
+                                      folder.parentId,
+                                      token,
+                                    );
                                     await loadData();
                                   }}
                                 >
-                                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: c.value }} />
+                                  <div
+                                    className="w-4 h-4 rounded-full mr-2"
+                                    style={{ backgroundColor: c.value }}
+                                  />
                                   {c.name}
                                 </DropdownMenuItem>
                               ))}
@@ -937,7 +1012,6 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 </div>
               ))}
             </div>
-
           </div>
 
           {/* Main Content */}
@@ -948,7 +1022,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 <div>
                   <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
                     {selectedFolderId ? (
-                      <Folder className="w-6 h-6" style={{ color: folders.find(f => f.id === selectedFolderId)?.color }} />
+                      <Folder
+                        className="w-6 h-6"
+                        style={{ color: folders.find((f) => f.id === selectedFolderId)?.color }}
+                      />
                     ) : (
                       <FolderOpen className="w-6 h-6 text-blue-500 dark:text-blue-400" />
                     )}
@@ -962,7 +1039,11 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 <div className="flex items-center gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="border-slate-300 dark:border-white/10">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-slate-300 dark:border-white/10"
+                      >
                         <Upload className="w-4 h-4 mr-2" />
                         Import
                       </Button>
@@ -978,8 +1059,16 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button onClick={openNewProjectDialog} disabled={creating} className="bg-blue-600 hover:bg-blue-500">
-                    {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                  <Button
+                    onClick={openNewProjectDialog}
+                    disabled={creating}
+                    className="bg-blue-600 hover:bg-blue-500"
+                  >
+                    {creating ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Plus className="w-4 h-4 mr-2" />
+                    )}
                     New Project
                   </Button>
                 </div>
@@ -1036,7 +1125,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   >
                     <Clock className="w-3.5 h-3.5 mr-1.5" />
                     Updated
-                    {sortBy === 'updated' && (sortDirection === 'desc' ? <SortDesc className="w-3 h-3 ml-1" /> : <SortAsc className="w-3 h-3 ml-1" />)}
+                    {sortBy === 'updated' &&
+                      (sortDirection === 'desc' ? (
+                        <SortDesc className="w-3 h-3 ml-1" />
+                      ) : (
+                        <SortAsc className="w-3 h-3 ml-1" />
+                      ))}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1046,7 +1140,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   >
                     <Calendar className="w-3.5 h-3.5 mr-1.5" />
                     Created
-                    {sortBy === 'created' && (sortDirection === 'desc' ? <SortDesc className="w-3 h-3 ml-1" /> : <SortAsc className="w-3 h-3 ml-1" />)}
+                    {sortBy === 'created' &&
+                      (sortDirection === 'desc' ? (
+                        <SortDesc className="w-3 h-3 ml-1" />
+                      ) : (
+                        <SortAsc className="w-3 h-3 ml-1" />
+                      ))}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1056,7 +1155,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   >
                     <Type className="w-3.5 h-3.5 mr-1.5" />
                     Name
-                    {sortBy === 'name' && (sortDirection === 'desc' ? <SortDesc className="w-3 h-3 ml-1" /> : <SortAsc className="w-3 h-3 ml-1" />)}
+                    {sortBy === 'name' &&
+                      (sortDirection === 'desc' ? (
+                        <SortDesc className="w-3 h-3 ml-1" />
+                      ) : (
+                        <SortAsc className="w-3 h-3 ml-1" />
+                      ))}
                   </Button>
                 </div>
 
@@ -1091,7 +1195,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 searchQuery ? (
                   <div className="flex flex-col items-center justify-center h-64 text-center">
                     <Search className="w-12 h-12 text-slate-400 dark:text-slate-600 mb-4" />
-                    <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">No matching projects</h3>
+                    <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">
+                      No matching projects
+                    </h3>
                     <p className="text-slate-500">Try a different search term</p>
                   </div>
                 ) : (
@@ -1126,7 +1232,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                       {!isGuest && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="border-slate-300 dark:border-white/20">
+                            <Button
+                              variant="outline"
+                              className="border-slate-300 dark:border-white/20"
+                            >
                               <Upload className="w-4 h-4 mr-2" />
                               Import
                             </Button>
@@ -1148,7 +1257,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 )
               ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filteredProjects.map(project => (
+                  {filteredProjects.map((project) => (
                     <div
                       key={project.id}
                       onClick={(e) => handleCardClick(project.id, e)}
@@ -1203,47 +1312,93 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 <DrawerTitle>{project.title || 'Untitled'} Actions</DrawerTitle>
                               </DrawerHeader>
                               <div className="p-4 space-y-2 max-h-[70vh] overflow-y-auto">
-                                <Button variant="outline" className="w-full justify-start" onClick={() => {
-                                  setRenameValue(project.title || '');
-                                  setRenamingId(project.id);
-                                  // Close drawer via UI interaction implicitly or we need a controlled drawer
-                                }}>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-start"
+                                  onClick={() => {
+                                    setRenameValue(project.title || '');
+                                    setRenamingId(project.id);
+                                    // Close drawer via UI interaction implicitly or we need a controlled drawer
+                                  }}
+                                >
                                   <Pencil className="w-4 h-4 mr-2" />
                                   Rename
                                 </Button>
 
                                 {!isGuest && (project.role === 'owner' || !project.role) && (
-                                  <Button variant="outline" className="w-full justify-start" onClick={() => setSharingProject(project)}>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => setSharingProject(project)}
+                                  >
                                     <Share2 className="w-4 h-4 mr-2" />
                                     Share
                                   </Button>
                                 )}
 
-                                <Button variant="outline" className="w-full justify-start" onClick={() => {
-                                  getToken().then(token => {
-                                    getProject<ReturnType<typeof serializeProject>>(project.id, token).then(record => {
-                                      createProject(`${project.title} (Copy)`, record.data, token).then(() => {
-                                        loadData();
-                                        toast({ title: 'Project duplicated' });
-                                      });
-                                    });
-                                  }).catch(() => toast({ title: 'Failed to duplicate', variant: 'destructive' }));
-                                }}>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-start"
+                                  onClick={() => {
+                                    getToken()
+                                      .then((token) => {
+                                        getProject<ReturnType<typeof serializeProject>>(
+                                          project.id,
+                                          token,
+                                        ).then((record) => {
+                                          createProject(
+                                            `${project.title} (Copy)`,
+                                            record.data,
+                                            token,
+                                          ).then(() => {
+                                            loadData();
+                                            toast({ title: 'Project duplicated' });
+                                          });
+                                        });
+                                      })
+                                      .catch(() =>
+                                        toast({
+                                          title: 'Failed to duplicate',
+                                          variant: 'destructive',
+                                        }),
+                                      );
+                                  }}
+                                >
                                   <Copy className="w-4 h-4 mr-2" />
                                   Duplicate
                                 </Button>
 
-                                <div className="text-sm font-medium text-muted-foreground mt-4 mb-2">Export</div>
+                                <div className="text-sm font-medium text-muted-foreground mt-4 mb-2">
+                                  Export
+                                </div>
                                 <div className="grid grid-cols-3 gap-2">
-                                  <Button variant="secondary" size="sm" onClick={() => handleExportDRA(project.id, project.title || 'project')}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleExportDRA(project.id, project.title || 'project')
+                                    }
+                                  >
                                     <FileArchive className="w-4 h-4 mr-2" />
                                     .dra
                                   </Button>
-                                  <Button variant="secondary" size="sm" onClick={() => handleExportPNG(project.id, project.title || 'drawing')}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleExportPNG(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <Image className="w-4 h-4 mr-2" />
                                     PNG
                                   </Button>
-                                  <Button variant="secondary" size="sm" onClick={() => handleExportPDF(project.id, project.title || 'drawing')}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleExportPDF(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <FileText className="w-4 h-4 mr-2" />
                                     PDF
                                   </Button>
@@ -1256,10 +1411,15 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                       variant="destructive"
                                       className="w-full justify-start"
                                       onClick={() => {
-                                        if (!confirm('Are you sure you want to delete this project?')) return;
-                                        getToken().then(token => {
+                                        if (
+                                          !confirm('Are you sure you want to delete this project?')
+                                        )
+                                          return;
+                                        getToken().then((token) => {
                                           deleteProject(project.id, token).then(() => {
-                                            setProjects(prev => prev.filter(p => p.id !== project.id));
+                                            setProjects((prev) =>
+                                              prev.filter((p) => p.id !== project.id),
+                                            );
                                             if (currentProjectId === project.id) {
                                               const store = useDrawingStore.getState();
                                               store.newProject();
@@ -1289,7 +1449,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                             modal={true}
                             onOpenChange={(open) => handleMenuOpenChange(open, project.id)}
                           >
-                            <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                            <DropdownMenuTrigger
+                              asChild
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            >
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1302,13 +1465,19 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                               align="end"
                               className="w-48"
                               onCloseAutoFocus={(e) => e.preventDefault()}
-                              onPointerDownOutside={() => { menuClosedAtRef.current = Date.now(); }}
-                              onInteractOutside={() => { menuClosedAtRef.current = Date.now(); }}
+                              onPointerDownOutside={() => {
+                                menuClosedAtRef.current = Date.now();
+                              }}
+                              onInteractOutside={() => {
+                                menuClosedAtRef.current = Date.now();
+                              }}
                             >
-                              <DropdownMenuItem onSelect={() => {
-                                setRenameValue(project.title || '');
-                                setRenamingId(project.id);
-                              }}>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setRenameValue(project.title || '');
+                                  setRenamingId(project.id);
+                                }}
+                              >
                                 <Pencil className="w-4 h-4 mr-2" />
                                 Rename
                               </DropdownMenuItem>
@@ -1325,33 +1494,54 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                     Move to folder
                                   </DropdownMenuSubTrigger>
                                   <DropdownMenuSubContent>
-                                    <DropdownMenuItem onSelect={() => handleMoveToFolder(project.id, null)}>
+                                    <DropdownMenuItem
+                                      onSelect={() => handleMoveToFolder(project.id, null)}
+                                    >
                                       <Home className="w-4 h-4 mr-2" />
                                       All Projects
                                     </DropdownMenuItem>
                                     {folders.length > 0 && <DropdownMenuSeparator />}
-                                    {folders.map(f => (
+                                    {folders.map((f) => (
                                       <DropdownMenuItem
                                         key={f.id}
                                         onSelect={() => handleMoveToFolder(project.id, f.id)}
                                       >
-                                        <Folder className="w-4 h-4 mr-2" style={{ color: f.color }} />
+                                        <Folder
+                                          className="w-4 h-4 mr-2"
+                                          style={{ color: f.color }}
+                                        />
                                         {f.name}
                                       </DropdownMenuItem>
                                     ))}
                                   </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                               )}
-                              <DropdownMenuItem onSelect={() => {
-                                getToken().then(token => {
-                                  getProject<ReturnType<typeof serializeProject>>(project.id, token).then(record => {
-                                    createProject(`${project.title} (Copy)`, record.data, token).then(() => {
-                                      loadData();
-                                      toast({ title: 'Project duplicated' });
-                                    });
-                                  });
-                                }).catch(() => toast({ title: 'Failed to duplicate', variant: 'destructive' }));
-                              }}>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  getToken()
+                                    .then((token) => {
+                                      getProject<ReturnType<typeof serializeProject>>(
+                                        project.id,
+                                        token,
+                                      ).then((record) => {
+                                        createProject(
+                                          `${project.title} (Copy)`,
+                                          record.data,
+                                          token,
+                                        ).then(() => {
+                                          loadData();
+                                          toast({ title: 'Project duplicated' });
+                                        });
+                                      });
+                                    })
+                                    .catch(() =>
+                                      toast({
+                                        title: 'Failed to duplicate',
+                                        variant: 'destructive',
+                                      }),
+                                    );
+                                }}
+                              >
                                 <Copy className="w-4 h-4 mr-2" />
                                 Duplicate
                               </DropdownMenuItem>
@@ -1361,16 +1551,28 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   Export
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
-                                  <DropdownMenuItem onSelect={() => handleExportDRA(project.id, project.title || 'project')}>
+                                  <DropdownMenuItem
+                                    onSelect={() =>
+                                      handleExportDRA(project.id, project.title || 'project')
+                                    }
+                                  >
                                     <FileArchive className="w-4 h-4 mr-2" />
                                     Export as .dra
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem onSelect={() => handleExportPNG(project.id, project.title || 'drawing')}>
+                                  <DropdownMenuItem
+                                    onSelect={() =>
+                                      handleExportPNG(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <Image className="w-4 h-4 mr-2" />
                                     Export as PNG
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => handleExportPDF(project.id, project.title || 'drawing')}>
+                                  <DropdownMenuItem
+                                    onSelect={() =>
+                                      handleExportPDF(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <FileText className="w-4 h-4 mr-2" />
                                     Export as PDF
                                   </DropdownMenuItem>
@@ -1382,23 +1584,32 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   <DropdownMenuItem
                                     onSelect={(e) => {
                                       e.preventDefault();
-                                      if (!confirm('Are you sure you want to delete this project?')) {
+                                      if (
+                                        !confirm('Are you sure you want to delete this project?')
+                                      ) {
                                         return;
                                       }
-                                      getToken().then(token => {
-                                        deleteProject(project.id, token).then(() => {
-                                          setProjects(prev => prev.filter(p => p.id !== project.id));
-                                          if (currentProjectId === project.id) {
-                                            const store = useDrawingStore.getState();
-                                            store.newProject();
-                                            store.clearCanvas();
-                                            setCurrentProject(undefined);
-                                          }
-                                          toast({ title: 'Project deleted' });
+                                      getToken()
+                                        .then((token) => {
+                                          deleteProject(project.id, token).then(() => {
+                                            setProjects((prev) =>
+                                              prev.filter((p) => p.id !== project.id),
+                                            );
+                                            if (currentProjectId === project.id) {
+                                              const store = useDrawingStore.getState();
+                                              store.newProject();
+                                              store.clearCanvas();
+                                              setCurrentProject(undefined);
+                                            }
+                                            toast({ title: 'Project deleted' });
+                                          });
+                                        })
+                                        .catch(() => {
+                                          toast({
+                                            title: 'Failed to delete',
+                                            variant: 'destructive',
+                                          });
                                         });
-                                      }).catch(() => {
-                                        toast({ title: 'Failed to delete', variant: 'destructive' });
-                                      });
                                     }}
                                     className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400"
                                   >
@@ -1437,7 +1648,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
               ) : (
                 /* List View */
                 <div className="space-y-2">
-                  {filteredProjects.map(project => (
+                  {filteredProjects.map((project) => (
                     <div
                       key={project.id}
                       onClick={(e) => handleCardClick(project.id, e)}
@@ -1503,46 +1714,92 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 <DrawerTitle>{project.title || 'Untitled'} Actions</DrawerTitle>
                               </DrawerHeader>
                               <div className="p-4 space-y-2 max-h-[70vh] overflow-y-auto">
-                                <Button variant="outline" className="w-full justify-start" onClick={() => {
-                                  setRenameValue(project.title || '');
-                                  setRenamingId(project.id);
-                                }}>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-start"
+                                  onClick={() => {
+                                    setRenameValue(project.title || '');
+                                    setRenamingId(project.id);
+                                  }}
+                                >
                                   <Pencil className="w-4 h-4 mr-2" />
                                   Rename
                                 </Button>
 
                                 {!isGuest && (project.role === 'owner' || !project.role) && (
-                                  <Button variant="outline" className="w-full justify-start" onClick={() => setSharingProject(project)}>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => setSharingProject(project)}
+                                  >
                                     <Share2 className="w-4 h-4 mr-2" />
                                     Share
                                   </Button>
                                 )}
 
-                                <Button variant="outline" className="w-full justify-start" onClick={() => {
-                                  getToken().then(token => {
-                                    getProject<ReturnType<typeof serializeProject>>(project.id, token).then(record => {
-                                      createProject(`${project.title} (Copy)`, record.data, token).then(() => {
-                                        loadData();
-                                        toast({ title: 'Project duplicated' });
-                                      });
-                                    });
-                                  }).catch(() => toast({ title: 'Failed to duplicate', variant: 'destructive' }));
-                                }}>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-start"
+                                  onClick={() => {
+                                    getToken()
+                                      .then((token) => {
+                                        getProject<ReturnType<typeof serializeProject>>(
+                                          project.id,
+                                          token,
+                                        ).then((record) => {
+                                          createProject(
+                                            `${project.title} (Copy)`,
+                                            record.data,
+                                            token,
+                                          ).then(() => {
+                                            loadData();
+                                            toast({ title: 'Project duplicated' });
+                                          });
+                                        });
+                                      })
+                                      .catch(() =>
+                                        toast({
+                                          title: 'Failed to duplicate',
+                                          variant: 'destructive',
+                                        }),
+                                      );
+                                  }}
+                                >
                                   <Copy className="w-4 h-4 mr-2" />
                                   Duplicate
                                 </Button>
 
-                                <div className="text-sm font-medium text-muted-foreground mt-4 mb-2">Export</div>
+                                <div className="text-sm font-medium text-muted-foreground mt-4 mb-2">
+                                  Export
+                                </div>
                                 <div className="grid grid-cols-3 gap-2">
-                                  <Button variant="secondary" size="sm" onClick={() => handleExportDRA(project.id, project.title || 'project')}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleExportDRA(project.id, project.title || 'project')
+                                    }
+                                  >
                                     <FileArchive className="w-4 h-4 mr-2" />
                                     .dra
                                   </Button>
-                                  <Button variant="secondary" size="sm" onClick={() => handleExportPNG(project.id, project.title || 'drawing')}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleExportPNG(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <Image className="w-4 h-4 mr-2" />
                                     PNG
                                   </Button>
-                                  <Button variant="secondary" size="sm" onClick={() => handleExportPDF(project.id, project.title || 'drawing')}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleExportPDF(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <FileText className="w-4 h-4 mr-2" />
                                     PDF
                                   </Button>
@@ -1555,21 +1812,31 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                       variant="destructive"
                                       className="w-full justify-start"
                                       onClick={() => {
-                                        if (!confirm('Are you sure you want to delete this project?')) return;
-                                        getToken().then(token => {
-                                          deleteProject(project.id, token).then(() => {
-                                            setProjects(prev => prev.filter(p => p.id !== project.id));
-                                            if (currentProjectId === project.id) {
-                                              const store = useDrawingStore.getState();
-                                              store.newProject();
-                                              store.clearCanvas();
-                                              setCurrentProject(undefined);
-                                            }
-                                            toast({ title: 'Project deleted' });
+                                        if (
+                                          !confirm('Are you sure you want to delete this project?')
+                                        )
+                                          return;
+                                        getToken()
+                                          .then((token) => {
+                                            deleteProject(project.id, token).then(() => {
+                                              setProjects((prev) =>
+                                                prev.filter((p) => p.id !== project.id),
+                                              );
+                                              if (currentProjectId === project.id) {
+                                                const store = useDrawingStore.getState();
+                                                store.newProject();
+                                                store.clearCanvas();
+                                                setCurrentProject(undefined);
+                                              }
+                                              toast({ title: 'Project deleted' });
+                                            });
+                                          })
+                                          .catch(() => {
+                                            toast({
+                                              title: 'Failed to delete',
+                                              variant: 'destructive',
+                                            });
                                           });
-                                        }).catch(() => {
-                                          toast({ title: 'Failed to delete', variant: 'destructive' });
-                                        });
                                       }}
                                     >
                                       <Trash2 className="w-4 h-4 mr-2" />
@@ -1590,7 +1857,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                             modal={true}
                             onOpenChange={(open) => handleMenuOpenChange(open, project.id)}
                           >
-                            <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                            <DropdownMenuTrigger
+                              asChild
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            >
                               <Button variant="ghost" size="icon" className="h-8 w-8">
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
@@ -1599,13 +1869,19 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                               align="end"
                               className="w-48"
                               onCloseAutoFocus={(e) => e.preventDefault()}
-                              onPointerDownOutside={() => { menuClosedAtRef.current = Date.now(); }}
-                              onInteractOutside={() => { menuClosedAtRef.current = Date.now(); }}
+                              onPointerDownOutside={() => {
+                                menuClosedAtRef.current = Date.now();
+                              }}
+                              onInteractOutside={() => {
+                                menuClosedAtRef.current = Date.now();
+                              }}
                             >
-                              <DropdownMenuItem onSelect={() => {
-                                setRenameValue(project.title || '');
-                                setRenamingId(project.id);
-                              }}>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setRenameValue(project.title || '');
+                                  setRenamingId(project.id);
+                                }}
+                              >
                                 <Pencil className="w-4 h-4 mr-2" />
                                 Rename
                               </DropdownMenuItem>
@@ -1622,33 +1898,54 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                     Move to folder
                                   </DropdownMenuSubTrigger>
                                   <DropdownMenuSubContent>
-                                    <DropdownMenuItem onSelect={() => handleMoveToFolder(project.id, null)}>
+                                    <DropdownMenuItem
+                                      onSelect={() => handleMoveToFolder(project.id, null)}
+                                    >
                                       <Home className="w-4 h-4 mr-2" />
                                       All Projects
                                     </DropdownMenuItem>
                                     {folders.length > 0 && <DropdownMenuSeparator />}
-                                    {folders.map(f => (
+                                    {folders.map((f) => (
                                       <DropdownMenuItem
                                         key={f.id}
                                         onSelect={() => handleMoveToFolder(project.id, f.id)}
                                       >
-                                        <Folder className="w-4 h-4 mr-2" style={{ color: f.color }} />
+                                        <Folder
+                                          className="w-4 h-4 mr-2"
+                                          style={{ color: f.color }}
+                                        />
                                         {f.name}
                                       </DropdownMenuItem>
                                     ))}
                                   </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                               )}
-                              <DropdownMenuItem onSelect={() => {
-                                getToken().then(token => {
-                                  getProject<ReturnType<typeof serializeProject>>(project.id, token).then(record => {
-                                    createProject(`${project.title} (Copy)`, record.data, token).then(() => {
-                                      loadData();
-                                      toast({ title: 'Project duplicated' });
-                                    });
-                                  });
-                                }).catch(() => toast({ title: 'Failed to duplicate', variant: 'destructive' }));
-                              }}>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  getToken()
+                                    .then((token) => {
+                                      getProject<ReturnType<typeof serializeProject>>(
+                                        project.id,
+                                        token,
+                                      ).then((record) => {
+                                        createProject(
+                                          `${project.title} (Copy)`,
+                                          record.data,
+                                          token,
+                                        ).then(() => {
+                                          loadData();
+                                          toast({ title: 'Project duplicated' });
+                                        });
+                                      });
+                                    })
+                                    .catch(() =>
+                                      toast({
+                                        title: 'Failed to duplicate',
+                                        variant: 'destructive',
+                                      }),
+                                    );
+                                }}
+                              >
                                 <Copy className="w-4 h-4 mr-2" />
                                 Duplicate
                               </DropdownMenuItem>
@@ -1658,16 +1955,28 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   Export
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
-                                  <DropdownMenuItem onSelect={() => handleExportDRA(project.id, project.title || 'project')}>
+                                  <DropdownMenuItem
+                                    onSelect={() =>
+                                      handleExportDRA(project.id, project.title || 'project')
+                                    }
+                                  >
                                     <FileArchive className="w-4 h-4 mr-2" />
                                     Export as .dra
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem onSelect={() => handleExportPNG(project.id, project.title || 'drawing')}>
+                                  <DropdownMenuItem
+                                    onSelect={() =>
+                                      handleExportPNG(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <Image className="w-4 h-4 mr-2" />
                                     Export as PNG
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => handleExportPDF(project.id, project.title || 'drawing')}>
+                                  <DropdownMenuItem
+                                    onSelect={() =>
+                                      handleExportPDF(project.id, project.title || 'drawing')
+                                    }
+                                  >
                                     <FileText className="w-4 h-4 mr-2" />
                                     Export as PDF
                                   </DropdownMenuItem>
@@ -1679,23 +1988,32 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   <DropdownMenuItem
                                     onSelect={(e) => {
                                       e.preventDefault();
-                                      if (!confirm('Are you sure you want to delete this project?')) {
+                                      if (
+                                        !confirm('Are you sure you want to delete this project?')
+                                      ) {
                                         return;
                                       }
-                                      getToken().then(token => {
-                                        deleteProject(project.id, token).then(() => {
-                                          setProjects(prev => prev.filter(p => p.id !== project.id));
-                                          if (currentProjectId === project.id) {
-                                            const store = useDrawingStore.getState();
-                                            store.newProject();
-                                            store.clearCanvas();
-                                            setCurrentProject(undefined);
-                                          }
-                                          toast({ title: 'Project deleted' });
+                                      getToken()
+                                        .then((token) => {
+                                          deleteProject(project.id, token).then(() => {
+                                            setProjects((prev) =>
+                                              prev.filter((p) => p.id !== project.id),
+                                            );
+                                            if (currentProjectId === project.id) {
+                                              const store = useDrawingStore.getState();
+                                              store.newProject();
+                                              store.clearCanvas();
+                                              setCurrentProject(undefined);
+                                            }
+                                            toast({ title: 'Project deleted' });
+                                          });
+                                        })
+                                        .catch(() => {
+                                          toast({
+                                            title: 'Failed to delete',
+                                            variant: 'destructive',
+                                          });
                                         });
-                                      }).catch(() => {
-                                        toast({ title: 'Failed to delete', variant: 'destructive' });
-                                      });
                                     }}
                                     className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400"
                                   >

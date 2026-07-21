@@ -24,7 +24,13 @@ export class DrawingService {
   private canvas(projectId: string): CanvasState {
     let canvas = this.canvases.get(projectId);
     if (!canvas) {
-      canvas = { currentSnapshot: null, strokes: [], shapes: [], snapshotThrottleTimeout: null, lastActivityAt: Date.now() };
+      canvas = {
+        currentSnapshot: null,
+        strokes: [],
+        shapes: [],
+        snapshotThrottleTimeout: null,
+        lastActivityAt: Date.now(),
+      };
       this.canvases.set(projectId, canvas);
     }
     return canvas;
@@ -39,32 +45,43 @@ export class DrawingService {
     return true;
   }
 
-  public removeConnection(clientId: string): void { this.connections.delete(clientId); }
-  public getConnectionCount(): number { return this.connections.size; }
-  public getMaxConnections(): number { return this.maxConnections; }
+  public removeConnection(clientId: string): void {
+    this.connections.delete(clientId);
+  }
+  public getConnectionCount(): number {
+    return this.connections.size;
+  }
+  public getMaxConnections(): number {
+    return this.maxConnections;
+  }
 
   public addStroke(projectId: string, stroke: StrokeData): void {
     const canvas = this.canvas(projectId);
     canvas.lastActivityAt = Date.now();
     canvas.strokes.push(stroke);
-    if (canvas.strokes.length > this.maxStrokes) canvas.strokes = canvas.strokes.slice(-this.maxStrokes * 0.8);
+    if (canvas.strokes.length > this.maxStrokes)
+      canvas.strokes = canvas.strokes.slice(-this.maxStrokes * 0.8);
   }
 
   public addStrokes(projectId: string, strokes: StrokeData[]): void {
     const canvas = this.canvas(projectId);
     canvas.lastActivityAt = Date.now();
     canvas.strokes.push(...strokes);
-    if (canvas.strokes.length > this.maxStrokes) canvas.strokes = canvas.strokes.slice(-this.maxStrokes * 0.8);
+    if (canvas.strokes.length > this.maxStrokes)
+      canvas.strokes = canvas.strokes.slice(-this.maxStrokes * 0.8);
   }
 
   public addShape(projectId: string, shape: ShapeData): void {
     const canvas = this.canvas(projectId);
     canvas.lastActivityAt = Date.now();
     canvas.shapes.push(shape);
-    if (canvas.shapes.length > this.maxShapes) canvas.shapes = canvas.shapes.slice(-this.maxShapes * 0.8);
+    if (canvas.shapes.length > this.maxShapes)
+      canvas.shapes = canvas.shapes.slice(-this.maxShapes * 0.8);
   }
 
-  public getCurrentSnapshot(projectId: string): CanvasSnapshot | null { return this.canvas(projectId).currentSnapshot; }
+  public getCurrentSnapshot(projectId: string): CanvasSnapshot | null {
+    return this.canvas(projectId).currentSnapshot;
+  }
   public updateSnapshot(projectId: string, snapshot: CanvasSnapshot): void {
     const canvas = this.canvas(projectId);
     canvas.currentSnapshot = snapshot;

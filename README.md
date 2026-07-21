@@ -19,7 +19,7 @@ Features seamless synchronization across devices, including iPad/tablet support 
   - Customizable stroke sizes and colors.
 - **👥 Multi-User Presence**: See other users' cursors and actions in real-time.
 - **📱 PWA Support**: Fully installable Progressive Web App with offline capabilities and standalone mode.
-- **🚀 High Performance**: 
+- **🚀 High Performance**:
   - Optimized for 60+ FPS rendering.
   - Efficient update batching and object pooling.
   - Hardware acceleration.
@@ -32,6 +32,7 @@ This project is a monorepo managed with `pnpm` workspaces.
 ### **Apps**
 
 #### **Client** (`apps/client`)
+
 - **Framework**: [React 18](https://react.dev/) + [Vite](https://vitejs.dev/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [Radix UI](https://www.radix-ui.com/)
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand)
@@ -39,6 +40,7 @@ This project is a monorepo managed with `pnpm` workspaces.
 - **PWA**: [Vite PWA](https://vite-pwa-org.netlify.app/)
 
 #### **Server** (`apps/server`)
+
 - **Runtime**: [Node.js](https://nodejs.org/)
 - **Framework**: [Express](https://expressjs.com/)
 - **Real-time**: [Socket.IO](https://socket.io/)
@@ -71,12 +73,14 @@ This project is a monorepo managed with `pnpm` workspaces.
 ### Environment Setup
 
 1.  **Clone the repository**:
+
     ```bash
     git clone https://github.com/my-org/sketchflow.git
     cd sketchflow
     ```
 
 2.  **Install dependencies**:
+
     ```bash
     pnpm install
     ```

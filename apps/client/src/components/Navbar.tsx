@@ -24,7 +24,11 @@ export function Navbar() {
       const toolbarEls = Array.from(document.querySelectorAll('[data-toolbar]')) as HTMLElement[];
       for (const el of toolbarEls) {
         const r = el.getBoundingClientRect();
-        const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        const over =
+          e.clientX >= r.left &&
+          e.clientX <= r.right &&
+          e.clientY >= r.top &&
+          e.clientY <= r.bottom;
         if (over) {
           if (hideTimerRef.current) {
             window.clearTimeout(hideTimerRef.current);
@@ -44,8 +48,11 @@ export function Navbar() {
         const nav = navRef.current;
         if (nav) {
           const rect = nav.getBoundingClientRect();
-          const isOverNav = e.clientX >= rect.left && e.clientX <= rect.right &&
-            e.clientY >= rect.top && e.clientY <= rect.bottom;
+          const isOverNav =
+            e.clientX >= rect.left &&
+            e.clientX <= rect.right &&
+            e.clientY >= rect.top &&
+            e.clientY <= rect.bottom;
 
           if (!isOverNav) {
             if (!hideTimerRef.current) {
@@ -81,8 +88,8 @@ export function Navbar() {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/20 px-6 py-4 transition-all duration-500 ease-out",
-        navVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'
+        'fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/20 px-6 py-4 transition-all duration-500 ease-out',
+        navVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0',
       )}
       onMouseEnter={() => {
         if (hideTimerRef.current) {
@@ -121,33 +128,39 @@ export function Navbar() {
               <User className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Guest Mode</span>
             </div>
-          ) : isAuthenticated && (
-            <div className="flex items-center gap-2">
-              <div className={cn(
-                "flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300",
-                isConnected
-                  ? "bg-green-100 dark:bg-gradient-to-r dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-400/40 shadow-lg shadow-green-500/10 dark:shadow-green-500/20"
-                  : "bg-red-100 dark:bg-gradient-to-r dark:from-red-500/20 dark:to-rose-500/20 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-400/40 shadow-lg shadow-red-500/10 dark:shadow-red-500/20"
-              )}>
-                {isConnected ? (
-                  <Wifi className="w-3.5 h-3.5 animate-pulse" />
-                ) : (
-                  <WifiOff className="w-3.5 h-3.5" />
-                )}
-                <span className="hidden sm:inline">{isConnected ? 'Connected' : 'Disconnected'}</span>
-              </div>
-              {!isConnected && (
-                <Button
-                  onClick={reconnect}
-                  variant="secondary"
-                  size="sm"
-                  title="Retry connection"
-                  className="h-8 px-3 hover:scale-105"
+          ) : (
+            isAuthenticated && (
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    'flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300',
+                    isConnected
+                      ? 'bg-green-100 dark:bg-gradient-to-r dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-400/40 shadow-lg shadow-green-500/10 dark:shadow-green-500/20'
+                      : 'bg-red-100 dark:bg-gradient-to-r dark:from-red-500/20 dark:to-rose-500/20 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-400/40 shadow-lg shadow-red-500/10 dark:shadow-red-500/20',
+                  )}
                 >
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                </Button>
-              )}
-            </div>
+                  {isConnected ? (
+                    <Wifi className="w-3.5 h-3.5 animate-pulse" />
+                  ) : (
+                    <WifiOff className="w-3.5 h-3.5" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                {!isConnected && (
+                  <Button
+                    onClick={reconnect}
+                    variant="secondary"
+                    size="sm"
+                    title="Retry connection"
+                    className="h-8 px-3 hover:scale-105"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  </Button>
+                )}
+              </div>
+            )
           )}
         </div>
 
@@ -158,11 +171,12 @@ export function Navbar() {
 
           <Button
             asChild
-            variant={isDraw ? "default" : "secondary"}
+            variant={isDraw ? 'default' : 'secondary'}
             size="sm"
             className={cn(
-              "transition-all duration-300 font-medium",
-              isDraw && "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 scale-105"
+              'transition-all duration-300 font-medium',
+              isDraw &&
+                'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 scale-105',
             )}
           >
             <Link to="/draw" className="flex items-center space-x-2">
@@ -173,11 +187,12 @@ export function Navbar() {
 
           <Button
             asChild
-            variant={isView ? "default" : "secondary"}
+            variant={isView ? 'default' : 'secondary'}
             size="sm"
             className={cn(
-              "transition-all duration-300 font-medium",
-              isView && "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 scale-105"
+              'transition-all duration-300 font-medium',
+              isView &&
+                'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 scale-105',
             )}
           >
             <Link to="/view" className="flex items-center space-x-2">
@@ -202,11 +217,7 @@ export function Navbar() {
               {clerk.loaded ? (
                 <>
                   <SignInButton mode="modal">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="font-medium hover:scale-105"
-                    >
+                    <Button variant="secondary" size="sm" className="font-medium hover:scale-105">
                       <User className="w-4 h-4 mr-1.5" />
                       <span>Sign In</span>
                     </Button>
@@ -227,7 +238,9 @@ export function Navbar() {
                   size="sm"
                   className="font-medium"
                   onClick={() => {
-                    alert('Clerk is not configured. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env file');
+                    alert(
+                      'Clerk is not configured. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env file',
+                    );
                   }}
                 >
                   <User className="w-4 h-4 mr-1.5" />
@@ -237,12 +250,7 @@ export function Navbar() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="font-medium"
-                disabled
-              >
+              <Button variant="secondary" size="sm" className="font-medium" disabled>
                 <User className="w-4 h-4 mr-1.5" />
                 <span>Loading...</span>
               </Button>

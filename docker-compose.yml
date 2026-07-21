@@ -10,7 +10,7 @@ services:
     volumes:
       - redisdata:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,11 +25,11 @@ services:
       POSTGRES_PASSWORD: sketchflow_dev_password
       POSTGRES_DB: sketchflow
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U sketchflow -d sketchflow" ]
+      test: ['CMD-SHELL', 'pg_isready -U sketchflow -d sketchflow']
       interval: 10s
       timeout: 5s
       retries: 5

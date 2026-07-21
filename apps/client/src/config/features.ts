@@ -1,6 +1,6 @@
 /**
  * Feature flags for enabling/disabling features
- * 
+ *
  * To enable/disable a feature:
  * 1. Change the boolean value for the feature (true = enabled, false = disabled)
  * 2. The feature will be hidden from UI and disabled in the codebase
@@ -14,22 +14,22 @@ export const FEATURES = {
    * When disabled: hides UI controls and prevents shape detection from running
    */
   AUTO_SHAPE: false,
-  
+
   /**
    * Advanced shape detection - experimental improved detection
    */
   ADVANCED_SHAPE_DETECTION: false,
-  
+
   /**
    * Real-time collaboration features
    */
   COLLABORATION: true,
-  
+
   /**
    * Project sharing
    */
   SHARING: true,
-  
+
   /**
    * Performance monitoring
    */

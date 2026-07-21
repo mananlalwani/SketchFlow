@@ -36,10 +36,10 @@ const REDACT_PATTERNS = [
  */
 function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  
+
   for (const [key, value] of Object.entries(obj)) {
     const isSensitive = REDACT_PATTERNS.some((pattern) => pattern.test(key));
-    
+
     if (isSensitive) {
       result[key] = '[REDACTED]';
     } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -49,7 +49,7 @@ function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> 
       result[key] = value;
     }
   }
-  
+
   return result;
 }
 
@@ -79,7 +79,8 @@ class Logger {
 
   constructor() {
     this.logLevel = (process.env.LOG_LEVEL as LogLevel) || 'info';
-    this.logFormat = (process.env.LOG_FORMAT as LogFormat) || 
+    this.logFormat =
+      (process.env.LOG_FORMAT as LogFormat) ||
       (process.env.NODE_ENV === 'production' ? 'json' : 'pretty');
   }
 
@@ -102,7 +103,7 @@ class Logger {
       debug: 0,
       info: 1,
       warn: 2,
-      error: 3
+      error: 3,
     };
     return levels[level] >= levels[this.logLevel];
   }
@@ -110,7 +111,7 @@ class Logger {
   private formatMessage(level: LogLevel, message: string, meta?: Record<string, unknown>): string {
     const traceContext = getTraceContext();
     const redactedMeta = meta ? redactSensitive(meta) : undefined;
-    
+
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
@@ -129,9 +130,10 @@ class Logger {
     const levelStr = level.toUpperCase().padEnd(5);
     const reqIdStr = Logger.requestId ? ` [req:${Logger.requestId.slice(0, 8)}]` : '';
     const traceStr = traceContext.traceId ? ` [trace:${traceContext.traceId.slice(0, 8)}]` : '';
-    const metaStr = redactedMeta && Object.keys(redactedMeta).length > 0 
-      ? ` ${JSON.stringify(redactedMeta)}` 
-      : '';
+    const metaStr =
+      redactedMeta && Object.keys(redactedMeta).length > 0
+        ? ` ${JSON.stringify(redactedMeta)}`
+        : '';
     return `[${entry.timestamp}] ${levelStr}${reqIdStr}${traceStr} ${message}${metaStr}`;
   }
 
@@ -156,7 +158,7 @@ class Logger {
   error(message: string, error?: unknown, meta?: Record<string, unknown>): void {
     if (this.shouldLog('error')) {
       const errorMeta: Record<string, unknown> = { ...meta };
-      
+
       if (error instanceof Error) {
         errorMeta.errorMessage = error.message;
         errorMeta.errorStack = error.stack;
@@ -164,9 +166,9 @@ class Logger {
       } else if (error !== undefined) {
         errorMeta.error = error;
       }
-      
+
       console.error(this.formatMessage('error', message, errorMeta));
-      
+
       // Also record error on current span if available
       try {
         const span = trace.getSpan(context.active());
@@ -182,7 +184,13 @@ class Logger {
   /**
    * Log an HTTP request (for request logging middleware)
    */
-  request(method: string, url: string, statusCode: number, durationMs: number, meta?: Record<string, unknown>): void {
+  request(
+    method: string,
+    url: string,
+    statusCode: number,
+    durationMs: number,
+    meta?: Record<string, unknown>,
+  ): void {
     const logMeta = {
       method,
       url,
@@ -215,7 +223,7 @@ class Logger {
 class ChildLogger {
   constructor(
     private parent: Logger,
-    private context: Record<string, unknown>
+    private context: Record<string, unknown>,
   ) {}
 
   debug(message: string, meta?: Record<string, unknown>): void {

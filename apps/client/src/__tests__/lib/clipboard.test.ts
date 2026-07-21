@@ -11,14 +11,14 @@ describe('clipboard', () => {
       const height = 2000;
       const maxWidth = 1920;
       const maxHeight = 1080;
-      
+
       const scaleW = maxWidth / width;
       const scaleH = maxHeight / height;
       const scale = Math.min(1, Math.min(scaleW, scaleH));
-      
+
       const newWidth = Math.round(width * scale);
       const newHeight = Math.round(height * scale);
-      
+
       expect(newWidth).toBeLessThanOrEqual(maxWidth);
       expect(newHeight).toBeLessThanOrEqual(maxHeight);
       // Aspect ratio preserved
@@ -30,11 +30,11 @@ describe('clipboard', () => {
       const height = 400;
       const maxWidth = 1920;
       const maxHeight = 1080;
-      
+
       const scaleW = maxWidth / width;
       const scaleH = maxHeight / height;
       const scale = Math.min(1, Math.min(scaleW, scaleH));
-      
+
       expect(scale).toBe(1);
       expect(Math.round(width * scale)).toBe(width);
       expect(Math.round(height * scale)).toBe(height);
@@ -45,14 +45,14 @@ describe('clipboard', () => {
       const height = 3000;
       const maxWidth = 1920;
       const maxHeight = 1080;
-      
+
       const scaleW = maxWidth / width;
       const scaleH = maxHeight / height;
       const scale = Math.min(1, Math.min(scaleW, scaleH));
-      
+
       const newWidth = Math.round(width * scale);
       const newHeight = Math.round(height * scale);
-      
+
       expect(newHeight).toBeLessThanOrEqual(maxHeight);
       expect(newWidth).toBeLessThanOrEqual(maxWidth);
     });

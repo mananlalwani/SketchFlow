@@ -29,13 +29,13 @@ This plan turns the current strong foundation into a production-grade applicatio
 
 **Priority:** P0.
 
-- [ ] Add a server ESLint configuration and include both client and server linting in `pnpm lint`.
-- [ ] Add `pnpm format:check` using Prettier (or Biome) and make formatting non-negotiable in CI.
-- [ ] Run Playwright E2E tests in CI with a disposable PostgreSQL service and deterministic test authentication.
-- [ ] Add an accessibility CI job using axe-core for the draw surface, toolbar, dialogs, project manager, and share flow.
+- [x] Add a server ESLint configuration and include both client and server linting in `pnpm lint`.
+- [x] Add `pnpm format:check` using Prettier (or Biome) and make formatting non-negotiable in CI.
+- [x] Run Playwright E2E tests in CI with a disposable PostgreSQL service and deterministic test authentication.
+- [x] Add an accessibility CI job using axe-core for the draw surface and toolbar; expand coverage to dialogs, project manager, and sharing flows with their feature tests.
 - [ ] Publish coverage artifacts and set ratcheting thresholds: 80% lines/functions globally, 90% for authorization, validation, persistence, and socket-boundary modules.
-- [ ] Keep the Docker smoke test, but use readiness (`/api/readyz`) with a real CI database instead of liveness alone.
-- [ ] Add a migration test: apply all migrations to a clean database, start the production image, then verify the critical project lifecycle.
+- [x] Keep the Docker smoke test, but use readiness (`/api/readyz`) with a real CI database instead of liveness alone.
+- [x] Add a migration test: apply all migrations to a clean database, start the production image, then verify the critical project lifecycle.
 
 **Verify:** a pull request cannot merge unless lint, format, type-check, unit/integration/E2E/accessibility tests, audit, build, migration, and container checks pass.
 
@@ -117,11 +117,11 @@ This plan turns the current strong foundation into a production-grade applicatio
 
 ## Scorecard
 
-| Area | Current signal | Target for 9–10/10 |
-| --- | --- | --- |
-| Build quality | Tests, lint, types, and builds pass | Full client/server/E2E/a11y/migration release gate |
-| Security | Good validation/rate-limit foundation; tracked env files | No tracked secrets; proven server-side authorization |
-| Reliability | Realtime and persistence foundations | Restart/offline/concurrent-edit recovery proven by tests |
-| Performance | Production build warns about large chunks | Explicit, CI-enforced loading and board-performance budgets |
-| Maintainability | Large central modules and duplicate contracts | Focused modules, shared contracts, typed boundaries |
-| Operations | Health probes and Docker build exist | Runbooks, dashboards, drills, alerting, safe releases |
+| Area            | Current signal                                           | Target for 9–10/10                                          |
+| --------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| Build quality   | Tests, lint, types, and builds pass                      | Full client/server/E2E/a11y/migration release gate          |
+| Security        | Good validation/rate-limit foundation; tracked env files | No tracked secrets; proven server-side authorization        |
+| Reliability     | Realtime and persistence foundations                     | Restart/offline/concurrent-edit recovery proven by tests    |
+| Performance     | Production build warns about large chunks                | Explicit, CI-enforced loading and board-performance budgets |
+| Maintainability | Large central modules and duplicate contracts            | Focused modules, shared contracts, typed boundaries         |
+| Operations      | Health probes and Docker build exist                     | Runbooks, dashboards, drills, alerting, safe releases       |

@@ -3,12 +3,57 @@ import { objectIntersectsViewport } from '@/lib/viewportCulling';
 
 describe('viewport culling', () => {
   it('removes off-screen shapes, including shapes with negative dimensions', () => {
-    expect(objectIntersectsViewport({ type: 'rectangle', x: 200, y: 200, width: 20, height: 20 }, 0, 0, 100, 100)).toBe(false);
-    expect(objectIntersectsViewport({ type: 'line', x: 80, y: 80, width: -40, height: -40 }, 0, 0, 100, 100)).toBe(true);
+    expect(
+      objectIntersectsViewport(
+        { type: 'rectangle', x: 200, y: 200, width: 20, height: 20 },
+        0,
+        0,
+        100,
+        100,
+      ),
+    ).toBe(false);
+    expect(
+      objectIntersectsViewport(
+        { type: 'line', x: 80, y: 80, width: -40, height: -40 },
+        0,
+        0,
+        100,
+        100,
+      ),
+    ).toBe(true);
   });
 
   it('uses stroke bounds and a stroke-width margin', () => {
-    expect(objectIntersectsViewport({ type: 'stroke', size: 10, points: [{ x: 105, y: 50 }, { x: 115, y: 50 }] }, 0, 0, 100, 100)).toBe(true);
-    expect(objectIntersectsViewport({ type: 'stroke', points: [{ x: 120, y: 50 }, { x: 130, y: 50 }] }, 0, 0, 100, 100)).toBe(false);
+    expect(
+      objectIntersectsViewport(
+        {
+          type: 'stroke',
+          size: 10,
+          points: [
+            { x: 105, y: 50 },
+            { x: 115, y: 50 },
+          ],
+        },
+        0,
+        0,
+        100,
+        100,
+      ),
+    ).toBe(true);
+    expect(
+      objectIntersectsViewport(
+        {
+          type: 'stroke',
+          points: [
+            { x: 120, y: 50 },
+            { x: 130, y: 50 },
+          ],
+        },
+        0,
+        0,
+        100,
+        100,
+      ),
+    ).toBe(false);
   });
 });

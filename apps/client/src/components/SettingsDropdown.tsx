@@ -51,9 +51,7 @@ export function SettingsDropdown() {
             <Sun className="w-4 h-4" />
             <span>Light</span>
           </div>
-          {theme === 'light' && (
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
-          )}
+          {theme === 'light' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTheme('dark')}
@@ -63,9 +61,7 @@ export function SettingsDropdown() {
             <Moon className="w-4 h-4" />
             <span>Dark</span>
           </div>
-          {theme === 'dark' && (
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
-          )}
+          {theme === 'dark' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -81,12 +77,12 @@ export function SettingsDropdown() {
         ) : isAuthenticated && user ? (
           <>
             <div className="px-2 py-2 flex items-center gap-3">
-              <UserButton 
+              <UserButton
                 afterSignOutUrl="/draw"
                 appearance={{
                   elements: {
-                    avatarBox: "w-8 h-8"
-                  }
+                    avatarBox: 'w-8 h-8',
+                  },
                 }}
               />
               <div className="flex flex-col min-w-0">
@@ -138,7 +134,9 @@ export function SettingsDropdown() {
         ) : (
           <DropdownMenuItem
             onClick={() => {
-              alert('Clerk is not configured. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env file');
+              alert(
+                'Clerk is not configured. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env file',
+              );
             }}
             className="flex items-center gap-2"
           >
@@ -150,10 +148,7 @@ export function SettingsDropdown() {
         <DropdownMenuSeparator />
 
         {/* About Section */}
-        <DropdownMenuItem
-          onClick={() => setShowAbout(true)}
-          className="flex items-center gap-2"
-        >
+        <DropdownMenuItem onClick={() => setShowAbout(true)} className="flex items-center gap-2">
           <Info className="w-4 h-4" />
           <span>About</span>
         </DropdownMenuItem>
@@ -169,7 +164,8 @@ export function SettingsDropdown() {
             <DialogDescription asChild>
               <div className="space-y-4 pt-2">
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  A collaborative drawing application for creating and sharing sketches in real-time.
+                  A collaborative drawing application for creating and sharing sketches in
+                  real-time.
                 </p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">

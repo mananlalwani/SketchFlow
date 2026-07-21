@@ -20,7 +20,7 @@ export function requestIdMiddleware(req: Request, res: Response, next: NextFunct
  */
 export function requestLoggingMiddleware(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now();
-  
+
   res.on('finish', () => {
     const duration = Date.now() - start;
     // Skip health check spam in logs
@@ -32,7 +32,7 @@ export function requestLoggingMiddleware(req: Request, res: Response, next: Next
       ip: req.ip || req.socket.remoteAddress,
     });
   });
-  
+
   next();
 }
 
@@ -42,28 +42,28 @@ export function requestLoggingMiddleware(req: Request, res: Response, next: Next
 export function securityHeadersMiddleware(_req: Request, res: Response, next: NextFunction): void {
   // Prevent MIME type sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  
+
   // Prevent clickjacking
   res.setHeader('X-Frame-Options', 'DENY');
-  
+
   // Enable XSS filter
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  
+
   // Don't expose server info
   res.removeHeader('X-Powered-By');
-  
+
   // Referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; worker-src 'self' blob:"
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; worker-src 'self' blob:",
   );
-  
+
   // Content Security Policy (basic)
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
-  
+
   next();
 }
 
@@ -113,7 +113,7 @@ export function rateLimitMiddleware(options: {
   keyGenerator?: (req: Request) => string;
 }) {
   const { windowMs, maxRequests, keyGenerator } = options;
-  
+
   // Cleanup old entries periodically
   setInterval(() => {
     const now = Date.now();
@@ -125,9 +125,9 @@ export function rateLimitMiddleware(options: {
   }, windowMs);
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const key = keyGenerator ? keyGenerator(req) : (req.ip || req.socket.remoteAddress || 'unknown');
+    const key = keyGenerator ? keyGenerator(req) : req.ip || req.socket.remoteAddress || 'unknown';
     const now = Date.now();
-    
+
     const redis = await getRedisLimiter();
     if (redis) {
       const redisKey = `sketchflow:rate-limit:${req.path}:${key}`;
@@ -138,7 +138,9 @@ export function rateLimitMiddleware(options: {
       res.setHeader('X-RateLimit-Remaining', Math.max(0, maxRequests - count));
       res.setHeader('X-RateLimit-Reset', Math.ceil((Date.now() + Math.max(0, ttl)) / 1000));
       if (count > maxRequests) {
-        res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil(Math.max(0, ttl) / 1000) });
+        res
+          .status(429)
+          .json({ error: 'Too many requests', retryAfter: Math.ceil(Math.max(0, ttl) / 1000) });
         return;
       }
       next();
@@ -151,19 +153,19 @@ export function rateLimitMiddleware(options: {
     }
 
     let entry = rateLimitStore.get(key);
-    
+
     if (!entry || entry.resetTime < now) {
       entry = { count: 0, resetTime: now + windowMs };
       rateLimitStore.set(key, entry);
     }
-    
+
     entry.count++;
-    
+
     // Set rate limit headers
     res.setHeader('X-RateLimit-Limit', maxRequests);
     res.setHeader('X-RateLimit-Remaining', Math.max(0, maxRequests - entry.count));
     res.setHeader('X-RateLimit-Reset', Math.ceil(entry.resetTime / 1000));
-    
+
     if (entry.count > maxRequests) {
       res.status(429).json({
         error: 'Too many requests',
@@ -171,7 +173,7 @@ export function rateLimitMiddleware(options: {
       });
       return;
     }
-    
+
     next();
   };
 }
@@ -180,9 +182,14 @@ export function rateLimitMiddleware(options: {
  * Error handling middleware - consistent error responses
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorHandlerMiddleware(err: Error & { status?: number; statusCode?: number }, req: Request, res: Response, _next: NextFunction): void {
+export function errorHandlerMiddleware(
+  err: Error & { status?: number; statusCode?: number },
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): void {
   const traceContext = getTraceContext();
-  
+
   logger.error('Unhandled error', err, {
     method: req.method,
     path: req.path,
@@ -191,12 +198,11 @@ export function errorHandlerMiddleware(err: Error & { status?: number; statusCod
   });
 
   // Don't leak error details in production
-  const message = process.env.NODE_ENV === 'production' 
-    ? 'Internal server error' 
-    : err.message;
+  const message = process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
 
   const status = err.statusCode ?? err.status;
-  const expectedStatus = status === 400 || status === 403 || status === 404 || status === 413 ? status : 500;
+  const expectedStatus =
+    status === 400 || status === 403 || status === 404 || status === 413 ? status : 500;
   res.status(expectedStatus).json({
     error: message,
     requestId: req.headers['x-request-id'],

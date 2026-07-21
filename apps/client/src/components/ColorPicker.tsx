@@ -11,7 +11,7 @@ export function ColorPicker() {
     brushOpacity,
     setBrushColor,
     addCustomColor,
-    removeCustomColor
+    removeCustomColor,
   } = useDrawingStore();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -33,7 +33,7 @@ export function ColorPicker() {
     if (customColors.length > 1) {
       removeCustomColor(color);
       if (brushColor === color) {
-        setBrushColor(customColors.find(c => c !== color) || '#ffffff');
+        setBrushColor(customColors.find((c) => c !== color) || '#ffffff');
       }
     }
   };
@@ -48,18 +48,21 @@ export function ColorPicker() {
       >
         <div className="relative w-5 h-5 rounded-lg border-2 border-slate-300 dark:border-white/40 color-preview shadow-lg overflow-hidden">
           <div className="absolute inset-0 bg-slate-100 dark:bg-slate-900" />
-          <div className="absolute inset-0" style={{ backgroundColor: brushColor, opacity: brushOpacity }} />
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: brushColor, opacity: brushOpacity }}
+          />
         </div>
         <span className="hidden sm:inline text-sm font-medium">Color</span>
         <Palette className="w-4 h-4" />
       </Button>
 
       {isExpanded && (
-        <div
-          className="absolute left-0 top-full mt-3 p-5 z-50 animate-fade-in min-w-[300px] shadow-2xl rounded-2xl bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/20"
-        >
+        <div className="absolute left-0 top-full mt-3 p-5 z-50 animate-fade-in min-w-[300px] shadow-2xl rounded-2xl bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/20">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-300">Color Palette</h3>
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-300">
+              Color Palette
+            </h3>
             <Button
               onClick={() => setIsExpanded(false)}
               variant="ghost"
@@ -69,17 +72,17 @@ export function ColorPicker() {
               <X className="w-4 h-4" />
             </Button>
           </div>
-          
+
           <div className="grid grid-cols-6 gap-3 mb-4">
             {customColors.map((color) => (
               <div key={color} className="relative group">
                 <button
                   onClick={() => handleColorSelect(color)}
                   className={cn(
-                    "w-10 h-10 rounded-xl border-2 transition-all duration-300 hover:scale-110 color-swatch shadow-lg",
+                    'w-10 h-10 rounded-xl border-2 transition-all duration-300 hover:scale-110 color-swatch shadow-lg',
                     brushColor === color
-                      ? "border-blue-400 shadow-xl shadow-blue-500/50 ring-2 ring-blue-300/50 scale-110"
-                      : "border-slate-300 dark:border-white/30 hover:border-slate-400 dark:hover:border-white/50"
+                      ? 'border-blue-400 shadow-xl shadow-blue-500/50 ring-2 ring-blue-300/50 scale-110'
+                      : 'border-slate-300 dark:border-white/30 hover:border-slate-400 dark:hover:border-white/50',
                   )}
                   style={{ backgroundColor: color }}
                   title={color}

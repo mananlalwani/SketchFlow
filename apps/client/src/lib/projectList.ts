@@ -18,11 +18,12 @@ export function filterAndSortProjects(
       : projects.filter((project) => project.folderId === selectedFolderId);
 
   result = [...result].sort((a, b) => {
-    const comparison = sortBy === 'name'
-      ? (a.title || '').localeCompare(b.title || '')
-      : sortBy === 'created'
-        ? (a.createdAt || 0) - (b.createdAt || 0)
-        : (a.updatedAt || 0) - (b.updatedAt || 0);
+    const comparison =
+      sortBy === 'name'
+        ? (a.title || '').localeCompare(b.title || '')
+        : sortBy === 'created'
+          ? (a.createdAt || 0) - (b.createdAt || 0)
+          : (a.updatedAt || 0) - (b.updatedAt || 0);
     return sortDirection === 'desc' ? -comparison : comparison;
   });
 

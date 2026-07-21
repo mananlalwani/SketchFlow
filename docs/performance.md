@@ -2,12 +2,12 @@
 
 The production client is measured with a throttling-free desktop browser and a 10,000-object board.
 
-| Metric | Budget |
-| --- | --- |
-| Initial JavaScript (gzip) | 300 KB or less, excluding user-triggered import/export chunks |
-| Initial PWA precache | 1.6 MB or less |
-| Canvas interaction | 60 FPS target; never block the main thread for more than 50 ms |
-| Large board | Pan and zoom a 10,000-object board without rendering off-viewport objects |
+| Metric                    | Budget                                                                    |
+| ------------------------- | ------------------------------------------------------------------------- |
+| Initial JavaScript (gzip) | 300 KB or less, excluding user-triggered import/export chunks             |
+| Initial PWA precache      | 1.6 MB or less                                                            |
+| Canvas interaction        | 60 FPS target; never block the main thread for more than 50 ms            |
+| Large board               | Pan and zoom a 10,000-object board without rendering off-viewport objects |
 
 ## Benchmark procedure
 

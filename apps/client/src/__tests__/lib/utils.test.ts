@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  cn,
-  generateId,
-} from '@/lib/utils';
+import { cn, generateId } from '@/lib/utils';
 
 describe('utils', () => {
   describe('cn (classnames)', () => {

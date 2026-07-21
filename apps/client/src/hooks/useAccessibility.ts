@@ -20,7 +20,7 @@ export function useAccessibility() {
     // Check for reduced motion preference
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const updateReducedMotion = () => {
-      setPreferences(prev => ({
+      setPreferences((prev) => ({
         ...prev,
         prefersReducedMotion: reducedMotionQuery.matches,
       }));
@@ -31,7 +31,7 @@ export function useAccessibility() {
     // Check for high contrast preference
     const highContrastQuery = window.matchMedia('(prefers-contrast: high)');
     const updateHighContrast = () => {
-      setPreferences(prev => ({
+      setPreferences((prev) => ({
         ...prev,
         prefersHighContrast: highContrastQuery.matches,
       }));
@@ -43,13 +43,13 @@ export function useAccessibility() {
     const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const lightModeQuery = window.matchMedia('(prefers-color-scheme: light)');
     const updateColorScheme = () => {
-      setPreferences(prev => ({
+      setPreferences((prev) => ({
         ...prev,
-        prefersColorScheme: darkModeQuery.matches 
-          ? 'dark' 
-          : lightModeQuery.matches 
-          ? 'light' 
-          : 'no-preference',
+        prefersColorScheme: darkModeQuery.matches
+          ? 'dark'
+          : lightModeQuery.matches
+            ? 'light'
+            : 'no-preference',
       }));
     };
     updateColorScheme();
@@ -95,7 +95,7 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[], enabled = tr
         return;
       }
 
-      const matchingShortcut = shortcuts.find(shortcut => {
+      const matchingShortcut = shortcuts.find((shortcut) => {
         const keyMatches = shortcut.key.toLowerCase() === e.key.toLowerCase();
         const ctrlMatches = shortcut.ctrlKey === undefined || shortcut.ctrlKey === e.ctrlKey;
         const shiftMatches = shortcut.shiftKey === undefined || shortcut.shiftKey === e.shiftKey;
@@ -119,7 +119,10 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[], enabled = tr
 /**
  * Announce message to screen readers
  */
-export function announceToScreenReader(message: string, priority: 'polite' | 'assertive' = 'polite') {
+export function announceToScreenReader(
+  message: string,
+  priority: 'polite' | 'assertive' = 'polite',
+) {
   const announcement = document.createElement('div');
   announcement.setAttribute('role', 'status');
   announcement.setAttribute('aria-live', priority);

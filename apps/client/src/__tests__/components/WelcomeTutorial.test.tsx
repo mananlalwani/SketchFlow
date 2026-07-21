@@ -17,7 +17,10 @@ describe('WelcomeTutorial accessibility', () => {
 
     expect(screen.getByRole('button', { name: 'Close tutorial' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Skip tutorial' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Go to step 1' })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('button', { name: 'Go to step 1' })).toHaveAttribute(
+      'aria-current',
+      'step',
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Skip tutorial' }));
     expect(localStorage.setItem).toHaveBeenCalledWith('sketchflow-tutorial-completed', 'true');

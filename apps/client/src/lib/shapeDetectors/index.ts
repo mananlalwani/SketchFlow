@@ -1,6 +1,6 @@
 /**
  * Shape Detection System
- * 
+ *
  * A modern, modular shape detection system for 2D sketches
  */
 
@@ -9,12 +9,7 @@ export { ShapeDetectionPipeline } from './ShapeDetectionPipeline';
 export type { ShapeDetectionResult, DetectionOptions } from './ShapeDetectionPipeline';
 
 // Types
-export type { 
-  DetectionResult, 
-  DetectedShape, 
-  ShapeDetector, 
-  DetectionThresholds 
-} from './types';
+export type { DetectionResult, DetectedShape, ShapeDetector, DetectionThresholds } from './types';
 export { DEFAULT_THRESHOLDS, createDetectedShape } from './types';
 
 // Individual detectors
@@ -37,13 +32,13 @@ let defaultPipeline: ShapeDetectionPipeline | null = null;
  * Detect shapes from a stroke using the default pipeline
  */
 export function detectShapes(
-  points: Point[], 
-  options: DetectionOptions = {}
+  points: Point[],
+  options: DetectionOptions = {},
 ): ShapeDetectionResult {
   if (!defaultPipeline) {
     defaultPipeline = new ShapeDetectionPipeline();
   }
-  
+
   return defaultPipeline.detectShape(points, options);
 }
 
@@ -60,8 +55,3 @@ export function createDetectionPipeline(options: DetectionOptions = {}): ShapeDe
 export function resetDefaultPipeline(): void {
   defaultPipeline = null;
 }
-
-
-
-
-

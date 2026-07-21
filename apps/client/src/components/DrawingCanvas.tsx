@@ -1,41 +1,34 @@
-import { useRef, useEffect, useCallback, useState } from "react";
-import { useGesture } from "@use-gesture/react";
-import { useDrawingStore } from "@/store/drawingStore";
-import { useDrawingSocket } from "@/hooks/useSocket";
-import { usePerformanceMonitor } from "@/hooks/usePerformanceMonitor";
-import { useFPSCounter } from "@/hooks/useFPSCounter";
-import { useTheme } from "@/contexts/ThemeContext";
-import { Button } from "./ui/button";
-import {
-  Square,
-  Circle,
-  Triangle,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-} from "lucide-react";
+import { useRef, useEffect, useCallback, useState } from 'react';
+import { useGesture } from '@use-gesture/react';
+import { useDrawingStore } from '@/store/drawingStore';
+import { useDrawingSocket } from '@/hooks/useSocket';
+import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
+import { useFPSCounter } from '@/hooks/useFPSCounter';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Button } from './ui/button';
+import { Square, Circle, Triangle, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
-import { generateId, isIOS } from "@/lib/utils";
-import type { DrawingObject } from "@/store/drawingStore";
-import type { StrokeData, ShapeData, CanvasSnapshot } from "@/types/socket";
-import { detectShapes } from "@/lib/shapeDetectors";
-import { getImageFromClipboard, compressImage } from "@/lib/clipboard";
-import { ShortcutsDialog } from "./ShortcutsDialog";
-import { LiveCursors } from "./LiveCursors";
-import { useLiveCursors } from "@/hooks/useLiveCursors";
-import { useProjectPermissions } from "@/hooks/useProjectPermissions";
-import { useToast } from "@/hooks/use-toast";
-import { FEATURES } from "@/config/features";
+import { generateId, isIOS } from '@/lib/utils';
+import type { DrawingObject } from '@/store/drawingStore';
+import type { StrokeData, ShapeData, CanvasSnapshot } from '@/types/socket';
+import { detectShapes } from '@/lib/shapeDetectors';
+import { getImageFromClipboard, compressImage } from '@/lib/clipboard';
+import { ShortcutsDialog } from './ShortcutsDialog';
+import { LiveCursors } from './LiveCursors';
+import { useLiveCursors } from '@/hooks/useLiveCursors';
+import { useProjectPermissions } from '@/hooks/useProjectPermissions';
+import { useToast } from '@/hooks/use-toast';
+import { FEATURES } from '@/config/features';
 import {
   calculateTriangleVertices,
   constrainView,
   WORLD_HEIGHT,
   WORLD_WIDTH,
-} from "@/lib/canvasViewport";
+} from '@/lib/canvasViewport';
 
 const BG_COLORS = {
-  dark: "#0a0a0a",
-  light: "#e0e0e0",
+  dark: '#0a0a0a',
+  light: '#e0e0e0',
 } as const;
 
 export function DrawingCanvas() {
@@ -69,14 +62,8 @@ export function DrawingCanvas() {
     autoShape,
   } = useDrawingStore();
 
-  const {
-    emitStrokes,
-    emitShape,
-    emitSnapshot,
-    emitClear,
-    emitProjectState,
-    on,
-  } = useDrawingSocket();
+  const { emitStrokes, emitShape, emitSnapshot, emitClear, emitProjectState, on } =
+    useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
@@ -85,13 +72,9 @@ export function DrawingCanvas() {
   const { theme } = useTheme();
 
   const [isDrawing, setIsDrawing] = useState(false);
-  const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(
-    null
-  );
+  const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentStroke, setCurrentStroke] = useState<StrokeData[]>([]);
-  const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(
-    null
-  );
+  const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [previewShape, setPreviewShape] = useState<{
     type: string;
     startX: number;
@@ -112,9 +95,7 @@ export function DrawingCanvas() {
     viewY: number;
   } | null>(null);
   const [isSpacePan, setIsSpacePan] = useState(false);
-  const [triangleVertices, setTriangleVertices] = useState<
-    { x: number; y: number }[]
-  >([]);
+  const [triangleVertices, setTriangleVertices] = useState<{ x: number; y: number }[]>([]);
   const [textInputPos, setTextInputPos] = useState<{
     x: number;
     y: number;
@@ -123,7 +104,7 @@ export function DrawingCanvas() {
   } | null>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [textInputValue, setTextInputValue] = useState("");
+  const [textInputValue, setTextInputValue] = useState('');
   const [draggedObject, setDraggedObject] = useState<{
     id: string;
     offsetX: number;
@@ -144,17 +125,14 @@ export function DrawingCanvas() {
   const buildStrokePoints = useCallback((strokes: StrokeData[]) => {
     if (strokes.length === 0) return [];
     const first = strokes[0];
-    return [
-      { x: first.x0, y: first.y0 },
-      ...strokes.map((s) => ({ x: s.x1, y: s.y1 })),
-    ];
+    return [{ x: first.x0, y: first.y0 }, ...strokes.map((s) => ({ x: s.x1, y: s.y1 }))];
   }, []);
 
   useEffect(() => {
     if (!needsFullRedraw) return;
-    workerRef.current?.postMessage({ type: "clear" });
+    workerRef.current?.postMessage({ type: 'clear' });
     for (const obj of objects) {
-      if (obj.type === "stroke" && obj.points && obj.points.length > 1) {
+      if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
         const strokes: StrokeData[] = [];
         const objGroupId = obj.id;
         for (let i = 0; i < obj.points.length - 1; i++) {
@@ -172,19 +150,18 @@ export function DrawingCanvas() {
             timestamp: Date.now(),
           });
         }
-        if (strokes.length)
-          workerRef.current?.postMessage({ type: "strokes", data: strokes });
+        if (strokes.length) workerRef.current?.postMessage({ type: 'strokes', data: strokes });
       } else if (
-        (obj.type === "line" ||
-          obj.type === "rectangle" ||
-          obj.type === "ellipse" ||
-          obj.type === "circle" ||
-          obj.type === "triangle" ||
-          obj.type === "parabola" ||
-          obj.type === "text" ||
-          obj.type === "image" ||
-          obj.type === "star" ||
-          obj.type === "arrow") &&
+        (obj.type === 'line' ||
+          obj.type === 'rectangle' ||
+          obj.type === 'ellipse' ||
+          obj.type === 'circle' ||
+          obj.type === 'triangle' ||
+          obj.type === 'parabola' ||
+          obj.type === 'text' ||
+          obj.type === 'image' ||
+          obj.type === 'star' ||
+          obj.type === 'arrow') &&
         obj.x !== undefined &&
         obj.y !== undefined
       ) {
@@ -199,9 +176,7 @@ export function DrawingCanvas() {
           size: obj.size,
           alpha: obj.alpha ?? 1,
           filled: obj.filled,
-          orientation: (
-            obj as { orientation?: "up" | "down" | "left" | "right" }
-          ).orientation,
+          orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
           text: obj.text,
           fontSize: obj.fontSize,
           imageData: obj.imageData,
@@ -209,7 +184,7 @@ export function DrawingCanvas() {
           properties: obj.properties,
           timestamp: Date.now(),
         };
-        workerRef.current?.postMessage({ type: "shape", data: shape });
+        workerRef.current?.postMessage({ type: 'shape', data: shape });
       }
     }
     clearFullRedraw();
@@ -235,35 +210,32 @@ export function DrawingCanvas() {
 
     if (!workerRef.current) {
       try {
-        const worker = new Worker(
-          new URL("../workers/rendererWorker.ts", import.meta.url),
-          { type: "module" }
-        );
+        const worker = new Worker(new URL('../workers/rendererWorker.ts', import.meta.url), {
+          type: 'module',
+        });
         workerRef.current = worker;
 
-        if ("transferControlToOffscreen" in canvas) {
+        if ('transferControlToOffscreen' in canvas) {
           const offscreen = canvas.transferControlToOffscreen();
           worker.postMessage(
             {
-              type: "init",
+              type: 'init',
               canvas: offscreen,
               worldWidth: WORLD_WIDTH,
               worldHeight: WORLD_HEIGHT,
             },
-            [offscreen]
+            [offscreen],
           );
         } else {
-          console.warn(
-            "OffscreenCanvas not supported, using fallback rendering"
-          );
+          console.warn('OffscreenCanvas not supported, using fallback rendering');
           worker.postMessage({
-            type: "init-fallback",
+            type: 'init-fallback',
             worldWidth: WORLD_WIDTH,
             worldHeight: WORLD_HEIGHT,
           });
         }
       } catch (error) {
-        console.error("Worker initialization failed:", error);
+        console.error('Worker initialization failed:', error);
       }
     }
 
@@ -271,7 +243,7 @@ export function DrawingCanvas() {
       const rect = canvas.getBoundingClientRect();
       const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
       workerRef.current?.postMessage({
-        type: "viewport",
+        type: 'viewport',
         zoom,
         viewX,
         viewY,
@@ -292,21 +264,21 @@ export function DrawingCanvas() {
       sendViewport();
     };
 
-    window.addEventListener("resize", onResize);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("focus", onFocus);
+    window.addEventListener('resize', onResize);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
 
     return () => {
-      window.removeEventListener("resize", onResize);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
     };
   }, [zoom, viewX, viewY]);
 
   useEffect(() => {
     if (!workerRef.current) return;
-    const bgColor = theme === "dark" ? "#0a0a0a" : "#e0e0e0";
-    workerRef.current.postMessage({ type: "theme", bgColor });
+    const bgColor = theme === 'dark' ? '#0a0a0a' : '#e0e0e0';
+    workerRef.current.postMessage({ type: 'theme', bgColor });
   }, [theme]);
 
   const render = useCallback(() => {
@@ -326,7 +298,7 @@ export function DrawingCanvas() {
     }
     const batch = workerStrokeQueueRef.current;
     if (batch.length) {
-      worker.postMessage({ type: "strokes", data: batch });
+      worker.postMessage({ type: 'strokes', data: batch });
       emitStrokes(batch);
       workerStrokeQueueRef.current = [];
     }
@@ -341,7 +313,7 @@ export function DrawingCanvas() {
         requestAnimationFrame(() => flushWorkerStrokes());
       }
     },
-    [flushWorkerStrokes]
+    [flushWorkerStrokes],
   );
 
   useEffect(() => {
@@ -366,33 +338,32 @@ export function DrawingCanvas() {
     const handleKeyDown = (e: KeyboardEvent) => {
       const state = useDrawingStore.getState();
 
-      if (e.key === "Shift") {
+      if (e.key === 'Shift') {
         setIsShiftPressed(true);
       }
 
       const target = e.target as HTMLElement | null;
       const isEditable = !!(
         target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          (target as unknown as { isContentEditable?: boolean })
-            .isContentEditable)
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          (target as unknown as { isContentEditable?: boolean }).isContentEditable)
       );
 
       if (isEditable) return;
 
       if (e.ctrlKey || e.metaKey) {
-        if (e.key.toLowerCase() === "z") {
+        if (e.key.toLowerCase() === 'z') {
           e.preventDefault();
           if (e.shiftKey) {
             state.redo();
           } else {
             state.undo();
           }
-        } else if (e.key.toLowerCase() === "y") {
+        } else if (e.key.toLowerCase() === 'y') {
           e.preventDefault();
           state.redo();
-        } else if (e.key === "=" || e.key === "+") {
+        } else if (e.key === '=' || e.key === '+') {
           e.preventDefault();
           const zoom = state.zoom;
           const newZoom = Math.max(0.1, Math.min(5, zoom * 1.2));
@@ -416,7 +387,7 @@ export function DrawingCanvas() {
               unconstrained.y,
               newZoom,
               rect.width,
-              rect.height
+              rect.height,
             );
 
             state.setZoom(newZoom);
@@ -424,7 +395,7 @@ export function DrawingCanvas() {
 
             const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
             workerRef.current?.postMessage({
-              type: "viewport",
+              type: 'viewport',
               zoom: newZoom,
               viewX: constrained.x,
               viewY: constrained.y,
@@ -433,7 +404,7 @@ export function DrawingCanvas() {
               dpr,
             });
           }
-        } else if (e.key === "-") {
+        } else if (e.key === '-') {
           e.preventDefault();
           const zoom = state.zoom;
           const newZoom = Math.max(0.1, Math.min(5, zoom / 1.2));
@@ -457,7 +428,7 @@ export function DrawingCanvas() {
               unconstrained.y,
               newZoom,
               rect.width,
-              rect.height
+              rect.height,
             );
 
             state.setZoom(newZoom);
@@ -465,7 +436,7 @@ export function DrawingCanvas() {
 
             const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
             workerRef.current?.postMessage({
-              type: "viewport",
+              type: 'viewport',
               zoom: newZoom,
               viewX: constrained.x,
               viewY: constrained.y,
@@ -474,7 +445,7 @@ export function DrawingCanvas() {
               dpr,
             });
           }
-        } else if (e.key === "0") {
+        } else if (e.key === '0') {
           e.preventDefault();
           state.resetView();
           const canvas = canvasRef.current;
@@ -482,7 +453,7 @@ export function DrawingCanvas() {
             const rect = canvas.getBoundingClientRect();
             const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
             workerRef.current?.postMessage({
-              type: "viewport",
+              type: 'viewport',
               zoom: 1,
               viewX: 0,
               viewY: 0,
@@ -491,54 +462,54 @@ export function DrawingCanvas() {
               dpr,
             });
           }
-        } else if (e.key === "Delete" || e.key === "Backspace") {
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
           e.preventDefault();
-          if (window.confirm("Are you sure you want to clear the canvas?")) {
+          if (window.confirm('Are you sure you want to clear the canvas?')) {
             state.clearCanvas();
             emitClear();
-            workerRef.current?.postMessage({ type: "clear" });
+            workerRef.current?.postMessage({ type: 'clear' });
           }
         }
       } else {
         switch (e.key.toLowerCase()) {
-          case "v":
-          case "h":
-            state.setTool("hand");
+          case 'v':
+          case 'h':
+            state.setTool('hand');
             break;
-          case "p":
-          case "b":
-            state.setTool("pen");
+          case 'p':
+          case 'b':
+            state.setTool('pen');
             break;
-          case "e":
-            state.setTool("eraser");
+          case 'e':
+            state.setTool('eraser');
             break;
-          case "l":
-            state.setTool("line");
+          case 'l':
+            state.setTool('line');
             break;
-          case "r":
-            state.setTool("rectangle");
+          case 'r':
+            state.setTool('rectangle');
             break;
-          case "c":
-          case "o":
-            state.setTool("ellipse");
+          case 'c':
+          case 'o':
+            state.setTool('ellipse');
             break;
-          case "t":
-            state.setTool("text");
+          case 't':
+            state.setTool('text');
             break;
-          case "i":
-            state.setTool("eyedropper");
+          case 'i':
+            state.setTool('eyedropper');
             break;
-          case "3":
-            state.setTool("triangle");
+          case '3':
+            state.setTool('triangle');
             break;
         }
 
-        if (e.code === "Space") {
+        if (e.code === 'Space') {
           e.preventDefault();
           setIsSpacePan(true);
         }
 
-        if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        if (e.key === '?' || (e.shiftKey && e.key === '/')) {
           e.preventDefault();
           setShowShortcuts(true);
         }
@@ -546,23 +517,23 @@ export function DrawingCanvas() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Shift") {
+      if (e.key === 'Shift') {
         setIsShiftPressed(false);
         return;
       }
-      if (e.code === "Space") {
+      if (e.code === 'Space') {
         setIsSpacePan(false);
         setIsPanning(false);
         setPanStart(null);
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
   }, [emitClear]);
 
@@ -590,13 +561,13 @@ export function DrawingCanvas() {
 
       const imageObject: DrawingObject = {
         id: generateId(),
-        type: "image",
+        type: 'image',
         x: centerX - finalImage.width / 2,
         y: centerY - finalImage.height / 2,
         width: finalImage.width,
         height: finalImage.height,
         imageData: finalImage.dataUrl,
-        color: "#ffffff",
+        color: '#ffffff',
         size: 1,
         alpha: 1,
       };
@@ -607,7 +578,7 @@ export function DrawingCanvas() {
 
       const shapeData: ShapeData = {
         id: imageObject.id,
-        type: "image",
+        type: 'image',
         x: imageObject.x!,
         y: imageObject.y!,
         width: imageObject.width!,
@@ -621,8 +592,8 @@ export function DrawingCanvas() {
       emitShape(shapeData);
     };
 
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
   }, [
     viewX,
     viewY,
@@ -640,8 +611,8 @@ export function DrawingCanvas() {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      if (!file.type.startsWith("image/")) {
-        console.warn("Invalid file type");
+      if (!file.type.startsWith('image/')) {
+        console.warn('Invalid file type');
         return;
       }
 
@@ -666,13 +637,13 @@ export function DrawingCanvas() {
 
           const imageObject: DrawingObject = {
             id: generateId(),
-            type: "image",
+            type: 'image',
             x: centerX - finalImage.width / 2,
             y: centerY - finalImage.height / 2,
             width: finalImage.width,
             height: finalImage.height,
             imageData: finalImage.dataUrl,
-            color: "#ffffff",
+            color: '#ffffff',
             size: 1,
             alpha: 1,
           };
@@ -683,7 +654,7 @@ export function DrawingCanvas() {
 
           const shapeData: ShapeData = {
             id: imageObject.id,
-            type: "image",
+            type: 'image',
             x: imageObject.x!,
             y: imageObject.y!,
             width: imageObject.width!,
@@ -696,72 +667,60 @@ export function DrawingCanvas() {
           };
           emitShape(shapeData);
 
-          useDrawingStore.getState().setTool("move");
+          useDrawingStore.getState().setTool('move');
         };
         img.src = dataUrl;
       };
       reader.readAsDataURL(file);
 
-      e.target.value = "";
+      e.target.value = '';
     },
-    [
-      viewX,
-      viewY,
-      zoom,
-      addObject,
-      saveHistory,
-      emitShape,
-      emitProjectState,
-      objects,
-    ]
+    [viewX, viewY, zoom, addObject, saveHistory, emitShape, emitProjectState, objects],
   );
 
   useEffect(() => {
-    if (!["rectangle", "ellipse"].includes(currentTool)) {
+    if (!['rectangle', 'ellipse'].includes(currentTool)) {
       setIsConstraintMode(false);
     }
-    if (currentTool !== "triangle") {
+    if (currentTool !== 'triangle') {
       setTriangleVertices([]);
     }
-    if (currentTool !== "text") {
+    if (currentTool !== 'text') {
       setTextInputPos(null);
-      setTextInputValue("");
+      setTextInputValue('');
     }
   }, [currentTool]);
 
   useEffect(() => {
-    const unsubscribeStroke = on("draw:stroke", (stroke: StrokeData) => {
-      workerRef.current?.postMessage({ type: "stroke", data: stroke });
+    const unsubscribeStroke = on('draw:stroke', (stroke: StrokeData) => {
+      workerRef.current?.postMessage({ type: 'stroke', data: stroke });
     });
 
-    const unsubscribeStrokes = on("draw:strokes", (strokes: StrokeData[]) => {
-      workerRef.current?.postMessage({ type: "strokes", data: strokes });
+    const unsubscribeStrokes = on('draw:strokes', (strokes: StrokeData[]) => {
+      workerRef.current?.postMessage({ type: 'strokes', data: strokes });
     });
 
-    const unsubscribeShape = on("draw:shape", (shape: ShapeData) => {
-      workerRef.current?.postMessage({ type: "shape", data: shape });
+    const unsubscribeShape = on('draw:shape', (shape: ShapeData) => {
+      workerRef.current?.postMessage({ type: 'shape', data: shape });
     });
 
-    const unsubscribeSnapshot = on(
-      "canvas:snapshot",
-      (snapshot: CanvasSnapshot) => {
-        if (!snapshot?.dataUrl) return;
-        if (isIOS()) return;
-        workerRef.current?.postMessage({
-          type: "snapshot-image",
-          dataUrl: snapshot.dataUrl,
-          worldWidth: snapshot.worldW ?? WORLD_WIDTH,
-          worldHeight: snapshot.worldH ?? WORLD_HEIGHT,
-        });
-      }
-    );
+    const unsubscribeSnapshot = on('canvas:snapshot', (snapshot: CanvasSnapshot) => {
+      if (!snapshot?.dataUrl) return;
+      if (isIOS()) return;
+      workerRef.current?.postMessage({
+        type: 'snapshot-image',
+        dataUrl: snapshot.dataUrl,
+        worldWidth: snapshot.worldW ?? WORLD_WIDTH,
+        worldHeight: snapshot.worldH ?? WORLD_HEIGHT,
+      });
+    });
 
-    const unsubscribeClear = on("canvas:clear", () => {
-      workerRef.current?.postMessage({ type: "clear" });
+    const unsubscribeClear = on('canvas:clear', () => {
+      workerRef.current?.postMessage({ type: 'clear' });
       const list = pendingReplayRef.current;
       if (list && list.length) {
         for (const obj of list) {
-          if (obj.type === "stroke" && obj.points && obj.points.length > 1) {
+          if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
             const strokes: StrokeData[] = [];
             const objGroupId = obj.id;
             for (let i = 0; i < obj.points.length - 1; i++) {
@@ -782,18 +741,18 @@ export function DrawingCanvas() {
             }
             if (strokes.length) {
               workerRef.current?.postMessage({
-                type: "strokes",
+                type: 'strokes',
                 data: strokes,
               });
             }
           } else if (
-            (obj.type === "line" ||
-              obj.type === "rectangle" ||
-              obj.type === "ellipse" ||
-              obj.type === "circle" ||
-              obj.type === "triangle" ||
-              obj.type === "parabola" ||
-              obj.type === "text") &&
+            (obj.type === 'line' ||
+              obj.type === 'rectangle' ||
+              obj.type === 'ellipse' ||
+              obj.type === 'circle' ||
+              obj.type === 'triangle' ||
+              obj.type === 'parabola' ||
+              obj.type === 'text') &&
             obj.x !== undefined &&
             obj.y !== undefined
           ) {
@@ -808,29 +767,24 @@ export function DrawingCanvas() {
               size: obj.size,
               alpha: obj.alpha ?? 1,
               filled: obj.filled,
-              orientation: (
-                obj as { orientation?: "up" | "down" | "left" | "right" }
-              ).orientation,
+              orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
               text: obj.text,
               fontSize: obj.fontSize,
               timestamp: Date.now(),
             };
-            workerRef.current?.postMessage({ type: "shape", data: shape });
+            workerRef.current?.postMessage({ type: 'shape', data: shape });
           }
         }
         pendingReplayRef.current = null;
       }
     });
 
-    const unsubscribeProjectState = on(
-      "project:state",
-      (data: { objects: unknown[] }) => {
-        const objects = data.objects as DrawingObject[];
-        setObjects(objects);
-        replaceHistory(objects);
-        requestFullRedraw();
-      }
-    );
+    const unsubscribeProjectState = on('project:state', (data: { objects: unknown[] }) => {
+      const objects = data.objects as DrawingObject[];
+      setObjects(objects);
+      replaceHistory(objects);
+      requestFullRedraw();
+    });
 
     return () => {
       unsubscribeStroke();
@@ -840,24 +794,10 @@ export function DrawingCanvas() {
       unsubscribeClear();
       unsubscribeProjectState();
     };
-  }, [
-    on,
-    emitShape,
-    emitStrokes,
-    replaceHistory,
-    requestFullRedraw,
-    setObjects,
-  ]);
+  }, [on, emitShape, emitStrokes, replaceHistory, requestFullRedraw, setObjects]);
 
   const distancePointToSegment = useCallback(
-    (
-      px: number,
-      py: number,
-      x1: number,
-      y1: number,
-      x2: number,
-      y2: number
-    ) => {
+    (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
       const dx = x2 - x1;
       const dy = y2 - y1;
       if (dx === 0 && dy === 0) {
@@ -873,7 +813,7 @@ export function DrawingCanvas() {
       const ddy = py - projY;
       return Math.sqrt(ddx * ddx + ddy * ddy);
     },
-    []
+    [],
   );
 
   const findHitObjectIdAt = useCallback(
@@ -884,7 +824,7 @@ export function DrawingCanvas() {
         const tol = Math.max(6, obj.size);
 
         if (
-          obj.type === "image" &&
+          obj.type === 'image' &&
           obj.x !== undefined &&
           obj.y !== undefined &&
           obj.width !== undefined &&
@@ -900,12 +840,9 @@ export function DrawingCanvas() {
           }
           continue;
         }
-        if (obj.type === "stroke" && obj.points && obj.points.length > 1) {
+        if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
           const normalizedColor = obj.color.toLowerCase();
-          if (
-            normalizedColor === BG_COLORS.dark ||
-            normalizedColor === BG_COLORS.light
-          ) {
+          if (normalizedColor === BG_COLORS.dark || normalizedColor === BG_COLORS.light) {
             continue;
           }
           for (let p = 0; p < obj.points.length - 1; p++) {
@@ -916,7 +853,7 @@ export function DrawingCanvas() {
             }
           }
         } else if (
-          obj.type === "line" &&
+          obj.type === 'line' &&
           obj.x !== undefined &&
           obj.y !== undefined &&
           obj.width !== undefined &&
@@ -930,12 +867,12 @@ export function DrawingCanvas() {
             return obj.id;
           }
         } else if (
-          (obj.type === "rectangle" ||
-            obj.type === "ellipse" ||
-            obj.type === "circle" ||
-            obj.type === "triangle" ||
-            obj.type === "star" ||
-            obj.type === "parabola") &&
+          (obj.type === 'rectangle' ||
+            obj.type === 'ellipse' ||
+            obj.type === 'circle' ||
+            obj.type === 'triangle' ||
+            obj.type === 'star' ||
+            obj.type === 'parabola') &&
           obj.x !== undefined &&
           obj.y !== undefined &&
           obj.width !== undefined &&
@@ -949,7 +886,7 @@ export function DrawingCanvas() {
             return obj.id;
           }
         } else if (
-          obj.type === "text" &&
+          obj.type === 'text' &&
           obj.x !== undefined &&
           obj.y !== undefined &&
           obj.width !== undefined &&
@@ -966,28 +903,28 @@ export function DrawingCanvas() {
       }
       return null;
     },
-    [objects, distancePointToSegment]
+    [objects, distancePointToSegment],
   );
 
   const detectShapeFromStroke = useCallback(
     (
-      points: { x: number; y: number }[]
+      points: { x: number; y: number }[],
     ):
       | {
-        kind: "rectangle" | "ellipse" | "circle" | "triangle" | "line";
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }
+          kind: 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'line';
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }
       | {
-        kind: "parabola";
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        orientation: "up" | "down" | "left" | "right";
-      }
+          kind: 'parabola';
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          orientation: 'up' | 'down' | 'left' | 'right';
+        }
       | null => {
       if (!points || points.length < 3) return null;
 
@@ -1031,27 +968,18 @@ export function DrawingCanvas() {
 
           console.log(`Shape conversion: ${shape.type}, bbox:`, bbox);
 
-          if (shape.type === "parabola" && shape.properties?.orientation) {
+          if (shape.type === 'parabola' && shape.properties?.orientation) {
             return {
-              kind: "parabola" as const,
+              kind: 'parabola' as const,
               x: bbox.minX,
               y: bbox.minY,
               width: bbox.width,
               height: bbox.height,
-              orientation: shape.properties.orientation as
-                | "up"
-                | "down"
-                | "left"
-                | "right",
+              orientation: shape.properties.orientation as 'up' | 'down' | 'left' | 'right',
             };
           } else {
             const shapeObj = {
-              kind: shape.type as
-                | "rectangle"
-                | "ellipse"
-                | "circle"
-                | "triangle"
-                | "line",
+              kind: shape.type as 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'line',
               x: bbox.minX,
               y: bbox.minY,
               width: bbox.width,
@@ -1062,10 +990,7 @@ export function DrawingCanvas() {
           }
         }
       } catch (error) {
-        console.warn(
-          "Shape detection failed, falling back to simple detection:",
-          error
-        );
+        console.warn('Shape detection failed, falling back to simple detection:', error);
       }
 
       let minX = Infinity,
@@ -1086,16 +1011,13 @@ export function DrawingCanvas() {
 
       const first = points[0];
       const last = points[points.length - 1];
-      const closureDist = Math.sqrt(
-        (last.x - first.x) ** 2 + (last.y - first.y) ** 2
-      );
+      const closureDist = Math.sqrt((last.x - first.x) ** 2 + (last.y - first.y) ** 2);
       const diag = Math.sqrt(w * w + h * h);
-      const isClosed =
-        closureDist <= Math.max(10, diag * oldThresholds.closureFactor);
+      const isClosed = closureDist <= Math.max(10, diag * oldThresholds.closureFactor);
 
       if (isClosed) {
         return {
-          kind: "rectangle" as const,
+          kind: 'rectangle' as const,
           x: minX,
           y: minY,
           width: w,
@@ -1103,7 +1025,7 @@ export function DrawingCanvas() {
         };
       } else {
         return {
-          kind: "line" as const,
+          kind: 'line' as const,
           x: first.x,
           y: first.y,
           width: last.x - first.x,
@@ -1111,7 +1033,7 @@ export function DrawingCanvas() {
         };
       }
     },
-    []
+    [],
   );
 
   const screenToWorld = useCallback(
@@ -1128,20 +1050,14 @@ export function DrawingCanvas() {
         y: viewY + y / zoom,
       };
     },
-    [viewX, viewY, zoom]
+    [viewX, viewY, zoom],
   );
 
   const constrainShape = useCallback(
-    (
-      startX: number,
-      startY: number,
-      endX: number,
-      endY: number,
-      shapeType: string
-    ) => {
+    (startX: number, startY: number, endX: number, endY: number, shapeType: string) => {
       if (
         (isShiftPressed || isConstraintMode) &&
-        (shapeType === "rectangle" || shapeType === "ellipse")
+        (shapeType === 'rectangle' || shapeType === 'ellipse')
       ) {
         const deltaX = endX - startX;
         const deltaY = endY - startY;
@@ -1154,16 +1070,16 @@ export function DrawingCanvas() {
       }
       return { endX, endY };
     },
-    [isShiftPressed, isConstraintMode]
+    [isShiftPressed, isConstraintMode],
   );
 
   const startDrawing = useCallback(
     (e: React.PointerEvent) => {
-      if (!canDraw && currentTool !== "hand" && currentTool !== "move") {
+      if (!canDraw && currentTool !== 'hand' && currentTool !== 'move') {
         toast({
-          title: "View Only",
+          title: 'View Only',
           description: "You don't have permission to edit this project.",
-          variant: "destructive",
+          variant: 'destructive',
         });
         return;
       }
@@ -1181,7 +1097,7 @@ export function DrawingCanvas() {
         // ignore
       }
 
-      if (currentTool === "move") {
+      if (currentTool === 'move') {
         const hitId = findHitObjectIdAt(worldPos.x, worldPos.y, {
           includeImages: true,
         });
@@ -1194,11 +1110,7 @@ export function DrawingCanvas() {
             if (obj.x !== undefined && obj.y !== undefined) {
               offsetX = worldPos.x - obj.x;
               offsetY = worldPos.y - obj.y;
-            } else if (
-              obj.type === "stroke" &&
-              obj.points &&
-              obj.points.length > 0
-            ) {
+            } else if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
               offsetX = worldPos.x - obj.points[0].x;
               offsetY = worldPos.y - obj.points[0].y;
             }
@@ -1211,7 +1123,7 @@ export function DrawingCanvas() {
         return;
       }
 
-      if (currentTool === "hand" || isSpacePan) {
+      if (currentTool === 'hand' || isSpacePan) {
         setIsPanning(true);
         setPanStart({ x: e.clientX, y: e.clientY, viewX, viewY });
         return;
@@ -1221,7 +1133,7 @@ export function DrawingCanvas() {
         return;
       }
 
-      if (currentTool === "eraser" && eraserMode === "object") {
+      if (currentTool === 'eraser' && eraserMode === 'object') {
         const hitId = findHitObjectIdAt(worldPos.x, worldPos.y, {
           includeImages: true,
         });
@@ -1236,24 +1148,20 @@ export function DrawingCanvas() {
               minY = 0,
               maxX = 0,
               maxY = 0;
-            if (
-              removed.type === "stroke" &&
-              removed.points &&
-              removed.points.length
-            ) {
+            if (removed.type === 'stroke' && removed.points && removed.points.length) {
               minX = Math.min(...removed.points.map((p) => p.x)) - removed.size;
               minY = Math.min(...removed.points.map((p) => p.y)) - removed.size;
               maxX = Math.max(...removed.points.map((p) => p.x)) + removed.size;
               maxY = Math.max(...removed.points.map((p) => p.y)) + removed.size;
             } else if (
-              (removed.type === "line" ||
-                removed.type === "rectangle" ||
-                removed.type === "ellipse" ||
-                removed.type === "circle" ||
-                removed.type === "triangle" ||
-                removed.type === "star" ||
-                removed.type === "parabola" ||
-                removed.type === "image") &&
+              (removed.type === 'line' ||
+                removed.type === 'rectangle' ||
+                removed.type === 'ellipse' ||
+                removed.type === 'circle' ||
+                removed.type === 'triangle' ||
+                removed.type === 'star' ||
+                removed.type === 'parabola' ||
+                removed.type === 'image') &&
               removed.x !== undefined &&
               removed.y !== undefined &&
               removed.width !== undefined &&
@@ -1266,7 +1174,7 @@ export function DrawingCanvas() {
               maxX = Math.max(removed.x, rx2) + removed.size;
               maxY = Math.max(removed.y, ry2) + removed.size;
             } else if (
-              removed.type === "text" &&
+              removed.type === 'text' &&
               removed.x !== undefined &&
               removed.y !== undefined &&
               removed.width !== undefined &&
@@ -1281,7 +1189,7 @@ export function DrawingCanvas() {
             const height = Math.max(0, maxY - minY);
 
             workerRef.current?.postMessage({
-              type: "clear-region",
+              type: 'clear-region',
               x: minX,
               y: minY,
               width,
@@ -1293,20 +1201,20 @@ export function DrawingCanvas() {
                 oy1 = 0,
                 ox2 = 0,
                 oy2 = 0;
-              if (obj.type === "stroke" && obj.points && obj.points.length) {
+              if (obj.type === 'stroke' && obj.points && obj.points.length) {
                 ox1 = Math.min(...obj.points.map((p) => p.x)) - obj.size;
                 oy1 = Math.min(...obj.points.map((p) => p.y)) - obj.size;
                 ox2 = Math.max(...obj.points.map((p) => p.x)) + obj.size;
                 oy2 = Math.max(...obj.points.map((p) => p.y)) + obj.size;
               } else if (
-                (obj.type === "line" ||
-                  obj.type === "rectangle" ||
-                  obj.type === "ellipse" ||
-                  obj.type === "circle" ||
-                  obj.type === "triangle" ||
-                  obj.type === "star" ||
-                  obj.type === "parabola" ||
-                  obj.type === "image") &&
+                (obj.type === 'line' ||
+                  obj.type === 'rectangle' ||
+                  obj.type === 'ellipse' ||
+                  obj.type === 'circle' ||
+                  obj.type === 'triangle' ||
+                  obj.type === 'star' ||
+                  obj.type === 'parabola' ||
+                  obj.type === 'image') &&
                 obj.x !== undefined &&
                 obj.y !== undefined &&
                 obj.width !== undefined &&
@@ -1319,7 +1227,7 @@ export function DrawingCanvas() {
                 ox2 = Math.max(obj.x, x2) + obj.size;
                 oy2 = Math.max(obj.y, y2) + obj.size;
               } else if (
-                obj.type === "text" &&
+                obj.type === 'text' &&
                 obj.x !== undefined &&
                 obj.y !== undefined &&
                 obj.width !== undefined &&
@@ -1338,11 +1246,7 @@ export function DrawingCanvas() {
               );
               if (!intersects) continue;
 
-              if (
-                obj.type === "stroke" &&
-                obj.points &&
-                obj.points.length > 1
-              ) {
+              if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
                 const strokes: StrokeData[] = [];
                 const objGroupId = obj.id;
                 for (let i = 0; i < obj.points.length - 1; i++) {
@@ -1362,17 +1266,17 @@ export function DrawingCanvas() {
                 }
                 if (strokes.length) {
                   workerRef.current?.postMessage({
-                    type: "strokes",
+                    type: 'strokes',
                     data: strokes,
                   });
                 }
               } else if (
-                (obj.type === "line" ||
-                  obj.type === "rectangle" ||
-                  obj.type === "ellipse" ||
-                  obj.type === "circle" ||
-                  obj.type === "triangle" ||
-                  obj.type === "parabola") &&
+                (obj.type === 'line' ||
+                  obj.type === 'rectangle' ||
+                  obj.type === 'ellipse' ||
+                  obj.type === 'circle' ||
+                  obj.type === 'triangle' ||
+                  obj.type === 'parabola') &&
                 obj.x !== undefined &&
                 obj.y !== undefined &&
                 obj.width !== undefined &&
@@ -1390,14 +1294,13 @@ export function DrawingCanvas() {
                   alpha: obj.alpha ?? 1,
                   filled: obj.filled,
                   points: obj.points,
-                  orientation: (
-                    obj as { orientation?: "up" | "down" | "left" | "right" }
-                  ).orientation,
+                  orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' })
+                    .orientation,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: "shape", data: shape });
+                workerRef.current?.postMessage({ type: 'shape', data: shape });
               } else if (
-                obj.type === "text" &&
+                obj.type === 'text' &&
                 obj.x !== undefined &&
                 obj.y !== undefined &&
                 obj.width !== undefined &&
@@ -1417,9 +1320,9 @@ export function DrawingCanvas() {
                   fontSize: obj.fontSize,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: "shape", data: shape });
+                workerRef.current?.postMessage({ type: 'shape', data: shape });
               } else if (
-                obj.type === "image" &&
+                obj.type === 'image' &&
                 obj.x !== undefined &&
                 obj.y !== undefined &&
                 obj.width !== undefined &&
@@ -1438,7 +1341,7 @@ export function DrawingCanvas() {
                   imageData: obj.imageData,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: "shape", data: shape });
+                workerRef.current?.postMessage({ type: 'shape', data: shape });
               }
             }
           }
@@ -1447,30 +1350,28 @@ export function DrawingCanvas() {
         return;
       }
 
-      if (currentTool === "pen" || currentTool === "eraser") {
+      if (currentTool === 'pen' || currentTool === 'eraser') {
         setIsDrawing(true);
         setLastPoint(worldPos);
         setCurrentStroke([]);
 
         strokeGroupRef.current = generateId();
-      } else if (
-        ["line", "rectangle", "ellipse", "star"].includes(currentTool)
-      ) {
+      } else if (['line', 'rectangle', 'ellipse', 'star'].includes(currentTool)) {
         setIsDrawing(true);
         setStartPoint(worldPos);
         setLastPoint(worldPos);
         saveHistory();
-      } else if (currentTool === "text") {
+      } else if (currentTool === 'text') {
         setTextInputPos({
           x: e.clientX,
           y: e.clientY,
           worldX: worldPos.x,
           worldY: worldPos.y,
         });
-        setTextInputValue("");
+        setTextInputValue('');
         setTimeout(() => textInputRef.current?.focus(), 0);
-      } else if (currentTool === "triangle") {
-        if (triangleMode === "custom") {
+      } else if (currentTool === 'triangle') {
+        if (triangleMode === 'custom') {
           if (triangleVertices.length === 0) {
             setTriangleVertices([worldPos]);
           } else if (triangleVertices.length === 1) {
@@ -1487,7 +1388,7 @@ export function DrawingCanvas() {
 
             const triangleObject = {
               id: generateId(),
-              type: "triangle" as const,
+              type: 'triangle' as const,
               points: vertices,
               x: minX,
               y: minY,
@@ -1504,7 +1405,7 @@ export function DrawingCanvas() {
             emitProjectState([...objects, triangleObject]);
 
             workerRef.current?.postMessage({
-              type: "shape",
+              type: 'shape',
               data: triangleObject,
             });
 
@@ -1546,7 +1447,7 @@ export function DrawingCanvas() {
       textInputPos,
       canDraw,
       toast,
-    ]
+    ],
   );
 
   const draw = useCallback(
@@ -1578,7 +1479,7 @@ export function DrawingCanvas() {
           unconstrained.y,
           zoom,
           rect.width,
-          rect.height
+          rect.height,
         );
         const newViewX = constrained.x;
         const newViewY = constrained.y;
@@ -1601,7 +1502,7 @@ export function DrawingCanvas() {
               const rect = canvas.getBoundingClientRect();
               const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
               workerRef.current?.postMessage({
-                type: "viewport",
+                type: 'viewport',
                 zoom,
                 viewX: latestView.x,
                 viewY: latestView.y,
@@ -1626,45 +1527,41 @@ export function DrawingCanvas() {
         if (obj) {
           let updatedObjects;
 
-          if (obj.type === "stroke" && obj.points && obj.points.length > 0) {
+          if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
             const deltaX = newX - obj.points[0].x;
             const deltaY = newY - obj.points[0].y;
 
             updatedObjects = currentObjects.map((o) =>
               o.id === draggedObject.id
                 ? {
-                  ...o,
-                  points: o.points!.map((p) => ({
-                    x: p.x + deltaX,
-                    y: p.y + deltaY,
-                  })),
-                }
-                : o
+                    ...o,
+                    points: o.points!.map((p) => ({
+                      x: p.x + deltaX,
+                      y: p.y + deltaY,
+                    })),
+                  }
+                : o,
             );
-          } else if (
-            obj.type === "triangle" &&
-            obj.points &&
-            obj.points.length > 0
-          ) {
+          } else if (obj.type === 'triangle' && obj.points && obj.points.length > 0) {
             const deltaX = newX - (obj.x ?? 0);
             const deltaY = newY - (obj.y ?? 0);
 
             updatedObjects = currentObjects.map((o) =>
               o.id === draggedObject.id
                 ? {
-                  ...o,
-                  x: newX,
-                  y: newY,
-                  points: o.points!.map((p) => ({
-                    x: p.x + deltaX,
-                    y: p.y + deltaY,
-                  })),
-                }
-                : o
+                    ...o,
+                    x: newX,
+                    y: newY,
+                    points: o.points!.map((p) => ({
+                      x: p.x + deltaX,
+                      y: p.y + deltaY,
+                    })),
+                  }
+                : o,
             );
           } else {
             updatedObjects = currentObjects.map((o) =>
-              o.id === draggedObject.id ? { ...o, x: newX, y: newY } : o
+              o.id === draggedObject.id ? { ...o, x: newX, y: newY } : o,
             );
           }
 
@@ -1676,17 +1573,15 @@ export function DrawingCanvas() {
               dragRedrawScheduledRef.current = false;
 
               if (draggedObjectsRef.current) {
-                const updatedObj = draggedObjectsRef.current.find(
-                  (o) => o.id === draggedObject.id
-                );
+                const updatedObj = draggedObjectsRef.current.find((o) => o.id === draggedObject.id);
                 if (updatedObj) {
                   if (
-                    updatedObj.type === "stroke" &&
+                    updatedObj.type === 'stroke' &&
                     updatedObj.points &&
                     updatedObj.points.length > 1
                   ) {
                     workerRef.current?.postMessage({
-                      type: "remove-group",
+                      type: 'remove-group',
                       groupId: updatedObj.id,
                     });
 
@@ -1708,21 +1603,21 @@ export function DrawingCanvas() {
                     }
                     if (strokes.length) {
                       workerRef.current?.postMessage({
-                        type: "strokes",
+                        type: 'strokes',
                         data: strokes,
                       });
                     }
                   } else if (
-                    (updatedObj.type === "line" ||
-                      updatedObj.type === "rectangle" ||
-                      updatedObj.type === "ellipse" ||
-                      updatedObj.type === "circle" ||
-                      updatedObj.type === "triangle" ||
-                      updatedObj.type === "parabola" ||
-                      updatedObj.type === "text" ||
-                      updatedObj.type === "image" ||
-                      updatedObj.type === "star" ||
-                      updatedObj.type === "arrow") &&
+                    (updatedObj.type === 'line' ||
+                      updatedObj.type === 'rectangle' ||
+                      updatedObj.type === 'ellipse' ||
+                      updatedObj.type === 'circle' ||
+                      updatedObj.type === 'triangle' ||
+                      updatedObj.type === 'parabola' ||
+                      updatedObj.type === 'text' ||
+                      updatedObj.type === 'image' ||
+                      updatedObj.type === 'star' ||
+                      updatedObj.type === 'arrow') &&
                     updatedObj.x !== undefined &&
                     updatedObj.y !== undefined
                   ) {
@@ -1739,7 +1634,7 @@ export function DrawingCanvas() {
                       filled: updatedObj.filled,
                       orientation: (
                         updatedObj as {
-                          orientation?: "up" | "down" | "left" | "right";
+                          orientation?: 'up' | 'down' | 'left' | 'right';
                         }
                       ).orientation,
                       text: updatedObj.text,
@@ -1750,7 +1645,7 @@ export function DrawingCanvas() {
                       timestamp: Date.now(),
                     };
                     workerRef.current?.postMessage({
-                      type: "shape",
+                      type: 'shape',
                       data: shape,
                     });
                   }
@@ -1765,21 +1660,16 @@ export function DrawingCanvas() {
       // use-gesture supplies a native PointerEvent, while React handlers supply
       // a SyntheticEvent. Support both so drawing does not crash in browsers
       // that dispatch native events through the gesture handler.
-      const native = (
-        "nativeEvent" in e && e.nativeEvent ? e.nativeEvent : e
-      ) as unknown as PointerEvent & {
+      const native = ('nativeEvent' in e && e.nativeEvent
+        ? e.nativeEvent
+        : e) as unknown as PointerEvent & {
         getCoalescedEvents?: () => PointerEvent[];
       };
       const coalesced =
-        typeof native.getCoalescedEvents === "function"
-          ? native.getCoalescedEvents()
-          : null;
+        typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : null;
       const events = coalesced && coalesced.length ? coalesced : [native];
 
-      if (
-        currentTool === "pen" ||
-        (currentTool === "eraser" && eraserMode === "partial")
-      ) {
+      if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
         let lp = lastPoint;
         for (let i = 0; i < events.length; i++) {
           const ev = events[i];
@@ -1790,7 +1680,7 @@ export function DrawingCanvas() {
           }
 
           if (!strokeGroupRef.current) {
-            console.error("No groupId set for stroke - this should not happen");
+            console.error('No groupId set for stroke - this should not happen');
             lp = p;
             continue;
           }
@@ -1800,7 +1690,7 @@ export function DrawingCanvas() {
             y0: lp.y,
             x1: p.x,
             y1: p.y,
-            color: currentTool === "eraser" ? BG_COLORS[theme] : brushColor,
+            color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
             size: brushSize,
             alpha: brushOpacity,
             timestamp: Date.now(),
@@ -1811,10 +1701,7 @@ export function DrawingCanvas() {
           lp = p;
         }
         if (lp) setLastPoint(lp);
-      } else if (
-        ["line", "rectangle", "ellipse", "star"].includes(currentTool) &&
-        startPoint
-      ) {
+      } else if (['line', 'rectangle', 'ellipse', 'star'].includes(currentTool) && startPoint) {
         const lastEv = events[events.length - 1];
         const endPos = screenToWorld(lastEv.clientX, lastEv.clientY);
         const { endX, endY } = constrainShape(
@@ -1822,7 +1709,7 @@ export function DrawingCanvas() {
           startPoint.y,
           endPos.x,
           endPos.y,
-          currentTool
+          currentTool,
         );
 
         setPreviewShape({
@@ -1835,16 +1722,12 @@ export function DrawingCanvas() {
           size: brushSize,
           alpha: brushOpacity,
         });
-      } else if (
-        currentTool === "triangle" &&
-        triangleMode !== "custom" &&
-        startPoint
-      ) {
+      } else if (currentTool === 'triangle' && triangleMode !== 'custom' && startPoint) {
         const lastEv = events[events.length - 1];
         const endPos = screenToWorld(lastEv.clientX, lastEv.clientY);
 
         setPreviewShape({
-          type: "triangle",
+          type: 'triangle',
           startX: startPoint.x,
           startY: startPoint.y,
           endX: endPos.x,
@@ -1876,15 +1759,15 @@ export function DrawingCanvas() {
       objects,
       theme,
       emitCursor,
-    ]
+    ],
   );
 
   const handleCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (currentTool !== "triangle" || triangleMode !== "custom") return;
+      if (currentTool !== 'triangle' || triangleMode !== 'custom') return;
       startDrawing(event as unknown as React.PointerEvent<HTMLCanvasElement>);
     },
-    [currentTool, startDrawing, triangleMode]
+    [currentTool, startDrawing, triangleMode],
   );
 
   const stopDrawing = useCallback(() => {
@@ -1892,11 +1775,9 @@ export function DrawingCanvas() {
       if (draggedObjectsRef.current) {
         const updatedObjects = draggedObjectsRef.current;
         setObjects(updatedObjects);
-        const updatedObj = updatedObjects.find(
-          (o) => o.id === draggedObject.id
-        );
+        const updatedObj = updatedObjects.find((o) => o.id === draggedObject.id);
         if (updatedObj) {
-          if (updatedObj.type === "stroke") {
+          if (updatedObj.type === 'stroke') {
             emitProjectState(updatedObjects);
           } else if (updatedObj.x !== undefined && updatedObj.y !== undefined) {
             emitShape({
@@ -1910,9 +1791,8 @@ export function DrawingCanvas() {
               size: updatedObj.size,
               alpha: updatedObj.alpha ?? 1,
               filled: updatedObj.filled,
-              orientation: (
-                updatedObj as { orientation?: "up" | "down" | "left" | "right" }
-              ).orientation,
+              orientation: (updatedObj as { orientation?: 'up' | 'down' | 'left' | 'right' })
+                .orientation,
               text: updatedObj.text,
               fontSize: updatedObj.fontSize,
               imageData: updatedObj.imageData,
@@ -1932,7 +1812,7 @@ export function DrawingCanvas() {
       return;
     }
 
-    if (isPanning || currentTool === "hand" || isSpacePan) {
+    if (isPanning || currentTool === 'hand' || isSpacePan) {
       if (currentPanViewRef.current) {
         setView(currentPanViewRef.current.x, currentPanViewRef.current.y);
         currentPanViewRef.current = null;
@@ -1940,19 +1820,16 @@ export function DrawingCanvas() {
       setIsPanning(false);
       setPanStart(null);
 
-      if (currentTool === "hand" || isSpacePan || !isDrawing) {
+      if (currentTool === 'hand' || isSpacePan || !isDrawing) {
         return;
       }
     }
     if (!isDrawing) return;
     flushWorkerStrokes();
 
-    if (
-      currentTool === "pen" ||
-      (currentTool === "eraser" && eraserMode === "partial")
-    ) {
+    if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
       if (currentStroke.length > 0) {
-        if (FEATURES.AUTO_SHAPE && autoShape && currentTool === "pen") {
+        if (FEATURES.AUTO_SHAPE && autoShape && currentTool === 'pen') {
           const pathPoints: { x: number; y: number }[] = [];
           const firstSeg = currentStroke[0];
           pathPoints.push({ x: firstSeg.x0, y: firstSeg.y0 });
@@ -1962,18 +1839,18 @@ export function DrawingCanvas() {
           if (shape) {
             if (strokeGroupRef.current) {
               workerRef.current?.postMessage({
-                type: "remove-group",
+                type: 'remove-group',
                 groupId: strokeGroupRef.current,
               });
             }
 
             const clearShapePayload = {
-              id: "temp",
+              id: 'temp',
               type:
-                shape.kind === "line"
-                  ? "line"
-                  : shape.kind === "parabola"
-                    ? "parabola"
+                shape.kind === 'line'
+                  ? 'line'
+                  : shape.kind === 'parabola'
+                    ? 'parabola'
                     : shape.kind,
               x: Math.min(shape.x, shape.x + shape.width),
               y: Math.min(shape.y, shape.y + shape.height),
@@ -1982,12 +1859,11 @@ export function DrawingCanvas() {
               color: BG_COLORS[theme],
               size: Math.max(brushSize, 1),
               alpha: brushOpacity,
-              orientation: (
-                shape as { orientation?: "up" | "down" | "left" | "right" }
-              ).orientation,
+              orientation: (shape as { orientation?: 'up' | 'down' | 'left' | 'right' })
+                .orientation,
             } as const;
             workerRef.current?.postMessage({
-              type: "clear-shape",
+              type: 'clear-shape',
               data: clearShapePayload,
             });
 
@@ -2007,13 +1883,7 @@ export function DrawingCanvas() {
             } as const;
             let shapeObject: {
               id: string;
-              type:
-              | "parabola"
-              | "line"
-              | "rectangle"
-              | "ellipse"
-              | "circle"
-              | "triangle";
+              type: 'parabola' | 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle';
               x: number;
               y: number;
               width: number;
@@ -2022,24 +1892,20 @@ export function DrawingCanvas() {
               size: number;
               alpha: number;
               filled?: boolean;
-              orientation?: "up" | "down" | "left" | "right";
+              orientation?: 'up' | 'down' | 'left' | 'right';
             };
-            if (shape.kind === "parabola") {
+            if (shape.kind === 'parabola') {
               shapeObject = {
                 ...common,
-                type: "parabola" as const,
+                type: 'parabola' as const,
                 orientation: shape.orientation,
               };
-            } else if (shape.kind === "line") {
-              shapeObject = { ...common, type: "line" as const };
+            } else if (shape.kind === 'line') {
+              shapeObject = { ...common, type: 'line' as const };
             } else {
               shapeObject = {
                 ...common,
-                type: shape.kind as
-                  | "rectangle"
-                  | "ellipse"
-                  | "circle"
-                  | "triangle",
+                type: shape.kind as 'rectangle' | 'ellipse' | 'circle' | 'triangle',
                 filled: useDrawingStore.getState().shapeFilled,
               };
             }
@@ -2048,14 +1914,14 @@ export function DrawingCanvas() {
             saveHistory();
             emitProjectState([...objects, shapeObject]);
             workerRef.current?.postMessage({
-              type: "shape",
+              type: 'shape',
               data: shapeObject,
             });
             emitShape({ ...shapeObject, timestamp: Date.now() });
           } else {
             const drawingObject = {
               id: generateId(),
-              type: "stroke" as const,
+              type: 'stroke' as const,
               points: buildStrokePoints(currentStroke),
               color: brushColor,
               size: brushSize,
@@ -2068,9 +1934,9 @@ export function DrawingCanvas() {
         } else {
           const drawingObject = {
             id: generateId(),
-            type: "stroke" as const,
+            type: 'stroke' as const,
             points: buildStrokePoints(currentStroke),
-            color: currentTool === "eraser" ? BG_COLORS[theme] : brushColor,
+            color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
             size: brushSize,
             alpha: brushOpacity,
           };
@@ -2080,15 +1946,15 @@ export function DrawingCanvas() {
         }
       }
     } else if (
-      ["line", "rectangle", "ellipse"].includes(currentTool) &&
+      ['line', 'rectangle', 'ellipse'].includes(currentTool) &&
       startPoint &&
       previewShape
     ) {
       let shapeObject;
-      if (currentTool === "line") {
+      if (currentTool === 'line') {
         shapeObject = {
           id: generateId(),
-          type: currentTool as "line" | "rectangle" | "ellipse",
+          type: currentTool as 'line' | 'rectangle' | 'ellipse',
           x: startPoint.x,
           y: startPoint.y,
           width: previewShape.endX - startPoint.x,
@@ -2100,7 +1966,7 @@ export function DrawingCanvas() {
       } else {
         shapeObject = {
           id: generateId(),
-          type: currentTool as "line" | "rectangle" | "ellipse",
+          type: currentTool as 'line' | 'rectangle' | 'ellipse',
           x: Math.min(startPoint.x, previewShape.endX),
           y: Math.min(startPoint.y, previewShape.endY),
           width: Math.abs(previewShape.endX - startPoint.x),
@@ -2116,7 +1982,7 @@ export function DrawingCanvas() {
       emitProjectState([...objects, shapeObject]);
 
       workerRef.current?.postMessage({
-        type: "shape",
+        type: 'shape',
         data: shapeObject,
       });
 
@@ -2124,7 +1990,7 @@ export function DrawingCanvas() {
         ...shapeObject,
         timestamp: Date.now(),
       });
-    } else if (currentTool === "star" && startPoint && previewShape) {
+    } else if (currentTool === 'star' && startPoint && previewShape) {
       const dx = previewShape.endX - startPoint.x;
       const dy = previewShape.endY - startPoint.y;
       const outerRadius = Math.sqrt(dx * dx + dy * dy);
@@ -2136,7 +2002,7 @@ export function DrawingCanvas() {
 
       const starObject = {
         id: generateId(),
-        type: "star" as const,
+        type: 'star' as const,
         x,
         y,
         width,
@@ -2154,7 +2020,7 @@ export function DrawingCanvas() {
       emitProjectState([...objects, starObject]);
 
       workerRef.current?.postMessage({
-        type: "shape",
+        type: 'shape',
         data: starObject,
       });
 
@@ -2163,8 +2029,8 @@ export function DrawingCanvas() {
         timestamp: Date.now(),
       });
     } else if (
-      currentTool === "triangle" &&
-      triangleMode !== "custom" &&
+      currentTool === 'triangle' &&
+      triangleMode !== 'custom' &&
       startPoint &&
       previewShape
     ) {
@@ -2173,7 +2039,7 @@ export function DrawingCanvas() {
         startPoint.y,
         previewShape.endX,
         previewShape.endY,
-        triangleMode as "right" | "45-45-90" | "30-60-90"
+        triangleMode as 'right' | '45-45-90' | '30-60-90',
       );
 
       const xs = vertices.map((v) => v.x);
@@ -2185,7 +2051,7 @@ export function DrawingCanvas() {
 
       const triangleObject = {
         id: generateId(),
-        type: "triangle" as const,
+        type: 'triangle' as const,
         points: vertices,
         x: minX,
         y: minY,
@@ -2201,7 +2067,7 @@ export function DrawingCanvas() {
       emitProjectState([...objects, triangleObject]);
 
       workerRef.current?.postMessage({
-        type: "shape",
+        type: 'shape',
         data: triangleObject,
       });
 
@@ -2223,24 +2089,18 @@ export function DrawingCanvas() {
         if (workerRef.current) {
           const handler = (e: MessageEvent) => {
             const msg = e.data;
-            if (msg?.type === "snapshot" && typeof msg.dataUrl === "string") {
+            if (msg?.type === 'snapshot' && typeof msg.dataUrl === 'string') {
               emitSnapshot({
                 dataUrl: msg.dataUrl,
                 worldW: WORLD_WIDTH,
                 worldH: WORLD_HEIGHT,
                 timestamp: Date.now(),
               });
-              workerRef.current?.removeEventListener(
-                "message",
-                handler as EventListener
-              );
+              workerRef.current?.removeEventListener('message', handler as EventListener);
             }
           };
-          workerRef.current.addEventListener(
-            "message",
-            handler as EventListener
-          );
-          workerRef.current.postMessage({ type: "snapshot" });
+          workerRef.current.addEventListener('message', handler as EventListener);
+          workerRef.current.postMessage({ type: 'snapshot' });
         }
       }, 100);
     }
@@ -2296,14 +2156,14 @@ export function DrawingCanvas() {
         unconstrained.y,
         newZoom,
         rect.width,
-        rect.height
+        rect.height,
       );
 
       setZoom(newZoom);
       setView(constrained.x, constrained.y);
       const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
       workerRef.current?.postMessage({
-        type: "viewport",
+        type: 'viewport',
         zoom: newZoom,
         viewX: constrained.x,
         viewY: constrained.y,
@@ -2312,14 +2172,11 @@ export function DrawingCanvas() {
         dpr,
       });
     },
-    [zoom, viewX, viewY, setZoom, setView]
+    [zoom, viewX, viewY, setZoom, setView],
   );
 
   const handleZoomIn = useCallback(() => handleZoomStep(1.2), [handleZoomStep]);
-  const handleZoomOut = useCallback(
-    () => handleZoomStep(1 / 1.2),
-    [handleZoomStep]
-  );
+  const handleZoomOut = useCallback(() => handleZoomStep(1 / 1.2), [handleZoomStep]);
   const handleResetView = useCallback(() => {
     resetView();
     const canvas = canvasRef.current;
@@ -2327,7 +2184,7 @@ export function DrawingCanvas() {
     const rect = canvas.getBoundingClientRect();
     const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
     workerRef.current?.postMessage({
-      type: "viewport",
+      type: 'viewport',
       zoom: 1,
       viewX: 0,
       viewY: 0,
@@ -2341,13 +2198,13 @@ export function DrawingCanvas() {
 
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768 || "ontouchstart" in window);
+      setIsMobile(window.innerWidth <= 768 || 'ontouchstart' in window);
     };
 
     checkMobile();
-    window.addEventListener("resize", checkMobile);
+    window.addEventListener('resize', checkMobile);
 
-    return () => window.removeEventListener("resize", checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   useGesture(
@@ -2384,7 +2241,7 @@ export function DrawingCanvas() {
               unconstrained.y,
               zoom,
               rect.width,
-              rect.height
+              rect.height,
             );
 
             setView(constrained.x, constrained.y);
@@ -2392,7 +2249,7 @@ export function DrawingCanvas() {
             // Send viewport update to worker
             const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
             workerRef.current?.postMessage({
-              type: "viewport",
+              type: 'viewport',
               zoom,
               viewX: constrained.x,
               viewY: constrained.y,
@@ -2415,7 +2272,7 @@ export function DrawingCanvas() {
 
         if (!isDrawing && active) {
           // START DRAWING
-          if (!canDraw && currentTool !== "move") {
+          if (!canDraw && currentTool !== 'move') {
             // Toast logic should be here or in startDrawing
             return;
           }
@@ -2463,14 +2320,20 @@ export function DrawingCanvas() {
           const newViewX = worldX - pinchX / clampedZoom;
           const newViewY = worldY - pinchY / clampedZoom;
 
-          const constrained = constrainView(newViewX, newViewY, clampedZoom, rect.width, rect.height);
+          const constrained = constrainView(
+            newViewX,
+            newViewY,
+            clampedZoom,
+            rect.width,
+            rect.height,
+          );
 
           setZoom(clampedZoom);
           setView(constrained.x, constrained.y);
 
           const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
           workerRef.current?.postMessage({
-            type: "viewport",
+            type: 'viewport',
             zoom: clampedZoom,
             viewX: constrained.x,
             viewY: constrained.y,
@@ -2502,14 +2365,20 @@ export function DrawingCanvas() {
           const unconstrainedX = worldX - mouseX / newZoom;
           const unconstrainedY = worldY - mouseY / newZoom;
 
-          const constrained = constrainView(unconstrainedX, unconstrainedY, newZoom, rect.width, rect.height);
+          const constrained = constrainView(
+            unconstrainedX,
+            unconstrainedY,
+            newZoom,
+            rect.width,
+            rect.height,
+          );
 
           setZoom(newZoom);
           setView(constrained.x, constrained.y);
 
           const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
           workerRef.current?.postMessage({
-            type: "viewport",
+            type: 'viewport',
             zoom: newZoom,
             viewX: constrained.x,
             viewY: constrained.y,
@@ -2532,7 +2401,7 @@ export function DrawingCanvas() {
 
             const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
             workerRef.current?.postMessage({
-              type: "viewport",
+              type: 'viewport',
               zoom,
               viewX: constrained.x,
               viewY: constrained.y,
@@ -2549,26 +2418,27 @@ export function DrawingCanvas() {
       eventOptions: { passive: false },
       drag: { filterTaps: true, threshold: 3 },
       pinch: { scaleBounds: { min: 0.1, max: 5 }, modifierKey: null },
-    }
+    },
   );
 
   return (
     <div
-      className={`w-full h-full relative overflow-hidden ${theme === "dark" ? "bg-[#0a0a0a]" : "bg-[#e0e0e0]"
-        }`}
+      className={`w-full h-full relative overflow-hidden ${
+        theme === 'dark' ? 'bg-[#0a0a0a]' : 'bg-[#e0e0e0]'
+      }`}
     >
       <canvas
         ref={canvasRef}
-        className={`absolute inset-0 w-full h-full touch-none ${currentTool === "hand" || isSpacePan || isPanning
-          ? isPanning
-            ? "cursor-grabbing"
-            : "cursor-grab"
-          : "cursor-crosshair"
-          }`}
+        className={`absolute inset-0 w-full h-full touch-none ${
+          currentTool === 'hand' || isSpacePan || isPanning
+            ? isPanning
+              ? 'cursor-grabbing'
+              : 'cursor-grab'
+            : 'cursor-crosshair'
+        }`}
         onContextMenu={(e) => e.preventDefault()}
         onClick={handleCanvasClick}
       />
-
       {/* Live Cursors */}
       {canvasRef.current && (
         <LiveCursors
@@ -2580,7 +2450,6 @@ export function DrawingCanvas() {
           canvasHeight={canvasRef.current.getBoundingClientRect().height}
         />
       )}
-
       {/* World boundary indicator - shows the 4096x4096 drawable area */}
       {/* Drawn on top of canvas to show the boundary */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
@@ -2590,11 +2459,10 @@ export function DrawingCanvas() {
           width={WORLD_WIDTH * zoom}
           height={WORLD_HEIGHT * zoom}
           fill="none"
-          stroke={theme === "dark" ? "#475569" : "#94a3b8"}
+          stroke={theme === 'dark' ? '#475569' : '#94a3b8'}
           strokeWidth={2}
         />
       </svg>
-
       {/* Zoom controls */}
       <div className="absolute top-4 left-4 z-40 flex items-center space-x-2">
         <Button
@@ -2618,20 +2486,14 @@ export function DrawingCanvas() {
         >
           <ZoomIn className="w-4 h-4" />
         </Button>
-        <Button
-          onClick={handleResetView}
-          variant="glass"
-          size="sm"
-          title="Reset view"
-        >
+        <Button onClick={handleResetView} variant="glass" size="sm" title="Reset view">
           <RotateCcw className="w-4 h-4" />
         </Button>
       </div>
-
       {/* Shape preview overlay */}
       {previewShape && (
         <>
-          {previewShape.type === "line" ? (
+          {previewShape.type === 'line' ? (
             <svg className="absolute pointer-events-none w-full h-full">
               <line
                 x1={(previewShape.startX - viewX) * zoom}
@@ -2647,17 +2509,11 @@ export function DrawingCanvas() {
           ) : (
             <svg className="absolute pointer-events-none w-full h-full">
               {(() => {
-                const x =
-                  (Math.min(previewShape.startX, previewShape.endX) - viewX) *
-                  zoom;
-                const y =
-                  (Math.min(previewShape.startY, previewShape.endY) - viewY) *
-                  zoom;
-                const w =
-                  Math.abs(previewShape.endX - previewShape.startX) * zoom;
-                const h =
-                  Math.abs(previewShape.endY - previewShape.startY) * zoom;
-                if (previewShape.type === "ellipse") {
+                const x = (Math.min(previewShape.startX, previewShape.endX) - viewX) * zoom;
+                const y = (Math.min(previewShape.startY, previewShape.endY) - viewY) * zoom;
+                const w = Math.abs(previewShape.endX - previewShape.startX) * zoom;
+                const h = Math.abs(previewShape.endY - previewShape.startY) * zoom;
+                if (previewShape.type === 'ellipse') {
                   const cx = x + w / 2;
                   const cy = y + h / 2;
                   const rx = w / 2;
@@ -2676,13 +2532,13 @@ export function DrawingCanvas() {
                     />
                   );
                 }
-                if (previewShape.type === "triangle") {
+                if (previewShape.type === 'triangle') {
                   const vertices = calculateTriangleVertices(
                     previewShape.startX,
                     previewShape.startY,
                     previewShape.endX,
                     previewShape.endY,
-                    triangleMode as "right" | "45-45-90" | "30-60-90"
+                    triangleMode as 'right' | '45-45-90' | '30-60-90',
                   );
 
                   if (vertices.length === 3) {
@@ -2704,7 +2560,7 @@ export function DrawingCanvas() {
                     );
                   }
                 }
-                if (previewShape.type === "star") {
+                if (previewShape.type === 'star') {
                   const centerX = (previewShape.startX - viewX) * zoom;
                   const centerY = (previewShape.startY - viewY) * zoom;
                   const dx = (previewShape.endX - previewShape.startX) * zoom;
@@ -2720,13 +2576,12 @@ export function DrawingCanvas() {
                     const angle = (i * Math.PI) / pointCount - Math.PI / 2;
                     const radius = i % 2 === 0 ? outerRadius : innerRadius;
                     starPointsArr.push(
-                      `${centerX + radius * Math.cos(angle)},${centerY + radius * Math.sin(angle)
-                      }`
+                      `${centerX + radius * Math.cos(angle)},${centerY + radius * Math.sin(angle)}`,
                     );
                   }
                   return (
                     <polygon
-                      points={starPointsArr.join(" ")}
+                      points={starPointsArr.join(' ')}
                       fill="none"
                       stroke="#60a5fa"
                       strokeWidth="2"
@@ -2753,67 +2608,57 @@ export function DrawingCanvas() {
           )}
         </>
       )}
-
-      {currentTool === "triangle" &&
-        triangleMode === "custom" &&
-        triangleVertices.length > 0 && (
-          <svg className="absolute pointer-events-none w-full h-full">
-            {triangleVertices.map((v, i) => (
-              <circle
-                key={i}
-                cx={(v.x - viewX) * zoom}
-                cy={(v.y - viewY) * zoom}
-                r="5"
-                fill="#60a5fa"
-                opacity="0.8"
+      {currentTool === 'triangle' && triangleMode === 'custom' && triangleVertices.length > 0 && (
+        <svg className="absolute pointer-events-none w-full h-full">
+          {triangleVertices.map((v, i) => (
+            <circle
+              key={i}
+              cx={(v.x - viewX) * zoom}
+              cy={(v.y - viewY) * zoom}
+              r="5"
+              fill="#60a5fa"
+              opacity="0.8"
+            />
+          ))}
+          {triangleVertices.length >= 2 && (
+            <>
+              <line
+                x1={(triangleVertices[0].x - viewX) * zoom}
+                y1={(triangleVertices[0].y - viewY) * zoom}
+                x2={(triangleVertices[1].x - viewX) * zoom}
+                y2={(triangleVertices[1].y - viewY) * zoom}
+                stroke="#60a5fa"
+                strokeWidth="2"
+                strokeDasharray="8,4"
+                opacity="0.6"
               />
-            ))}
-            {triangleVertices.length >= 2 && (
-              <>
-                <line
-                  x1={(triangleVertices[0].x - viewX) * zoom}
-                  y1={(triangleVertices[0].y - viewY) * zoom}
-                  x2={(triangleVertices[1].x - viewX) * zoom}
-                  y2={(triangleVertices[1].y - viewY) * zoom}
-                  stroke="#60a5fa"
-                  strokeWidth="2"
-                  strokeDasharray="8,4"
-                  opacity="0.6"
-                />
-              </>
-            )}
-          </svg>
-        )}
-
-      {isMobile && ["rectangle", "ellipse"].includes(currentTool) && (
+            </>
+          )}
+        </svg>
+      )}
+      {isMobile && ['rectangle', 'ellipse'].includes(currentTool) && (
         <Button
           onClick={() => setIsConstraintMode(!isConstraintMode)}
-          variant={isConstraintMode ? "default" : "glass"}
+          variant={isConstraintMode ? 'default' : 'glass'}
           size="icon"
           className="fixed bottom-20 right-4 z-40 w-12 h-12"
-          title={`${isConstraintMode ? "Disable" : "Enable"} perfect ${currentTool === "ellipse"
-            ? "circle"
-            : currentTool === "triangle"
-              ? "equilateral triangle"
-              : "square"
-            } mode`}
+          title={`${isConstraintMode ? 'Disable' : 'Enable'} perfect ${
+            currentTool === 'ellipse'
+              ? 'circle'
+              : currentTool === 'triangle'
+                ? 'equilateral triangle'
+                : 'square'
+          } mode`}
         >
-          {currentTool === "ellipse" ? (
-            <Circle
-              className={`w-6 h-6 ${isConstraintMode ? "text-white" : ""}`}
-            />
-          ) : currentTool === "triangle" ? (
-            <Triangle
-              className={`w-6 h-6 ${isConstraintMode ? "text-white" : ""}`}
-            />
+          {currentTool === 'ellipse' ? (
+            <Circle className={`w-6 h-6 ${isConstraintMode ? 'text-white' : ''}`} />
+          ) : currentTool === 'triangle' ? (
+            <Triangle className={`w-6 h-6 ${isConstraintMode ? 'text-white' : ''}`} />
           ) : (
-            <Square
-              className={`w-6 h-6 ${isConstraintMode ? "text-white" : ""}`}
-            />
+            <Square className={`w-6 h-6 ${isConstraintMode ? 'text-white' : ''}`} />
           )}
         </Button>
       )}
-
       {textInputPos && (
         <textarea
           ref={textInputRef}
@@ -2822,26 +2667,20 @@ export function DrawingCanvas() {
           onKeyDown={(e) => {
             e.stopPropagation();
 
-            if (
-              e.key === "Enter" &&
-              (e.ctrlKey || e.metaKey) &&
-              textInputValue.trim()
-            ) {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && textInputValue.trim()) {
               e.preventDefault();
               const text = textInputValue.trim();
               const fontSize = Math.max(16, brushSize * 2);
-              const ctx = document.createElement("canvas").getContext("2d");
+              const ctx = document.createElement('canvas').getContext('2d');
               ctx!.font = `${fontSize}px Inter, system-ui, sans-serif`;
 
-              const lines = text.split("\n");
-              const maxWidth = Math.max(
-                ...lines.map((line) => ctx!.measureText(line).width)
-              );
+              const lines = text.split('\n');
+              const maxWidth = Math.max(...lines.map((line) => ctx!.measureText(line).width));
               const height = fontSize * lines.length * 1.2;
 
               const textObj = {
                 id: generateId(),
-                type: "text" as const,
+                type: 'text' as const,
                 x: textInputPos.worldX,
                 y: textInputPos.worldY,
                 text,
@@ -2857,16 +2696,16 @@ export function DrawingCanvas() {
               addObject(textObj);
               emitProjectState([...objects, textObj]);
               workerRef.current?.postMessage({
-                type: "shape",
+                type: 'shape',
                 data: { ...textObj, timestamp: Date.now() },
               });
               emitShape({ ...textObj, timestamp: Date.now() } as ShapeData);
 
               setTextInputPos(null);
-              setTextInputValue("");
-            } else if (e.key === "Escape") {
+              setTextInputValue('');
+            } else if (e.key === 'Escape') {
               setTextInputPos(null);
-              setTextInputValue("");
+              setTextInputValue('');
             }
           }}
           onClick={(e) => e.stopPropagation()}
@@ -2885,15 +2724,14 @@ export function DrawingCanvas() {
           }}
         />
       )}
-
       <ShortcutsDialog
         mode="draw"
         open={showShortcuts}
         onOpenChange={setShowShortcuts}
         showTrigger={false}
       />
-
-      ]      <input
+      ]{' '}
+      <input
         id="image-upload-input"
         ref={fileInputRef}
         type="file"

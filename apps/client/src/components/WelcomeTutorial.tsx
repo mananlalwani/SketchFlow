@@ -3,15 +3,15 @@
  */
 import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
-import { 
-  X, 
-  ChevronLeft, 
+import {
+  X,
+  ChevronLeft,
   ChevronRight,
   Sparkles,
   Pen,
   Palette,
   Share2,
-  Keyboard
+  Keyboard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDrawingStore } from '@/store/drawingStore';
@@ -32,7 +32,8 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     title: 'Select a Tool',
-    description: 'Choose from pen, shapes, text, and more. Use keyboard shortcuts (P for pen, E for eraser, etc.) for quick access.',
+    description:
+      'Choose from pen, shapes, text, and more. Use keyboard shortcuts (P for pen, E for eraser, etc.) for quick access.',
     icon: <Pen className="w-8 h-8 text-purple-500" />,
     target: '[role="toolbar"]',
     position: 'bottom',
@@ -142,10 +143,10 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
                   key={index}
                   onClick={() => setCurrentStep(index)}
                   className={cn(
-                    "h-2 rounded-full transition-all duration-300",
-                    index === currentStep 
-                      ? "w-8 bg-blue-500" 
-                      : "w-2 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600"
+                    'h-2 rounded-full transition-all duration-300',
+                    index === currentStep
+                      ? 'w-8 bg-blue-500'
+                      : 'w-2 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600',
                   )}
                   aria-label={`Go to step ${index + 1}`}
                   aria-current={index === currentStep ? 'step' : undefined}
@@ -210,19 +211,19 @@ export function EmptyStateHint() {
   useEffect(() => {
     // Check if user has ever drawn before
     const hasDrawnBefore = localStorage.getItem(HAS_DRAWN_KEY);
-    
+
     // Never show if user has drawn before or if there are already objects
     if (hasDrawnBefore || objectCount > 0) {
       return;
     }
-    
+
     // Show hint after delay only if canvas is still empty
     const timer = setTimeout(() => {
       if (objectCount === 0 && !localStorage.getItem(HAS_DRAWN_KEY)) {
         setShow(true);
       }
     }, 1500);
-    
+
     return () => clearTimeout(timer);
   }, [objectCount]);
 
@@ -247,7 +248,11 @@ export function EmptyStateHint() {
           Select a tool from the toolbar and start drawing
         </p>
         <p className="text-xs text-slate-400 dark:text-slate-600 mt-3">
-          Press <kbd className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-700">?</kbd> for keyboard shortcuts
+          Press{' '}
+          <kbd className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-700">
+            ?
+          </kbd>{' '}
+          for keyboard shortcuts
         </p>
       </div>
     </div>

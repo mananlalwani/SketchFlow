@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Share2, Copy, Check, ExternalLink, Globe } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +29,7 @@ export function ShareDialog({
   projectTitle,
   onShare,
   onUnshare,
-  isSharing
+  isSharing,
 }: ShareDialogProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -55,7 +61,7 @@ export function ShareDialog({
             Share Project
           </DialogTitle>
           <DialogDescription>
-            {isShared 
+            {isShared
               ? `"${projectTitle}" is currently shared. Anyone with the link can view it.`
               : `Share "${projectTitle}" with others. They'll be able to view it without logging in.`}
           </DialogDescription>
@@ -69,7 +75,9 @@ export function ShareDialog({
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-gray-300">Share Link</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-gray-300">
+                Share Link
+              </label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -78,13 +86,12 @@ export function ShareDialog({
                   aria-label="Share link"
                   className="flex-1 px-3 py-2 bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-md text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
-                <Button
-                  onClick={handleCopy}
-                  variant="secondary"
-                  size="sm"
-                  className="shrink-0"
-                >
-                  {copied ? <Check className="w-4 h-4 text-green-500 dark:text-green-400" /> : <Copy className="w-4 h-4" />}
+                <Button onClick={handleCopy} variant="secondary" size="sm" className="shrink-0">
+                  {copied ? (
+                    <Check className="w-4 h-4 text-green-500 dark:text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
                 </Button>
                 <Button
                   onClick={handleOpenLink}
@@ -107,11 +114,7 @@ export function ShareDialog({
               >
                 {isSharing ? 'Unsharing...' : 'Stop Sharing'}
               </Button>
-              <Button
-                onClick={() => onOpenChange(false)}
-                variant="secondary"
-                className="flex-1"
-              >
+              <Button onClick={() => onOpenChange(false)} variant="secondary" className="flex-1">
                 Close
               </Button>
             </div>
@@ -120,17 +123,13 @@ export function ShareDialog({
           <div className="space-y-4">
             <div className="p-4 bg-blue-100 dark:bg-blue-500/10 border border-blue-300 dark:border-blue-500/20 rounded-md">
               <p className="text-sm text-slate-700 dark:text-gray-300">
-                When you share this project, anyone with the link will be able to view it. 
-                They won't need to log in or have an account.
+                When you share this project, anyone with the link will be able to view it. They
+                won't need to log in or have an account.
               </p>
             </div>
 
             <div className="flex gap-2">
-              <Button
-                onClick={onShare}
-                className="flex-1"
-                disabled={isSharing}
-              >
+              <Button onClick={onShare} className="flex-1" disabled={isSharing}>
                 {isSharing ? (
                   <>
                     <Share2 className="w-4 h-4 mr-2 animate-spin" />
@@ -143,10 +142,7 @@ export function ShareDialog({
                   </>
                 )}
               </Button>
-              <Button
-                onClick={() => onOpenChange(false)}
-                variant="secondary"
-              >
+              <Button onClick={() => onOpenChange(false)} variant="secondary">
                 Cancel
               </Button>
             </div>

@@ -15,13 +15,15 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 // Create pg Pool and adapter for Prisma 7
-const pool = globalForPrisma.pool ?? new Pool({ 
-  connectionString: env.DATABASE_URL,
-  // Connection pool settings for production
-  max: isProd ? 10 : 5,           // Max connections in pool
-  idleTimeoutMillis: 30000,       // Close idle connections after 30s
-  connectionTimeoutMillis: 10000, // Connection timeout
-});
+const pool =
+  globalForPrisma.pool ??
+  new Pool({
+    connectionString: env.DATABASE_URL,
+    // Connection pool settings for production
+    max: isProd ? 10 : 5, // Max connections in pool
+    idleTimeoutMillis: 30000, // Close idle connections after 30s
+    connectionTimeoutMillis: 10000, // Connection timeout
+  });
 
 const adapter = new PrismaPg(pool);
 
@@ -64,4 +66,3 @@ export async function checkDatabaseHealth(): Promise<boolean> {
     return false;
   }
 }
-

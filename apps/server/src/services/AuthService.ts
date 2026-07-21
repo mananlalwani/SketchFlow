@@ -35,7 +35,7 @@ export class AuthService {
   public middleware() {
     return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       const token = this.getTokenFromRequest(req);
-      
+
       if (!token) {
         return res.status(401).json({ error: 'Authentication required' });
       }
@@ -48,7 +48,7 @@ export class AuthService {
       req.user = {
         id: user.id,
         email: user.email,
-        username: user.username
+        username: user.username,
       };
 
       next();
@@ -58,14 +58,14 @@ export class AuthService {
   public optionalMiddleware() {
     return (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
       const token = this.getTokenFromRequest(req);
-      
+
       if (token) {
         const user = this.userService.validateSession(token);
         if (user) {
           req.user = {
             id: user.id,
             email: user.email,
-            username: user.username
+            username: user.username,
           };
         }
       }
@@ -74,17 +74,3 @@ export class AuthService {
     };
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,6 +1,7 @@
 # Copilot Instructions
 
 ## Tech Stack & Architecture
+
 - **Framework**: React 18 (Vite) + Node.js (Express) + TypeScript.
 - **State Management**: Zustand (`apps/client/src/store/`). Deeply integrated with Socket.IO for real-time state sync.
 - **Styling**: Tailwind CSS + Radix UI Primitives. Use `cn()` helper for class merging.
@@ -9,6 +10,7 @@
 - **Authentication**: Clerk (`@clerk/clerk-react` & `@clerk/express`).
 
 ## Project Structure
+
 - **Monorepo**: Managed with `pnpm` workspaces.
   - `apps/client`: Frontend application.
   - `apps/server`: Backend server.
@@ -18,6 +20,7 @@
 - **Client Entry**: `apps/client/src/main.tsx`.
 
 ## Critical Developer Workflows
+
 - **Development**: Run `pnpm dev` to start both frontend (Vite) and backend (tsx watch) concurrently.
 - **Database**:
   - `pnpm --filter @sketchflow/server db:migrate` for schema changes.
@@ -25,6 +28,7 @@
 - **Testing**: `pnpm test` (Vitest).
 
 ## Coding Conventions & Patterns
+
 - **Canvas Rendering**: `DrawingCanvas.tsx` handles raw canvas ops, but logic lies in hooks and utils.
 - **State Sync**:
   - **Local First**: UI updates immediately via Zustand key `objects`.
@@ -39,10 +43,12 @@
   - Backend: `errorHandlerMiddleware`.
 
 ## Testing Guidelines
+
 - **Structure**: Mirror source structure for tests.
 - **Mocking**: Use `vi.mock()` for external dependencies (Socket.IO, Clerk).
 - **Canvas Tests**: Focus on logic/state transformations rather than pixel-perfect canvas assertions.
 
 ## Common Pitfalls
+
 - **Imports**: Ensure shared code is imported from `@sketchflow/shared` and not relative paths across apps.
 - **Socket Connection**: Always check `isConnected` from `useSocket` before emitting events.
