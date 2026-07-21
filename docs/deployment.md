@@ -1,5 +1,13 @@
 # Deployment
 
+## Database migrations
+
+Apply pending production migrations before starting a new application version:
+
+```bash
+pnpm --filter @sketchflow/server db:migrate:deploy
+```
+
 ## Cloudflare Pages (Frontend)
 
 1. Go to [Cloudflare Pages](https://pages.cloudflare.com)

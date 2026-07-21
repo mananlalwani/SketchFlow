@@ -2,6 +2,19 @@
 # Usage: docker compose up -d
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: sketchflow-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # PostgreSQL database
   db:
     image: postgres:16-alpine
@@ -41,3 +54,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
