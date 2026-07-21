@@ -1,7 +1,9 @@
 node_modules
+/dist
 /generated/prisma
 /apps/client/dist
 /apps/server/dist
 /apps/client/node_modules
 /apps/server/node_modules
 /packages/shared/node_modules
+/packages/shared/dist

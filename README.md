@@ -114,10 +114,10 @@ Run Prisma migrations to set up your database schema:
 
 ```bash
 # Apply migrations
-pnpm --filter @live-draw/server db:migrate
+pnpm --filter @sketchflow/server db:migrate
 
 # Open Prisma Studio (Database GUI)
-pnpm --filter @live-draw/server db:studio
+pnpm --filter @sketchflow/server db:studio
 ```
 
 ## 🐳 Docker Support
@@ -131,7 +131,3 @@ docker build -t sketchflow .
 # Run the container
 docker run -p 3000:3000 -e DATABASE_URL=... -e CLERK_SECRET_KEY=... sketchflow
 ```
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
