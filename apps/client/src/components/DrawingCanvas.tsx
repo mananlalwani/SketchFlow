@@ -1879,6 +1879,14 @@ export function DrawingCanvas() {
     ]
   );
 
+  const handleCanvasClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (currentTool !== "triangle" || triangleMode !== "custom") return;
+      startDrawing(event as unknown as React.PointerEvent<HTMLCanvasElement>);
+    },
+    [currentTool, startDrawing, triangleMode]
+  );
+
   const stopDrawing = useCallback(() => {
     if (draggedObject) {
       if (draggedObjectsRef.current) {
@@ -2345,6 +2353,9 @@ export function DrawingCanvas() {
   useGesture(
     {
       onDrag: ({ active, xy: [clientX, clientY], event, touches, tap }) => {
+        // Custom triangles are a three-click tool. Keeping them out of the drag
+        // gesture prevents pointer-move events from being recorded as vertices.
+        if (currentTool === 'triangle' && triangleMode === 'custom') return;
         if (tap) return;
 
         const isMultiTouch = touches > 1;
@@ -2555,6 +2566,7 @@ export function DrawingCanvas() {
           : "cursor-crosshair"
           }`}
         onContextMenu={(e) => e.preventDefault()}
+        onClick={handleCanvasClick}
       />
 
       {/* Live Cursors */}

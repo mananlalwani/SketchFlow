@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('guest canvas supports drawing, undo/redo, and rectangles without runtime errors', async ({ page }) => {
+test('guest canvas supports drawing, undo/redo, rectangles, and custom triangles without runtime errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
 
@@ -33,5 +33,12 @@ test('guest canvas supports drawing, undo/redo, and rectangles without runtime e
   await page.mouse.move(box.x + 560, box.y + 270, { steps: 8 });
   await page.mouse.up();
   await expect.poll(async () => !(await canvas.screenshot()).equals(stroke)).toBeTruthy();
+
+  const rectangle = await canvas.screenshot();
+  await page.getByRole('button', { name: 'Triangle', exact: true }).click();
+  await page.mouse.click(box.x + 180, box.y + 360);
+  await page.mouse.click(box.x + 360, box.y + 430);
+  await page.mouse.click(box.x + 240, box.y + 520);
+  await expect.poll(async () => !(await canvas.screenshot()).equals(rectangle)).toBeTruthy();
   expect(errors).toEqual([]);
 });
