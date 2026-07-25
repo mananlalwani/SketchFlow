@@ -16,7 +16,8 @@ import { Button } from '@/components/ui/button';
 import { useDrawingStore } from '@/store/drawingStore';
 import { cn } from '@/lib/utils';
 
-function layerLabel(object: { type: string; text?: string }) {
+function layerLabel(object: { type: string; text?: string; name?: string }) {
+  if (object.name?.trim()) return object.name.trim();
   if (object.type === 'stroke') return 'Stroke';
   if (object.type === 'text') return object.text?.trim().slice(0, 24) || 'Text';
   return object.type.charAt(0).toUpperCase() + object.type.slice(1);
