@@ -1,4 +1,16 @@
-import { ChevronDown, ChevronUp, Layers, PenLine, Shapes, Trash2, Type } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  Layers,
+  Lock,
+  PenLine,
+  Shapes,
+  Trash2,
+  Type,
+  Unlock,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useDrawingStore } from '@/store/drawingStore';
@@ -28,6 +40,7 @@ export function LayerStack({ className }: LayerStackProps) {
     removeObject,
     saveHistory,
     requestFullRedraw,
+    updateObject,
     selectedObjectId,
     setSelectedObject,
   } = useDrawingStore();
@@ -47,6 +60,11 @@ export function LayerStack({ className }: LayerStackProps) {
     saveHistory();
     removeObject(id);
     requestFullRedraw();
+  };
+
+  const updateLayer = (id: string, changes: { hidden?: boolean; locked?: boolean }) => {
+    saveHistory();
+    updateObject(id, changes);
   };
 
   return (
@@ -87,7 +105,10 @@ export function LayerStack({ className }: LayerStackProps) {
                 >
                   <span
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/5 text-slate-600 dark:border-white/10 dark:text-slate-300"
-                    style={{ backgroundColor: `${object.color}22` }}
+                    style={{
+                      backgroundColor: `${object.color}22`,
+                      opacity: object.hidden ? 0.45 : 1,
+                    }}
                   >
                     <LayerGlyph type={object.type} />
                   </span>
@@ -101,6 +122,26 @@ export function LayerStack({ className }: LayerStackProps) {
                   </span>
                 </button>
                 <div className="flex shrink-0 items-center gap-0.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => updateLayer(object.id, { hidden: !object.hidden })}
+                    aria-label={`${object.hidden ? 'Show' : 'Hide'} ${label}`}
+                  >
+                    {object.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => updateLayer(object.id, { locked: !object.locked })}
+                    aria-label={`${object.locked ? 'Unlock' : 'Lock'} ${label}`}
+                  >
+                    {object.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"

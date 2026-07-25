@@ -1,4 +1,4 @@
-import { Copy, Trash2 } from 'lucide-react';
+import { Copy, Lock, Trash2, Unlock } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -42,7 +42,8 @@ export function SelectionInspector() {
   const object = objects.find((candidate) => candidate.id === selectedObjectId);
   if (!object) return null;
 
-  const isReadOnly = projectRole === 'viewer';
+  const isEditable = projectRole !== 'viewer';
+  const isReadOnly = !isEditable || object.locked;
   const canFill = ['rectangle', 'ellipse', 'circle', 'triangle', 'star'].includes(object.type);
   const canResize =
     object.type !== 'stroke' &&
@@ -97,6 +98,20 @@ export function SelectionInspector() {
           Done
         </Button>
       </div>
+
+      <Button
+        className="w-full"
+        variant="secondary"
+        size="sm"
+        disabled={!isEditable}
+        onClick={() => {
+          saveHistory();
+          updateObject(object.id, { locked: !object.locked });
+        }}
+      >
+        {object.locked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+        {object.locked ? 'Unlock object' : 'Lock object'}
+      </Button>
 
       <div className="grid grid-cols-[1fr_auto] items-center gap-3">
         <label

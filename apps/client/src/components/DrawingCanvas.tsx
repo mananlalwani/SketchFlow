@@ -734,6 +734,7 @@ export function DrawingCanvas() {
           const obj = objects.find((o) => o.id === hitId);
           if (obj) {
             setSelectedObject(hitId);
+            if (obj.locked) return;
             const offset = getObjectDragOffset(obj, worldPos);
             setDraggedObject({ id: hitId, offsetX: offset.x, offsetY: offset.y });
             saveHistory();

@@ -51,6 +51,7 @@ export function findCanvasObjectIdAt(
   const includeImages = options?.includeImages ?? false;
   for (let index = objects.length - 1; index >= 0; index--) {
     const object = objects[index];
+    if (object.hidden) continue;
     const tolerance = Math.max(6, object.size);
     const point = inverseRotatePoint(x, y, object);
     if (

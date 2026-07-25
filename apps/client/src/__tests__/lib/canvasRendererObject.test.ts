@@ -46,7 +46,7 @@ describe('drawingObjectsToRendererScene', () => {
         id: 'triangle-1',
         points: [{ x: 10, y: 20 }],
         orientation: 'up',
-        properties: { rotation: 45 },
+        properties: { hidden: false, rotation: 45 },
       }),
     ]);
   });

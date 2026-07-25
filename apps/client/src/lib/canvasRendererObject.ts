@@ -49,7 +49,11 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
       fontSize: object.fontSize,
       imageData: object.imageData,
       points: object.points,
-      properties: { ...object.properties, rotation: object.rotation ?? 0 },
+      properties: {
+        ...object.properties,
+        rotation: object.rotation ?? 0,
+        hidden: object.hidden ?? false,
+      },
       timestamp: object.createdAt ?? 0,
     });
   }

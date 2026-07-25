@@ -30,6 +30,7 @@ export function useCanvasRendererFallback(
       context.lineCap = 'round';
       context.lineJoin = 'round';
       for (const object of objects) {
+        if (object.hidden) continue;
         context.globalAlpha = object.alpha ?? 1;
         context.strokeStyle = object.color;
         context.fillStyle = object.color;
