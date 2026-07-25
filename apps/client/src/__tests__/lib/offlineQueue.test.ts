@@ -1,21 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const stores = vi.hoisted(() => new Map<number, Record<string, unknown>>());
+const stores = vi.hoisted(() => new Map<string, Map<string | number, Record<string, unknown>>>());
 let nextId = 1;
 
 vi.mock('idb', () => ({
   openDB: vi.fn(async () => ({
     add: async (_store: string, value: Record<string, unknown>) => {
       const id = nextId++;
-      stores.set(id, { ...value, id });
+      const store = stores.get(_store) ?? new Map();
+      store.set(id, { ...value, id });
+      stores.set(_store, store);
       return id;
     },
-    get: async (_store: string, id: number) => stores.get(id),
-    put: async (_store: string, value: Record<string, unknown>) =>
-      stores.set(value.id as number, value),
-    delete: async (_store: string, id: number) => stores.delete(id),
-    getAllFromIndex: async () =>
-      [...stores.values()].sort((a, b) => (a.createdAt as number) - (b.createdAt as number)),
+    get: async (_store: string, id: string | number) => stores.get(_store)?.get(id),
+    put: async (_store: string, value: Record<string, unknown>) => {
+      const store = stores.get(_store) ?? new Map();
+      store.set((value.id ?? value.operationId) as string | number, value);
+      stores.set(_store, store);
+    },
+    delete: async (_store: string, id: string | number) => stores.get(_store)?.delete(id),
+    getAllFromIndex: async (_store: string, index: string, key?: string) =>
+      [...(stores.get(_store)?.values() ?? [])]
+        .filter((value) => key === undefined || value[index] === key)
+        .sort((a, b) => (a.createdAt as number) - (b.createdAt as number)),
   })),
 }));
 
@@ -24,6 +31,10 @@ import {
   getOfflineSaveQueue,
   markOfflineSaveAttempt,
   removeOfflineSave,
+  enqueueCollaborationOperation,
+  getCollaborationOperations,
+  markCollaborationOperationAttempt,
+  removeCollaborationOperation,
 } from '@/lib/offlineQueue';
 
 describe('offline save queue', () => {
@@ -80,5 +91,21 @@ describe('offline save queue', () => {
         revision: 1,
       }),
     ).rejects.toThrow('10 MB');
+  });
+
+  it('persists idempotent collaboration operations separately from snapshots', async () => {
+    await enqueueCollaborationOperation({
+      operationId: 'operation_1234567',
+      projectId: 'project-1',
+      expectedRevision: 3,
+      kind: 'upsert-object',
+      data: { object: { id: 'shape-1' } },
+      createdAt: 1,
+    });
+    expect(await getCollaborationOperations('project-1')).toHaveLength(1);
+    await markCollaborationOperationAttempt('operation_1234567');
+    expect((await getCollaborationOperations())[0].attempts).toBe(1);
+    await removeCollaborationOperation('operation_1234567');
+    expect(await getCollaborationOperations()).toEqual([]);
   });
 });

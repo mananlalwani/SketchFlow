@@ -1,9 +1,6 @@
-import type { StrokeData } from '@/types/socket';
+import type { StrokeData, StrokePoint } from '@/types/socket';
 
-export interface CanvasPoint {
-  x: number;
-  y: number;
-}
+export type CanvasPoint = StrokePoint;
 
 export function screenPointToWorld(
   rect: Pick<DOMRect, 'left' | 'top'>,
@@ -39,8 +36,13 @@ export function buildStrokePoints(strokes: readonly StrokeData[]): CanvasPoint[]
   if (strokes.length === 0) return [];
   const first = strokes[0];
   return [
-    { x: first.x0, y: first.y0 },
-    ...strokes.map((stroke) => ({ x: stroke.x1, y: stroke.y1 })),
+    { x: first.x0, y: first.y0, pressure: first.pressure, width: first.size },
+    ...strokes.map((stroke) => ({
+      x: stroke.x1,
+      y: stroke.y1,
+      pressure: stroke.pressure,
+      width: stroke.size,
+    })),
   ];
 }
 

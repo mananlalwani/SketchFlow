@@ -11,6 +11,16 @@ export interface StrokeData {
   groupId?: string;
   createdBy?: string;
   createdAt?: number;
+  /** Raw PointerEvent pressure when available (0..1). */
+  pressure?: number;
+}
+
+/** Retained stroke point. `width` keeps pen pressure intact after save/reload. */
+export interface StrokePoint {
+  x: number;
+  y: number;
+  pressure?: number;
+  width?: number;
 }
 
 export interface ShapeData {
@@ -38,7 +48,7 @@ export interface ShapeData {
   text?: string;
   fontSize?: number;
   imageData?: string;
-  points?: { x: number; y: number }[];
+  points?: StrokePoint[];
   properties?: Record<string, unknown>;
   timestamp?: number;
   createdBy?: string;
@@ -71,7 +81,7 @@ export type ProjectVersion = '1.0.0';
 export interface ProjectStroke {
   id: string;
   type: 'stroke';
-  points: { x: number; y: number }[];
+  points: StrokePoint[];
   color: string;
   size: number;
   alpha?: number;
@@ -204,7 +214,7 @@ export interface CollaborationCommit {
   projectId: string;
   operationId: string;
   expectedRevision: number;
-  kind: 'replace-project' | 'upsert-object' | 'delete-object';
+  kind: 'replace-project' | 'upsert-object' | 'delete-object' | 'batch';
   data: unknown;
   title?: string;
 }
@@ -228,7 +238,7 @@ export interface CollaborationAppliedEvent {
   projectId: string;
   operationId: string;
   revision: number;
-  kind: 'replace-project' | 'upsert-object' | 'delete-object';
+  kind: 'replace-project' | 'upsert-object' | 'delete-object' | 'batch';
   data: unknown;
   title: string;
 }

@@ -17,6 +17,7 @@ import { LiveCursors } from './LiveCursors';
 import { useLiveCursors } from '@/hooks/useLiveCursors';
 import { useProjectPermissions } from '@/hooks/useProjectPermissions';
 import { useCanvasRendererWorker } from '@/hooks/useCanvasRendererWorker';
+import { useCanvasRendererFallback } from '@/hooks/useCanvasRendererFallback';
 import { useCanvasToolReset } from '@/hooks/useCanvasToolReset';
 import { useCanvasKeyboardShortcuts } from '@/hooks/useCanvasKeyboardShortcuts';
 import {
@@ -36,6 +37,13 @@ import { postRendererViewport } from '@/lib/canvasRendererViewport';
 import { drawingObjectsToRendererScene } from '@/lib/canvasRendererObject';
 import { useToast } from '@/hooks/use-toast';
 import { FEATURES } from '@/config/features';
+import { captureOperationalSignal } from '@/lib/sentry';
+import {
+  enqueueCollaborationOperation,
+  getCollaborationOperations,
+  markCollaborationOperationAttempt,
+  removeCollaborationOperation,
+} from '@/lib/offlineQueue';
 import {
   calculateTriangleVertices,
   panViewportBy,
@@ -161,10 +169,18 @@ export function DrawingCanvas() {
     { zoom, viewX, viewY },
     theme,
   );
+  useCanvasRendererFallback(
+    canvasRef,
+    rendererStatus === 'fallback',
+    objects,
+    { zoom, viewX, viewY },
+    BG_COLORS[theme],
+  );
   const workerStrokeQueueRef = useRef<StrokeData[]>([]);
   const workerFlushScheduledRef = useRef(false);
   const strokeGroupRef = useRef<string | null>(null);
   const collaborationCommitInFlightRef = useRef(false);
+  const collaborationReplayInFlightRef = useRef(false);
   const collaborationObjectsRef = useRef<DrawingObject[]>([]);
   const collaborationProjectRef = useRef<string | undefined>();
 
@@ -199,15 +215,20 @@ export function DrawingCanvas() {
       (object) => JSON.stringify(previousById.get(object.id)) !== JSON.stringify(object),
     );
     const removed = previous.filter((object) => !currentById.has(object.id));
+    const changes = [
+      ...changed.map((object) => ({ kind: 'upsert-object' as const, data: { object } })),
+      ...removed.map((object) => ({ kind: 'delete-object' as const, data: { id: object.id } })),
+    ];
+    if (changes.length === 0) {
+      collaborationObjectsRef.current = objects;
+      return;
+    }
+    // A batch is atomic at the server and avoids the old full-document fallback
+    // for undo/redo and other compound canvas mutations.
     const operation =
-      changed.length === 1 && removed.length === 0
-        ? { kind: 'upsert-object' as const, data: { object: changed[0] } }
-        : changed.length === 0 && removed.length === 1
-          ? { kind: 'delete-object' as const, data: { id: removed[0].id } }
-          : {
-              kind: 'replace-project' as const,
-              data: { version: 1, objects, width: WORLD_WIDTH, height: WORLD_HEIGHT },
-            };
+      changes.length === 1
+        ? changes[0]
+        : { kind: 'batch' as const, data: { operations: changes } };
     const committedDocumentVersion = documentVersion;
     collaborationCommitInFlightRef.current = true;
     collaborationObjectsRef.current = objects;
@@ -217,22 +238,28 @@ export function DrawingCanvas() {
         ? crypto.randomUUID()
         : `operation-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
 
-    commitCollaboration(
-      {
-        protocolVersion: 1,
+    const commit = {
+        protocolVersion: 1 as const,
         projectId,
         operationId,
         expectedRevision: projectRevision,
         kind: operation.kind,
         data: operation.data,
         title: projectTitle,
-      },
+      };
+    // IndexedDB is the source of truth for unsent edits: a tab close or
+    // transient socket failure cannot turn an optimistic edit into data loss.
+    void enqueueCollaborationOperation({ ...commit, createdAt: Date.now() })
+      .then(() =>
+        commitCollaboration(
+          commit,
       (result) => {
         collaborationCommitInFlightRef.current = false;
         const state = useDrawingStore.getState();
         if (state.currentProjectId !== projectId) return;
 
         if (result.status === 'applied' || result.status === 'duplicate') {
+          void removeCollaborationOperation(operationId);
           // The server may have rebased this object operation over an edit that
           // arrived from another device. Adopt that canonical result when this
           // is still the exact local edit we acknowledged.
@@ -250,14 +277,24 @@ export function DrawingCanvas() {
         }
 
         if (result.status === 'conflict') {
+          captureOperationalSignal('collaboration_replay_conflict', { replay: false });
+          void markCollaborationOperationAttempt(operationId);
           state.setSaveStatus('conflict');
           requestCanonicalHydration(projectId);
           return;
         }
 
         state.setSaveStatus(result.status === 'unavailable' ? 'retrying' : 'failed');
+        captureOperationalSignal('collaboration_queue_failed', { unavailable: result.status === 'unavailable' });
+        void markCollaborationOperationAttempt(operationId);
       },
-    );
+        ),
+      )
+      .catch(() => {
+        collaborationCommitInFlightRef.current = false;
+        captureOperationalSignal('collaboration_queue_failed', { durableWrite: true });
+        useDrawingStore.getState().setSaveStatus('failed');
+      });
   }, [
     canDraw,
     commitCollaboration,
@@ -273,6 +310,47 @@ export function DrawingCanvas() {
     setSaveStatus,
     unsavedChanges,
   ]);
+
+  // Replay persisted semantic edits after a reconnect or browser restart. Object
+  // operations can safely use their original base revision because the server
+  // rebases them over unrelated object changes and deduplicates operation IDs.
+  useEffect(() => {
+    if (!currentProjectId || !isConnected || !canDraw || collaborationReplayInFlightRef.current)
+      return;
+    let cancelled = false;
+    collaborationReplayInFlightRef.current = true;
+    void (async () => {
+      const queued = await getCollaborationOperations(currentProjectId);
+      for (const operation of queued) {
+        if (cancelled || !isConnected) break;
+        await new Promise<void>((resolve) => {
+          commitCollaboration(
+            { protocolVersion: 1, ...operation },
+            (result) => {
+              if (result.status === 'applied' || result.status === 'duplicate') {
+                void removeCollaborationOperation(operation.operationId);
+                useDrawingStore.getState().setProjectRevision(result.revision);
+              } else {
+                void markCollaborationOperationAttempt(operation.operationId);
+                if (result.status === 'conflict') {
+                  captureOperationalSignal('collaboration_replay_conflict', { replay: true });
+                  requestCanonicalHydration(currentProjectId);
+                }
+              }
+              resolve();
+            },
+          );
+        });
+      }
+    })()
+      .catch(() => undefined)
+      .finally(() => {
+        collaborationReplayInFlightRef.current = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canDraw, commitCollaboration, currentProjectId, isConnected, requestCanonicalHydration]);
 
   useEffect(() => {
     if (!needsFullRedraw) return;
@@ -1095,6 +1173,7 @@ export function DrawingCanvas() {
             y1: p.y,
             color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
             size: pressureAdjustedSize(brushSize, ev),
+            pressure: ev.pressure,
             alpha: brushOpacity,
             timestamp: Date.now(),
             groupId: strokeGroupRef.current,
@@ -1715,7 +1794,7 @@ export function DrawingCanvas() {
         onContextMenu={(e) => e.preventDefault()}
         onClick={handleCanvasClick}
       />
-      {(rendererStatus === 'unsupported' || rendererStatus === 'failed') && (
+      {rendererStatus === 'failed' && (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 p-6 text-center"
           role="alert"
@@ -1723,8 +1802,7 @@ export function DrawingCanvas() {
           <div>
             <p className="font-semibold">Canvas renderer unavailable</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              This browser cannot start the required OffscreenCanvas renderer. Use a supported
-              browser to edit this board.
+              The canvas renderer could not start. Reload the board or try another browser.
             </p>
           </div>
         </div>

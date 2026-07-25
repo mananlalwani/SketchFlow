@@ -23,7 +23,7 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
           x1: end.x,
           y1: end.y,
           color: object.color,
-          size: object.size,
+          size: end.width ?? object.size,
           alpha: object.alpha ?? 1,
           groupId: object.id,
           timestamp: object.createdAt ?? 0,

@@ -58,7 +58,6 @@ describe('💡 NICE TO HAVE - Polish Features', () => {
     it.todo('should have smooth tool switch animations');
     it.todo('should show drawing preview while dragging shapes');
     it.todo('should have subtle hover states on all interactive elements');
-    it.todo('should support pressure sensitivity for stylus/tablet');
   });
 
   describe('Smart Features', () => {
@@ -66,14 +65,6 @@ describe('💡 NICE TO HAVE - Polish Features', () => {
     it.skip('should detect hand-drawn stars - IMPLEMENTED');
     it.todo('should snap shapes to grid (optional)');
     it.todo('should snap to other objects (smart guides)');
-    it.todo('should auto-detect and perfect hand-drawn shapes');
-  });
-
-  describe('Offline/PWA', () => {
-    it.todo('should work offline as installable PWA');
-    it.todo('should queue changes when offline');
-    it.todo('should sync when back online with conflict resolution');
-    // PWA support shows modern web dev knowledge
   });
 
   describe('Accessibility', () => {

@@ -11,16 +11,16 @@ Performance and collaboration guarantees are validated by the repository's bench
 
 ## Features
 
-- **Real-time Collaboration**: WebSocket-based synchronization ensuring instant updates for all connected users.
+- **Real-time Collaboration**: Socket.IO object operations synchronize instantly; each browser session has its own live cursor, including two devices signed into the same account. Distinct-object edits merge; simultaneous edits to the same object use server-order last-writer-wins.
 - **Advanced Drawing Engine**:
-  - Pressure-sensitive plotting for tablets/iPads.
+  - Pressure-sensitive plotting preserved per stroke point through save/load and export.
   - Smooth rendering with standard and high-DPI support.
   - Tools: Pen, Eraser, Shapes (Line, Rectangle, Ellipse).
   - Customizable stroke sizes and colors.
 - **Multi-User Presence**: See other users' cursors and actions in real-time.
-- **PWA Support**: Fully installable Progressive Web App with offline capabilities and standalone mode.
+- **PWA Support**: Installable Progressive Web App with offline shell recovery and a durable IndexedDB operation queue.
 - **Performance tooling**:
-  - Worker-backed rendering with explicit unsupported-browser reporting when transferable OffscreenCanvas is unavailable.
+  - Worker-backed OffscreenCanvas rendering with a main-thread fallback when transferable OffscreenCanvas is unavailable.
   - Deterministic large-board benchmark fixtures and performance artifacts.
   - Performance limits documented with the benchmark.
 - **Secure**: Authentication and user management powered by Clerk.
@@ -66,7 +66,7 @@ This project is a monorepo managed with `pnpm` workspaces.
 
 ### Prerequisites
 
-- **Node.js**: 20.x (the version used by CI and Docker)
+- **Node.js**: 24.x (the version used by CI)
 - **pnpm**: the exact version pinned by the root `packageManager` field; Corepack is recommended.
 - **PostgreSQL**: 16+ for local development and integration testing.
 - **Redis**: required for multi-instance Socket.IO deployments; optional only for explicit single-instance development.
@@ -118,6 +118,14 @@ pnpm --filter @sketchflow/server db:migrate
 # Open Prisma Studio (Database GUI)
 pnpm --filter @sketchflow/server db:studio
 ```
+
+### Production release
+
+Push a signed-off `v*` tag to publish the versioned GHCR image and GitHub Release. The protected
+`production` GitHub Environment must provide `DEPLOY_WEBHOOK_URL` and `DEPLOY_WEBHOOK_TOKEN`, plus
+`PRODUCTION_APP_URL` and `PRODUCTION_API_URL` variables. The running service must set `RELEASE_ID`,
+`SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, Clerk live credentials, explicit `CORS_ORIGINS`, and
+`REDIS_URL` when scaled beyond one Socket.IO instance. Auto-shape detection is intentionally opt-in.
 
 ## Docker Support
 

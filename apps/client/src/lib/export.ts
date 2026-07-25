@@ -273,6 +273,7 @@ function renderObjectToPDF(
 
         // Draw as a series of line segments
         for (let i = 1; i < scaledPoints.length; i++) {
+          pdf.setLineWidth((obj.points[i].width ?? obj.size) * scale);
           pdf.line(
             scaledPoints[i - 1].x,
             scaledPoints[i - 1].y,
