@@ -1,6 +1,6 @@
 // Clerk-based auth store - wraps Clerk hooks for easier use
 import { useUser, useAuth } from '@clerk/clerk-react';
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useCallback } from 'react';
 
 // Generate or retrieve guest ID
 function getGuestId(): string {
@@ -17,7 +17,7 @@ function getGuestId(): string {
 
 export function useAuthStore() {
   const { user, isLoaded: userLoaded } = useUser();
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken: clerkGetToken, isSignedIn } = useAuth();
 
   // Only consider user as guest if Clerk has loaded and they're not signed in
   const isAuthenticated = isSignedIn ?? false;
@@ -47,11 +47,11 @@ export function useAuthStore() {
     isGuest,
     guestId,
     isLoading: !userLoaded,
-    getToken: async () => {
+    getToken: useCallback(async () => {
       if (isSignedIn) {
-        return await getToken();
+        return await clerkGetToken();
       }
       return null;
-    },
+    }, [isSignedIn, clerkGetToken]),
   };
 }

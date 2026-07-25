@@ -72,6 +72,12 @@ class SocketManager {
   connect(token: string) {
     if (this.socket?.connected) return this.socket;
 
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+      this.isConnected = false;
+    }
+
     const url = resolveSocketBaseUrl();
 
     this.socket = io(url, {

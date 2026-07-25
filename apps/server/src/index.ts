@@ -84,7 +84,7 @@ export class SketchFlowServer {
     Record<string, never>,
     SocketData
   >;
-  private connectionRegistry = new ConnectionRegistry();
+  private connectionRegistry = new ConnectionRegistry(200);
   private projectService = new ProjectService();
   private isShuttingDown = false;
   private clientDistPath =
