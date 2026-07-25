@@ -73,6 +73,12 @@ export function DrawingCanvas() {
     updatePerformanceStats,
     currentProjectId,
     projectRevision,
+    projectTitle,
+    documentVersion,
+    unsavedChanges,
+    setProjectRevision,
+    markSaved,
+    setSaveStatus,
     setZoom,
     setView,
     resetView,
@@ -80,7 +86,7 @@ export function DrawingCanvas() {
     objectCount,
   } = useDrawingStore();
 
-  const { requestCanonicalHydration, on } = useDrawingSocket();
+  const { requestCanonicalHydration, commitCollaboration, isConnected, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
@@ -143,6 +149,77 @@ export function DrawingCanvas() {
   const workerStrokeQueueRef = useRef<StrokeData[]>([]);
   const workerFlushScheduledRef = useRef(false);
   const strokeGroupRef = useRef<string | null>(null);
+  const collaborationCommitInFlightRef = useRef(false);
+
+  // A canvas change is a durable collaboration operation, not a delayed REST
+  // autosave. The server acknowledges the canonical revision before peers are
+  // notified, so they always receive a complete, ordered document snapshot.
+  useEffect(() => {
+    if (
+      !currentProjectId ||
+      !canDraw ||
+      !isConnected ||
+      !unsavedChanges ||
+      projectRevision === undefined ||
+      collaborationCommitInFlightRef.current
+    ) {
+      return;
+    }
+
+    const projectId = currentProjectId;
+    const committedDocumentVersion = documentVersion;
+    collaborationCommitInFlightRef.current = true;
+    setSaveStatus('syncing');
+    const operationId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `operation-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+
+    commitCollaboration(
+      {
+        protocolVersion: 1,
+        projectId,
+        operationId,
+        expectedRevision: projectRevision,
+        kind: 'replace-project',
+        data: { version: 1, objects, width: WORLD_WIDTH, height: WORLD_HEIGHT },
+        title: projectTitle,
+      },
+      (result) => {
+        collaborationCommitInFlightRef.current = false;
+        const state = useDrawingStore.getState();
+        if (state.currentProjectId !== projectId) return;
+
+        if (result.status === 'applied' || result.status === 'duplicate') {
+          state.setProjectRevision(result.revision);
+          state.markSaved(committedDocumentVersion);
+          return;
+        }
+
+        if (result.status === 'conflict') {
+          state.setSaveStatus('conflict');
+          requestCanonicalHydration(projectId);
+          return;
+        }
+
+        state.setSaveStatus(result.status === 'unavailable' ? 'retrying' : 'failed');
+      },
+    );
+  }, [
+    canDraw,
+    commitCollaboration,
+    currentProjectId,
+    documentVersion,
+    isConnected,
+    objects,
+    projectRevision,
+    projectTitle,
+    requestCanonicalHydration,
+    setProjectRevision,
+    markSaved,
+    setSaveStatus,
+    unsavedChanges,
+  ]);
 
   useEffect(() => {
     if (!needsFullRedraw) return;
@@ -263,6 +340,7 @@ export function DrawingCanvas() {
 
   useCanvasCollaborationAdapter({
     on,
+    isConnected,
     currentProjectId,
     projectRevision,
     requestCanonicalHydration,

@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Do not spend runner time validating commits that have already been replaced
+# by a newer push to the same pull request or branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/sketchflow
@@ -31,11 +37,21 @@ jobs:
           pnpm build
       - name: Test, Lint, Type Check, Audit
         run: |
-          pnpm test &
+          # The build above already type-checks the shared and server packages.
+          # Run independent checks concurrently; client/server tests used to be
+          # serialized by the root `pnpm test` script.
+          pids=()
+          pnpm --filter @sketchflow/client test & pids+=("$!")
+          pnpm --filter @sketchflow/server test & pids+=("$!")
           pnpm lint &
-          pnpm type-check &
-          pnpm audit:prod &
-          wait
+          pids+=("$!")
+          pnpm --filter @sketchflow/client type-check & pids+=("$!")
+          pnpm audit:prod & pids+=("$!")
+          status=0
+          for pid in "${pids[@]}"; do
+            wait "$pid" || status=1
+          done
+          exit "$status"
 
   container-build:
     name: Container build
@@ -49,6 +65,11 @@ jobs:
           context: .
           load: true
           tags: sketchflow:ci
+          # The production image is the most expensive PR check. Persist all
+          # BuildKit layers between workflow runs, including pnpm install and
+          # client/server compilation layers.
+          cache-from: type=gha,scope=sketchflow-production-image
+          cache-to: type=gha,mode=max,scope=sketchflow-production-image
           build-args: |
             BUILDPLATFORM=linux/amd64
             TARGETPLATFORM=linux/amd64
@@ -104,5 +125,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+            type=gha,scope=sketchflow-production-image
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max

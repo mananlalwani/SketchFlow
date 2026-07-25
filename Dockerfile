@@ -19,11 +19,20 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
-# Copy source code
-COPY . .
+# Copy only workspace manifests before installing. This keeps the dependency
+# layer reusable for code-only changes, which are the common CI case.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/client/package.json apps/client/package.json
+COPY apps/server/package.json apps/server/package.json
+COPY packages/shared/package.json packages/shared/package.json
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Source changes below no longer invalidate this expensive layer. The cache
+# mount also reuses fetched packages when the lockfile does change.
+RUN --mount=type=cache,id=sketchflow-pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir /pnpm/store
+
+# Copy application source only after dependencies are available.
+COPY . .
 
 # Build shared package
 RUN pnpm --filter @sketchflow/shared build
