@@ -579,7 +579,7 @@ function blit() {
         imageData?: string;
         properties?: Record<string, unknown>;
       };
-      if (sh.type === 'image' && sh.imageData) {
+      if (sh.type === 'image' && sh.imageData && !sh.properties?.hidden) {
         // Check viewport intersection for images (they can be large)
         if (objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
           const bitmap = imageBitmapCache.get(sh.imageData);
@@ -665,6 +665,7 @@ function blit() {
         imageData?: string;
         properties?: Record<string, unknown>;
       };
+      if (sh.properties?.hidden) continue;
       // Skip images - already rendered above
       if (sh.type === 'image') continue;
       // For text, check position directly (text might have 0 width/height from old projects)
@@ -895,7 +896,12 @@ function blit() {
       imageData?: string;
       properties?: Record<string, unknown>;
     };
-    if (sh.type === 'image' && sh.imageData && objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
+    if (
+      sh.type === 'image' &&
+      sh.imageData &&
+      !sh.properties?.hidden &&
+      objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)
+    ) {
       const bitmap = imageBitmapCache.get(sh.imageData);
       if (bitmap) {
         screenCtx.save();
@@ -982,6 +988,7 @@ function blit() {
       imageData?: string;
       properties?: Record<string, unknown>;
     };
+    if (sh.properties?.hidden) continue;
     // Skip images - already rendered above
     if (sh.type === 'image') continue;
     // For text, check position directly (text might have 0 width/height from old projects)
@@ -1504,6 +1511,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         if (
           sh.type === 'image' &&
           sh.imageData &&
+          !sh.properties?.hidden &&
           sh.x !== undefined &&
           sh.y !== undefined &&
           sh.width !== undefined &&
@@ -1554,6 +1562,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       // Shapes (skip images - already rendered above)
       for (let i = 0; i < retainedShapes.length; i++) {
         const sh = retainedShapes[i];
+        if (sh.properties?.hidden) continue;
         if (sh.type === 'image') continue;
         ctx.save();
         ctx.strokeStyle = sh.color;

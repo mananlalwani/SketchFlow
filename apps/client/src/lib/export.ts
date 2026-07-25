@@ -140,6 +140,7 @@ export function exportAsSVG(
 
   // Render objects
   for (const obj of objects) {
+    if (obj.hidden) continue;
     const svg = objectToSVG(obj);
     if (!svg) continue;
     if (obj.rotation && obj.x !== undefined && obj.y !== undefined) {
@@ -231,6 +232,7 @@ export async function exportAsPDF(
 
   // Render each object to PDF
   for (const obj of objects) {
+    if (obj.hidden) continue;
     renderObjectToPDF(pdf, obj, offsetX, offsetY, scale);
   }
 
