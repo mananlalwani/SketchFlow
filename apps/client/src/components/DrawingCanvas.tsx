@@ -799,6 +799,7 @@ export function DrawingCanvas() {
                   .map((candidate) => candidate.id)
               : [hitId];
             if (!selectedObjectIds.includes(hitId)) setSelectedObjects(groupIds);
+            if (e.pointerType === 'touch' && 'vibrate' in navigator) navigator.vibrate(12);
             if (obj.locked) return;
             const offset = getObjectDragOffset(obj, worldPos);
             const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds;

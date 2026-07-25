@@ -197,6 +197,7 @@ export function MobileToolbar() {
                         : 'text-slate-500 dark:text-slate-400',
                     )}
                     title={label}
+                    aria-label={label}
                   >
                     <Icon className="w-5 h-5" />
                   </Button>
