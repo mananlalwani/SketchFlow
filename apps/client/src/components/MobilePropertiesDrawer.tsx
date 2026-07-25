@@ -1,24 +1,10 @@
-import { useState } from 'react';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import {
-  Palette,
-  Layers,
-  Settings,
-  Moon,
-  Sun,
-  Trash2,
-  FolderOpen,
-  Download,
-  ChevronDown,
-  ChevronUp,
-  Type,
-  PenLine,
-  Shapes,
-} from 'lucide-react';
+import { Palette, Layers, Settings, Moon, Sun, Trash2, FolderOpen, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LayerStack } from '@/components/LayerStack';
 import {
   Drawer,
   DrawerContent,
@@ -54,18 +40,6 @@ interface MobilePropertiesDrawerProps {
   onAction?: (action: string) => void;
 }
 
-function layerLabel(object: { type: string; text?: string }) {
-  if (object.type === 'stroke') return 'Stroke';
-  if (object.type === 'text') return object.text?.trim().slice(0, 24) || 'Text';
-  return object.type.charAt(0).toUpperCase() + object.type.slice(1);
-}
-
-function LayerGlyph({ type }: { type: string }) {
-  if (type === 'stroke') return <PenLine className="h-4 w-4" />;
-  if (type === 'text') return <Type className="h-4 w-4" />;
-  return <Shapes className="h-4 w-4" />;
-}
-
 export function MobilePropertiesDrawer({
   open,
   onOpenChange,
@@ -78,32 +52,17 @@ export function MobilePropertiesDrawer({
     setBrushSize,
     brushOpacity,
     setBrushOpacity,
-    objects,
-    setObjects,
-    removeObject,
-    saveHistory,
-    requestFullRedraw,
+    currentTool,
+    eraserMode,
+    setEraserMode,
+    shapeFilled,
+    setShapeFilled,
+    triangleMode,
+    setTriangleMode,
+    starPoints,
+    setStarPoints,
   } = useDrawingStore();
   const { theme, toggleTheme } = useTheme();
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
-
-  const moveLayer = (id: string, direction: -1 | 1) => {
-    const index = objects.findIndex((object) => object.id === id);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= objects.length) return;
-    saveHistory();
-    const next = [...objects];
-    [next[index], next[target]] = [next[target], next[index]];
-    setObjects(next);
-    requestFullRedraw();
-  };
-
-  const deleteLayer = (id: string) => {
-    saveHistory();
-    removeObject(id);
-    requestFullRedraw();
-    setSelectedLayerId((current) => (current === id ? null : current));
-  };
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -171,7 +130,7 @@ export function MobilePropertiesDrawer({
                 <Slider
                   value={[brushSize]}
                   min={1}
-                  max={50}
+                  max={100}
                   step={1}
                   onValueChange={([val]) => setBrushSize(val)}
                 />
@@ -193,98 +152,94 @@ export function MobilePropertiesDrawer({
                   onValueChange={([val]) => setBrushOpacity(val)}
                 />
               </div>
+
+              {currentTool === 'eraser' && (
+                <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                      Eraser mode
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {eraserMode === 'partial' ? 'Standard' : 'Object'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant={eraserMode === 'partial' ? 'default' : 'secondary'}
+                      size="sm"
+                      onClick={() => setEraserMode('partial')}
+                    >
+                      Standard
+                    </Button>
+                    <Button
+                      variant={eraserMode === 'object' ? 'default' : 'secondary'}
+                      size="sm"
+                      onClick={() => setEraserMode('object')}
+                    >
+                      Object
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {currentTool === 'triangle' && (
+                <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
+                  <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Triangle type
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['custom', 'right', '45-45-90', '30-60-90'] as const).map((mode) => (
+                      <Button
+                        key={mode}
+                        variant={triangleMode === mode ? 'default' : 'secondary'}
+                        size="sm"
+                        onClick={() => setTriangleMode(mode)}
+                      >
+                        {mode === 'custom' ? 'Custom' : mode === 'right' ? 'Right' : mode}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {currentTool === 'star' && (
+                <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
+                  <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Star points
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([5, 6, 8] as const).map((points) => (
+                      <Button
+                        key={points}
+                        variant={starPoints === points ? 'default' : 'secondary'}
+                        size="sm"
+                        onClick={() => setStarPoints(points)}
+                      >
+                        {points}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(['rectangle', 'ellipse', 'triangle', 'star'] as string[]).includes(currentTool) && (
+                <div className="flex items-center justify-between border-t border-slate-200 pt-4 dark:border-white/10">
+                  <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Fill shape
+                  </span>
+                  <Button
+                    variant={shapeFilled ? 'default' : 'secondary'}
+                    size="sm"
+                    onClick={() => setShapeFilled(!shapeFilled)}
+                  >
+                    {shapeFilled ? 'On' : 'Off'}
+                  </Button>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="layers" className="h-[300px] overflow-y-auto pr-1">
-              <div className="mb-3 flex items-center justify-between px-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {objects.length} {objects.length === 1 ? 'object' : 'objects'}
-                </p>
-                <p className="text-xs text-slate-400">Top draws last</p>
-              </div>
-              {objects.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center dark:border-white/10 dark:bg-white/[0.03]">
-                  <Layers className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-700" />
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                    No layers yet
-                  </p>
-                  <p className="mt-1 text-xs text-slate-400">Draw something to build your stack.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {[...objects].reverse().map((object, reverseIndex) => {
-                    const index = objects.length - 1 - reverseIndex;
-                    const isSelected = selectedLayerId === object.id;
-                    return (
-                      <div
-                        key={object.id}
-                        className={cn(
-                          'group flex items-center gap-2 rounded-xl border p-2 transition-colors',
-                          isSelected
-                            ? 'border-blue-400 bg-blue-50/70 dark:border-blue-500/60 dark:bg-blue-500/10'
-                            : 'border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900/60',
-                        )}
-                      >
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                          onClick={() => setSelectedLayerId(object.id)}
-                          aria-pressed={isSelected}
-                        >
-                          <span
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/5 text-slate-600 dark:border-white/10 dark:text-slate-300"
-                            style={{ backgroundColor: `${object.color}22` }}
-                          >
-                            <LayerGlyph type={object.type} />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                              {layerLabel(object)}
-                            </span>
-                            <span className="block text-xs text-slate-400">
-                              Layer {objects.length - index}
-                            </span>
-                          </span>
-                        </button>
-                        <div className="flex shrink-0 items-center gap-0.5">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={index === objects.length - 1}
-                            onClick={() => moveLayer(object.id, 1)}
-                            aria-label={`Move ${layerLabel(object)} forward`}
-                          >
-                            <ChevronUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={index === 0}
-                            onClick={() => moveLayer(object.id, -1)}
-                            aria-label={`Move ${layerLabel(object)} backward`}
-                          >
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-red-500"
-                            onClick={() => deleteLayer(object.id)}
-                            aria-label={`Delete ${layerLabel(object)}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <LayerStack />
             </TabsContent>
 
             <TabsContent value="settings" className="space-y-4">

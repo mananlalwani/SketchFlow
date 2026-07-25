@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ColorPicker } from '@/components/ColorPicker';
 import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
+import { LayerStack } from '@/components/LayerStack';
 
 export function PropertiesPanel() {
   const {
@@ -40,8 +41,6 @@ export function PropertiesPanel() {
 
   const fontSize = Math.max(12, brushSize * 3);
 
-  if (!showBrushProps && !showEraserProps) return null;
-
   return (
     <div className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-l border-slate-200 dark:border-white/10 h-full p-4 flex flex-col gap-6 overflow-y-auto z-20 transition-colors duration-200">
       <div className="font-semibold text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -53,7 +52,9 @@ export function PropertiesPanel() {
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-slate-700 dark:text-slate-200">Size</span>
-              <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">{brushSize}px</span>
+              <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                {brushSize}px
+              </span>
             </div>
             <Slider
               aria-label="Brush size"
@@ -178,7 +179,9 @@ export function PropertiesPanel() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-700 dark:text-slate-200">Font Size</span>
-                  <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">{fontSize}px</span>
+                  <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                    {fontSize}px
+                  </span>
                 </div>
                 <Slider
                   value={[brushSize]}
@@ -273,6 +276,13 @@ export function PropertiesPanel() {
           </div>
         </div>
       )}
+
+      <div className="min-h-[220px] space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
+        <div className="font-semibold text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          Layers
+        </div>
+        <LayerStack className="max-h-[360px] overflow-y-auto pr-1" />
+      </div>
     </div>
   );
 }
