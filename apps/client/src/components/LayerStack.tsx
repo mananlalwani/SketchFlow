@@ -93,7 +93,7 @@ export function LayerStack({ className }: LayerStackProps) {
               <div
                 key={object.id}
                 className={cn(
-                  'group flex items-center gap-2 rounded-xl border p-2 transition-colors',
+                  'group flex flex-wrap items-center gap-2 rounded-xl border p-2 transition-colors',
                   isSelected
                     ? 'border-blue-400 bg-blue-50/70 dark:border-blue-500/60 dark:bg-blue-500/10'
                     : 'border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900/60',
@@ -127,62 +127,68 @@ export function LayerStack({ className }: LayerStackProps) {
                   </span>
                 </button>
                 {isSelected && (
-                  <div className="flex shrink-0 items-center gap-0.5">
+                  <div className="ml-11 flex basis-full flex-wrap items-center gap-1 border-t border-blue-200/70 pt-2 dark:border-blue-500/20">
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
+                      variant="secondary"
+                      size="sm"
+                      className="h-8"
                       onClick={() => updateLayer(object.id, { hidden: !object.hidden })}
                       aria-label={`${object.hidden ? 'Show' : 'Hide'} ${label}`}
                     >
-                      {object.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {object.hidden ? (
+                        <EyeOff className="mr-1.5 h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      {object.hidden ? 'Show' : 'Hide'}
                     </Button>
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
+                      variant="secondary"
+                      size="sm"
+                      className="h-8"
                       onClick={() => updateLayer(object.id, { locked: !object.locked })}
                       aria-label={`${object.locked ? 'Unlock' : 'Lock'} ${label}`}
                     >
                       {object.locked ? (
-                        <Lock className="h-4 w-4" />
+                        <Lock className="mr-1.5 h-3.5 w-3.5" />
                       ) : (
-                        <Unlock className="h-4 w-4" />
+                        <Unlock className="mr-1.5 h-3.5 w-3.5" />
                       )}
+                      {object.locked ? 'Unlock' : 'Lock'}
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
+                      size="sm"
+                      className="h-8 px-2"
                       disabled={index === objects.length - 1}
                       onClick={() => moveLayer(object.id, 1)}
                       aria-label={`Move ${label} forward`}
                     >
-                      <ChevronUp className="h-4 w-4" />
+                      <ChevronUp className="mr-1 h-3.5 w-3.5" /> Forward
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
+                      size="sm"
+                      className="h-8 px-2"
                       disabled={index === 0}
                       onClick={() => moveLayer(object.id, -1)}
                       aria-label={`Move ${label} backward`}
                     >
-                      <ChevronDown className="h-4 w-4" />
+                      <ChevronDown className="mr-1 h-3.5 w-3.5" /> Back
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-red-500"
+                      size="sm"
+                      className="h-8 px-2 text-slate-400 hover:text-red-500"
                       onClick={() => deleteLayer(object.id)}
                       aria-label={`Delete ${label}`}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
                     </Button>
                   </div>
                 )}
