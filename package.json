@@ -23,6 +23,7 @@
     "prettier": "3.6.2"
   },
   "pnpm": {
+    "onlyBuiltDependencies": ["@clerk/shared", "@prisma/engines", "@sentry/cli", "@swc/core", "core-js", "esbuild", "prisma", "protobufjs"],
     "overrides": {
       "@grpc/grpc-js": "1.14.4",
       "@hono/node-server": "1.19.13",

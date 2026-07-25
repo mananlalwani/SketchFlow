@@ -23,6 +23,8 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
       - name: Install & Build
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/sketchflow_build
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @sketchflow/server db:generate
