@@ -29,12 +29,12 @@ The production client is measured with a throttling-free desktop browser and a 1
 
 The unit suite uses the same scale for deterministic culling correctness. Browser timings, heap, and
 throughput are comparison artifacts rather than per-run CI budgets until a stable runner baseline is
-established. CI gates fixture/worker readiness, no uncaught errors, and gross interaction stalls; a
-renderer change requires comparing two benchmark artifacts and a trace before merge.
+established. The current main CI workflow does not run Playwright; run these benchmarks locally or
+add a dedicated authenticated browser job before treating them as merge gates.
 
 `web-vitals.spec.ts` runs Chromium with a 393×851 touch viewport, device scale factor 2.75, and
 4× CPU throttling. It captures `web-vitals-mobile.json` and fails when LCP, INP, or CLS exceed the
-table budgets. The Playwright HTML report retains both JSON attachments in CI.
+table budgets. The Playwright HTML report retains both JSON attachments when the suite is run.
 
 The editor canvas is route-lazy-loaded, and PDF import/export is intentionally lazy-loaded and excluded from the initial PWA precache. The renderer performs viewport culling in `src/workers/rendererWorker.ts`.
 
@@ -43,7 +43,7 @@ recovery, and that an authenticated API response never enters Cache Storage.
 
 ## Production telemetry
 
-Set `VITE_RELEASE_ID` and `RELEASE_ID` to the deployed git SHA or release number. Client and
-server OpenTelemetry resources then attach the same release identifier to errors, HTTP requests,
-socket activity, and persistence conflicts. Source maps must be uploaded only to the private
-monitoring provider during deployment; public production bundles keep source maps disabled.
+When Sentry is configured at build/runtime, set `VITE_RELEASE_ID` and `RELEASE_ID` to the same
+deployed git SHA or release number. Server OpenTelemetry uses `RELEASE_ID` when enabled; browser
+OpenTelemetry is disabled. Source maps remain disabled in normal builds; credentialed source-map
+upload is an optional deployment step, not part of the current release workflow.

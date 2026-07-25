@@ -6,25 +6,26 @@ Accepted.
 
 ## Decision
 
-SketchFlow uses server-ordered snapshots rather than a CRDT. Canvas events are broadcast only after
-the server verifies the room and editor permission. Durable project saves use a monotonic revision
-and conditional update: the client supplies its last acknowledged revision and the server accepts
-exactly one matching write.
+SketchFlow uses server-ordered object operations rather than a CRDT. Canvas events are broadcast only
+after the server verifies room and editor permission. Each operation has an idempotency ID and is
+applied with a monotonic project revision and conditional update.
 
 ## Semantics
 
 - The server is the authority for room membership, mutation ordering, and persistence.
-- Acknowledged canvas snapshots are persisted transactionally enough to survive process restarts;
-  in-memory room state is a cache.
-- A save with a stale revision returns `409` and preserves local IndexedDB recovery data.
-- Undo remains client-local until a successful save; concurrent changes do not silently merge.
+- Accepted operations and canonical project JSON are persisted transactionally; in-memory room state
+  is only a cache.
+- Upserts/deletes for different object IDs rebase over the latest canonical document. Batches apply
+  atomically. Competing writes to the same object resolve by server acceptance order.
+- Whole-project replacement remains revision-guarded and returns a conflict for stale writes.
+- Undo/redo is local history expressed as normal object-operation batches when committed.
 - Public links are HTTP read-only and intentionally never join realtime rooms.
 
 ## Recovery
 
-The client retries transient failures with backoff, keeps an IndexedDB emergency snapshot, and
-surfaces a conflict state instead of overwriting newer server data. Users can reload, duplicate, or
-export their recovered local work.
+The client stores unsent semantic operations in IndexedDB before socket emission and replays them on
+reconnect or restart. Duplicate IDs are harmless. A revision gap triggers canonical hydration; a
+whole-document conflict remains visible instead of silently overwriting newer data.
 
 ## Scaling
 
