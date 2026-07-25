@@ -123,9 +123,9 @@ pnpm --filter @sketchflow/server db:studio
 
 Push a signed-off `v*` tag to validate the source, publish a versioned GHCR image, and create a
 GitHub Release. Deployment is intentionally manual: pull the desired image tag on the VPS and restart
-the container. The running service must set `RELEASE_ID`, `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
-Clerk live credentials, explicit `CORS_ORIGINS`, and `REDIS_URL` when scaled beyond one Socket.IO
-instance. Auto-shape detection is intentionally opt-in.
+the container. The running service requires Clerk live credentials and explicit `CORS_ORIGINS`; Sentry,
+OpenTelemetry, release ID, and Redis (unless scaled beyond one Socket.IO instance) are optional
+production enhancements. Auto-shape detection is intentionally opt-in.
 
 ## Docker Support
 
