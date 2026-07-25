@@ -150,8 +150,6 @@ export function DrawingCanvas() {
     selectedObjectIds,
     setSelectedObjects,
     toggleSelectedObject,
-    updateObject,
-    projectRole,
   } = useDrawingStore();
 
   const selectedObject = objects.find((object) => object.id === selectedObjectId);
@@ -212,7 +210,6 @@ export function DrawingCanvas() {
     endX: number;
     endY: number;
   } | null>(null);
-  const [transformHandle, setTransformHandle] = useState<'resize' | 'rotate' | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const draggedObjectsRef = useRef<DrawingObject[] | null>(null);
   const dragRedrawScheduledRef = useRef(false);
@@ -260,8 +257,7 @@ export function DrawingCanvas() {
       !unsavedChanges ||
       projectRevision === undefined ||
       collaborationCommitInFlightRef.current ||
-      draggedObject ||
-      transformHandle
+      draggedObject
     ) {
       return;
     }
@@ -366,7 +362,6 @@ export function DrawingCanvas() {
     setSaveStatus,
     unsavedChanges,
     draggedObject,
-    transformHandle,
   ]);
 
   // Replay persisted semantic edits after a reconnect or browser restart. Object
@@ -722,45 +717,6 @@ export function DrawingCanvas() {
     },
     [viewX, viewY, zoom],
   );
-
-  useEffect(() => {
-    if (
-      !transformHandle ||
-      !selectedObject ||
-      selectedObject.x === undefined ||
-      selectedObject.y === undefined
-    )
-      return;
-
-    const onMove = (event: PointerEvent) => {
-      const point = screenToWorld(event.clientX, event.clientY);
-      if (transformHandle === 'rotate') {
-        const centerX = selectedObject.x! + (selectedObject.width ?? 0) / 2;
-        const centerY = selectedObject.y! + (selectedObject.height ?? 0) / 2;
-        const rotation =
-          ((Math.atan2(point.y - centerY, point.x - centerX) * 180) / Math.PI + 90 + 360) % 360;
-        updateObject(selectedObject.id, { rotation });
-      } else {
-        updateObject(selectedObject.id, {
-          width: Math.max(8, point.x - selectedObject.x!),
-          height: Math.max(8, point.y - selectedObject.y!),
-        });
-      }
-    };
-    const onUp = () => setTransformHandle(null);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp, { once: true });
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-  }, [screenToWorld, selectedObject, transformHandle, updateObject]);
-
-  const startTransform = (kind: 'resize' | 'rotate') => {
-    if (!selectedObject || selectedObject.locked || projectRole === 'viewer') return;
-    saveHistory();
-    setTransformHandle(kind);
-  };
 
   const startDrawing = useCallback(
     (e: React.PointerEvent) => {
@@ -2050,49 +2006,6 @@ export function DrawingCanvas() {
           />
         </svg>
       )}
-      {selectedBounds &&
-        selectedObject &&
-        selectedObject.x !== undefined &&
-        selectedObject.y !== undefined && (
-          <svg className="pointer-events-none absolute inset-0 z-30 h-full w-full overflow-visible">
-            <circle
-              className="pointer-events-auto cursor-grab active:cursor-grabbing"
-              cx={(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom}
-              cy={(selectedBounds.y - viewY) * zoom - 24}
-              r="8"
-              fill="#2563eb"
-              stroke="white"
-              strokeWidth="3"
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                startTransform('rotate');
-              }}
-            />
-            {selectedRotation === 0 &&
-              selectedObject.type !== 'stroke' &&
-              selectedObject.type !== 'text' &&
-              selectedObject.width !== undefined &&
-              selectedObject.height !== undefined && (
-                <rect
-                  className="pointer-events-auto cursor-nwse-resize"
-                  x={(selectedBounds.x + selectedBounds.width - viewX) * zoom - 7}
-                  y={(selectedBounds.y + selectedBounds.height - viewY) * zoom - 7}
-                  width="14"
-                  height="14"
-                  rx="3"
-                  fill="#2563eb"
-                  stroke="white"
-                  strokeWidth="3"
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    startTransform('resize');
-                  }}
-                />
-              )}
-          </svg>
-        )}
       {selectionRect && (
         <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full">
           <rect
