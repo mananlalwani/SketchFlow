@@ -21,7 +21,7 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
 # Copy only workspace manifests before installing. This keeps the dependency
 # layer reusable for code-only changes, which are the common CI case.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps/client/package.json apps/client/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY packages/shared/package.json packages/shared/package.json
