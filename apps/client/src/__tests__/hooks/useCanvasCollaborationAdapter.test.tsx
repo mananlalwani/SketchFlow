@@ -40,6 +40,7 @@ describe('useCanvasCollaborationAdapter', () => {
     return renderHook(() =>
       useCanvasCollaborationAdapter({
         on: on as never,
+        isConnected: true,
         currentProjectId: 'project-1',
         projectRevision,
         requestCanonicalHydration,
@@ -130,5 +131,11 @@ describe('useCanvasCollaborationAdapter', () => {
   it('rejects malformed canonical project data', () => {
     expect(getAuthoritativeObjects({ objects: [{ id: 'missing-fields' }] })).toBeNull();
     expect(getAuthoritativeObjects({ objects: [remoteObject] })).toEqual([remoteObject]);
+  });
+
+  it('accepts serialized REST fallback broadcasts', () => {
+    expect(getAuthoritativeObjects(JSON.stringify({ objects: [remoteObject] }))).toEqual([
+      remoteObject,
+    ]);
   });
 });

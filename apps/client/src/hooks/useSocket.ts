@@ -1,7 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/store/authStore';
-import type { ServerToClientEvents, ClientToServerEvents } from '@/types/socket';
+import type {
+  CollaborationCommit,
+  CollaborationCommitResult,
+  ServerToClientEvents,
+  ClientToServerEvents,
+} from '@/types/socket';
 
 type SocketInstance = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -276,7 +281,7 @@ export const useSocket = () => {
 
 // Specific hooks for drawing operations
 export const useDrawingSocket = () => {
-  const { emit, on } = useSocket();
+  const { emit, on, isConnected } = useSocket();
 
   const requestCanonicalHydration = useCallback(
     (projectId: string) => {
@@ -285,8 +290,17 @@ export const useDrawingSocket = () => {
     [emit],
   );
 
+  const commitCollaboration = useCallback(
+    (commit: CollaborationCommit, acknowledge: (result: CollaborationCommitResult) => void) => {
+      emit('collaboration:commit', commit, acknowledge);
+    },
+    [emit],
+  );
+
   return {
     requestCanonicalHydration,
+    commitCollaboration,
+    isConnected,
     on,
   };
 };
