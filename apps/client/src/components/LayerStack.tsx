@@ -126,60 +126,66 @@ export function LayerStack({ className }: LayerStackProps) {
                     </span>
                   </span>
                 </button>
-                <div className="flex shrink-0 items-center gap-0.5">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => updateLayer(object.id, { hidden: !object.hidden })}
-                    aria-label={`${object.hidden ? 'Show' : 'Hide'} ${label}`}
-                  >
-                    {object.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => updateLayer(object.id, { locked: !object.locked })}
-                    aria-label={`${object.locked ? 'Unlock' : 'Lock'} ${label}`}
-                  >
-                    {object.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={index === objects.length - 1}
-                    onClick={() => moveLayer(object.id, 1)}
-                    aria-label={`Move ${label} forward`}
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={index === 0}
-                    onClick={() => moveLayer(object.id, -1)}
-                    aria-label={`Move ${label} backward`}
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-red-500"
-                    onClick={() => deleteLayer(object.id)}
-                    aria-label={`Delete ${label}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                {isSelected && (
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => updateLayer(object.id, { hidden: !object.hidden })}
+                      aria-label={`${object.hidden ? 'Show' : 'Hide'} ${label}`}
+                    >
+                      {object.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => updateLayer(object.id, { locked: !object.locked })}
+                      aria-label={`${object.locked ? 'Unlock' : 'Lock'} ${label}`}
+                    >
+                      {object.locked ? (
+                        <Lock className="h-4 w-4" />
+                      ) : (
+                        <Unlock className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={index === objects.length - 1}
+                      onClick={() => moveLayer(object.id, 1)}
+                      aria-label={`Move ${label} forward`}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={index === 0}
+                      onClick={() => moveLayer(object.id, -1)}
+                      aria-label={`Move ${label} backward`}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-red-500"
+                      onClick={() => deleteLayer(object.id)}
+                      aria-label={`Delete ${label}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}

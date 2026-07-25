@@ -259,7 +259,9 @@ export function DrawingCanvas() {
       !isConnected ||
       !unsavedChanges ||
       projectRevision === undefined ||
-      collaborationCommitInFlightRef.current
+      collaborationCommitInFlightRef.current ||
+      draggedObject ||
+      transformHandle
     ) {
       return;
     }
@@ -363,6 +365,8 @@ export function DrawingCanvas() {
     markSaved,
     setSaveStatus,
     unsavedChanges,
+    draggedObject,
+    transformHandle,
   ]);
 
   // Replay persisted semantic edits after a reconnect or browser restart. Object
