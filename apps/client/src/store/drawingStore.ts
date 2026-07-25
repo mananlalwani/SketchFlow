@@ -54,6 +54,8 @@ export interface DrawingObject {
   alpha?: number;
   text?: string;
   fontSize?: number;
+  /** Clockwise object rotation in degrees around its visual center. */
+  rotation?: number;
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
   imageData?: string; // Base64 data URL for images

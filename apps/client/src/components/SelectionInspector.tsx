@@ -69,6 +69,8 @@ export function SelectionInspector() {
     updateObject(object.id, { [dimension]: Math.max(1, Math.round(value)) });
   };
 
+  const rotation = ((object.rotation ?? 0) + 360) % 360;
+
   const duplicate = () => {
     saveHistory();
     const copy = duplicateObject(object);
@@ -207,6 +209,24 @@ export function SelectionInspector() {
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
             />
           </label>
+        </div>
+      )}
+
+      {object.type !== 'stroke' && (
+        <div className="space-y-2 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+          <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
+            <span>Rotation</span>
+            <span>{Math.round(rotation)}°</span>
+          </div>
+          <Slider
+            value={[rotation]}
+            min={0}
+            max={359}
+            step={1}
+            disabled={isReadOnly}
+            onPointerDown={saveHistory}
+            onValueChange={([value]) => updateObject(object.id, { rotation: value })}
+          />
         </div>
       )}
 

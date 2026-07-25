@@ -26,6 +26,7 @@ describe('drawingObjectsToRendererScene', () => {
         height: 40,
         color: '#abcdef',
         size: 2,
+        rotation: 45,
         points: [{ x: 10, y: 20 }],
         orientation: 'up',
       },
@@ -41,7 +42,12 @@ describe('drawingObjectsToRendererScene', () => {
       groupId: 'stroke-1',
     });
     expect(scene.shapes).toEqual([
-      expect.objectContaining({ id: 'triangle-1', points: [{ x: 10, y: 20 }], orientation: 'up' }),
+      expect.objectContaining({
+        id: 'triangle-1',
+        points: [{ x: 10, y: 20 }],
+        orientation: 'up',
+        properties: { rotation: 45 },
+      }),
     ]);
   });
 });

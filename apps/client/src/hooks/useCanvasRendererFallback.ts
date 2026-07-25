@@ -46,6 +46,19 @@ export function useCanvasRendererFallback(
           continue;
         }
         if (object.x === undefined || object.y === undefined) continue;
+        context.save();
+        const rotation = object.rotation ?? 0;
+        if (rotation) {
+          context.translate(
+            object.x + (object.width ?? 0) / 2,
+            object.y + (object.height ?? 0) / 2,
+          );
+          context.rotate((rotation * Math.PI) / 180);
+          context.translate(
+            -(object.x + (object.width ?? 0) / 2),
+            -(object.y + (object.height ?? 0) / 2),
+          );
+        }
         context.lineWidth = object.size;
         if (object.type === 'ellipse' || object.type === 'circle') {
           context.beginPath();
@@ -75,6 +88,7 @@ export function useCanvasRendererFallback(
           context.lineTo(object.x + (object.width ?? 0), object.y + (object.height ?? 0));
           context.stroke();
         }
+        context.restore();
       }
       context.restore();
       context.globalAlpha = 1;

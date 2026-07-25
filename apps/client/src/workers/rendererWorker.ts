@@ -320,6 +320,25 @@ function getStarPointCount(shape: { properties?: Record<string, unknown> }): num
     : 5;
 }
 
+function applyObjectRotation(
+  context: OffscreenCanvasRenderingContext2D,
+  shape: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    properties?: Record<string, unknown>;
+  },
+) {
+  const degrees = Number(shape.properties?.rotation ?? 0);
+  if (!Number.isFinite(degrees) || degrees === 0) return;
+  const centerX = shape.x + shape.width / 2;
+  const centerY = shape.y + shape.height / 2;
+  context.translate(centerX, centerY);
+  context.rotate((degrees * Math.PI) / 180);
+  context.translate(-centerX, -centerY);
+}
+
 // Supersampled anti-aliased vector rendering
 // Base factor; actual factor is dynamic per frame
 const SSAA_FACTOR = 1; // default, may be overridden dynamically
@@ -567,6 +586,7 @@ function blit() {
           if (bitmap) {
             vectorSSCtx.save();
             vectorSSCtx.globalAlpha = sh.alpha ?? 1;
+            applyObjectRotation(vectorSSCtx, sh);
             vectorSSCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
             vectorSSCtx.restore();
           } else {
@@ -661,6 +681,7 @@ function blit() {
       vectorSSCtx.lineCap = 'round';
       vectorSSCtx.lineJoin = 'round';
       vectorSSCtx.fillStyle = adjustedShColor;
+      applyObjectRotation(vectorSSCtx, sh);
       vectorSSCtx.beginPath();
       if (sh.type === 'line') {
         vectorSSCtx.moveTo(sh.x, sh.y);
@@ -879,6 +900,7 @@ function blit() {
       if (bitmap) {
         screenCtx.save();
         screenCtx.globalAlpha = sh.alpha ?? 1;
+        applyObjectRotation(screenCtx, sh);
         screenCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
         screenCtx.restore();
       } else {
@@ -977,6 +999,7 @@ function blit() {
     screenCtx.lineCap = 'round';
     screenCtx.lineJoin = 'round';
     screenCtx.fillStyle = adjustedColor;
+    applyObjectRotation(screenCtx, sh);
     if (snap.snapped && snap.offset !== 0) {
       screenCtx.translate(snap.offset, snap.offset);
     }
@@ -1476,6 +1499,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
           width?: number;
           height?: number;
           alpha?: number;
+          properties?: Record<string, unknown>;
         };
         if (
           sh.type === 'image' &&
@@ -1489,6 +1513,13 @@ function handleMessage(evt: MessageEvent<Inbound>) {
           if (bitmap) {
             ctx.save();
             ctx.globalAlpha = sh.alpha ?? 1;
+            applyObjectRotation(ctx, {
+              x: sh.x,
+              y: sh.y,
+              width: sh.width,
+              height: sh.height,
+              properties: sh.properties,
+            });
             ctx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
             ctx.restore();
           }
@@ -1531,6 +1562,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.fillStyle = sh.color;
+        applyObjectRotation(ctx, sh);
         ctx.beginPath();
         if (sh.type === 'line') {
           ctx.moveTo(sh.x, sh.y);
