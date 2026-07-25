@@ -16,6 +16,17 @@ function duplicateObject(object: DrawingObject): DrawingObject {
   };
 }
 
+function textDimensions(text: string, fontSize: number) {
+  const context = document.createElement('canvas').getContext('2d');
+  if (!context) return { width: fontSize, height: fontSize * 1.2 };
+  context.font = `${fontSize}px Inter, system-ui, sans-serif`;
+  const lines = text.split('\n');
+  return {
+    width: Math.max(...lines.map((line) => context.measureText(line).width), fontSize),
+    height: Math.max(1, lines.length) * fontSize * 1.2,
+  };
+}
+
 /** Object-level controls, intentionally shared by the desktop panel and mobile drawer. */
 export function SelectionInspector() {
   const {
@@ -33,6 +44,30 @@ export function SelectionInspector() {
 
   const isReadOnly = projectRole === 'viewer';
   const canFill = ['rectangle', 'ellipse', 'circle', 'triangle', 'star'].includes(object.type);
+  const canResize =
+    object.type !== 'stroke' &&
+    object.type !== 'text' &&
+    object.width !== undefined &&
+    object.height !== undefined;
+
+  const updateText = (nextText: string) => {
+    if (nextText === object.text) return;
+    saveHistory();
+    const dimensions = textDimensions(nextText || ' ', object.fontSize ?? 24);
+    updateObject(object.id, { text: nextText, ...dimensions });
+  };
+
+  const updateFontSize = (fontSize: number) => {
+    saveHistory();
+    const dimensions = textDimensions(object.text || ' ', fontSize);
+    updateObject(object.id, { fontSize, ...dimensions });
+  };
+
+  const resize = (dimension: 'width' | 'height', rawValue: string) => {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return;
+    updateObject(object.id, { [dimension]: Math.max(1, Math.round(value)) });
+  };
 
   const duplicate = () => {
     saveHistory();
@@ -73,6 +108,7 @@ export function SelectionInspector() {
           type="color"
           value={object.color}
           disabled={isReadOnly}
+          onClick={saveHistory}
           onChange={(event) => updateObject(object.id, { color: event.target.value })}
           className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-transparent p-0.5 disabled:cursor-not-allowed dark:border-white/10"
         />
@@ -89,6 +125,7 @@ export function SelectionInspector() {
           max={100}
           step={5}
           disabled={isReadOnly}
+          onPointerDown={saveHistory}
           onValueChange={([value]) => updateObject(object.id, { alpha: value / 100 })}
         />
       </div>
@@ -99,10 +136,78 @@ export function SelectionInspector() {
           variant={object.filled ? 'default' : 'secondary'}
           size="sm"
           disabled={isReadOnly}
-          onClick={() => updateObject(object.id, { filled: !object.filled })}
+          onClick={() => {
+            saveHistory();
+            updateObject(object.id, { filled: !object.filled });
+          }}
         >
           Fill {object.filled ? 'on' : 'off'}
         </Button>
+      )}
+
+      {object.type === 'text' && (
+        <div className="space-y-3 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+          <label
+            className="block text-sm text-slate-600 dark:text-slate-300"
+            htmlFor="selected-text"
+          >
+            Text
+          </label>
+          <textarea
+            id="selected-text"
+            key={object.id}
+            defaultValue={object.text}
+            disabled={isReadOnly}
+            onBlur={(event) => updateText(event.target.value)}
+            className="min-h-20 w-full rounded-md border border-slate-200 bg-white p-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+          />
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
+              <span>Font size</span>
+              <span>{object.fontSize ?? 24}px</span>
+            </div>
+            <Slider
+              value={[object.fontSize ?? 24]}
+              min={12}
+              max={120}
+              step={1}
+              disabled={isReadOnly}
+              onPointerDown={saveHistory}
+              onValueChange={([value]) => updateFontSize(value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {canResize && (
+        <div className="grid grid-cols-2 gap-2 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+          <label className="space-y-1 text-xs text-slate-500" htmlFor="selected-object-width">
+            Width
+            <input
+              id="selected-object-width"
+              type="number"
+              min="1"
+              defaultValue={Math.round(Math.abs(object.width!))}
+              disabled={isReadOnly}
+              onFocus={saveHistory}
+              onBlur={(event) => resize('width', event.target.value)}
+              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+            />
+          </label>
+          <label className="space-y-1 text-xs text-slate-500" htmlFor="selected-object-height">
+            Height
+            <input
+              id="selected-object-height"
+              type="number"
+              min="1"
+              defaultValue={Math.round(Math.abs(object.height!))}
+              disabled={isReadOnly}
+              onFocus={saveHistory}
+              onBlur={(event) => resize('height', event.target.value)}
+              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+            />
+          </label>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-2 border-t border-blue-200 pt-3 dark:border-blue-500/20">
