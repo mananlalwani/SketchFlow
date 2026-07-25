@@ -141,7 +141,14 @@ export function exportAsSVG(
   // Render objects
   for (const obj of objects) {
     const svg = objectToSVG(obj);
-    if (svg) elements.push(svg);
+    if (!svg) continue;
+    if (obj.rotation && obj.x !== undefined && obj.y !== undefined) {
+      const centerX = obj.x + (obj.width ?? 0) / 2;
+      const centerY = obj.y + (obj.height ?? 0) / 2;
+      elements.push(`<g transform="rotate(${obj.rotation} ${centerX} ${centerY})">${svg}</g>`);
+    } else {
+      elements.push(svg);
+    }
   }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -500,6 +507,13 @@ function renderObjectsToContext(ctx: CanvasRenderingContext2D, objects: DrawingO
     ctx.lineWidth = obj.size;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    if (obj.rotation && obj.x !== undefined && obj.y !== undefined) {
+      const centerX = obj.x + (obj.width ?? 0) / 2;
+      const centerY = obj.y + (obj.height ?? 0) / 2;
+      ctx.translate(centerX, centerY);
+      ctx.rotate((obj.rotation * Math.PI) / 180);
+      ctx.translate(-centerX, -centerY);
+    }
 
     switch (obj.type) {
       case 'stroke':
