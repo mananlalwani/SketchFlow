@@ -181,6 +181,33 @@ describe('ProjectService', () => {
       );
     });
 
+    it('applies an object batch atomically without replacing unrelated objects', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        ...project,
+        data: { objects: [{ id: 'existing', type: 'rectangle' }] },
+      } as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockResolvedValue({} as never);
+
+      await expect(
+        service.commitCollaborationOperation({
+          ...operation,
+          operationId: 'operation_batch_1',
+          kind: 'batch',
+          data: {
+            operations: [
+              { kind: 'upsert-object', data: { object: { id: 'new', type: 'ellipse' } } },
+              { kind: 'delete-object', data: { id: 'existing' } },
+            ],
+          },
+        }),
+      ).resolves.toMatchObject({
+        status: 'applied',
+        data: { objects: [{ id: 'new', type: 'ellipse' }] },
+      });
+    });
+
     it('returns an existing matching operation as a duplicate without writing again', async () => {
       const receiptHash = 'a'.repeat(64);
       vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue({

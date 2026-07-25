@@ -9,12 +9,11 @@ interface RendererViewport {
   viewY: number;
 }
 
-export type RendererWorkerStatus = 'unsupported' | 'starting' | 'ready' | 'failed';
+export type RendererWorkerStatus = 'fallback' | 'starting' | 'ready' | 'failed';
 
 /**
- * Owns the OffscreenCanvas renderer lifecycle. Browsers without transferable
- * OffscreenCanvas are explicitly unsupported rather than being sent a
- * non-functional fallback protocol message.
+ * Owns the OffscreenCanvas renderer lifecycle. Unsupported browsers use a
+ * main-thread retained-mode fallback instead of being blocked from editing.
  */
 export function useCanvasRendererWorker(
   canvasRef: RefObject<HTMLCanvasElement>,
@@ -60,7 +59,7 @@ export function useCanvasRendererWorker(
 
     if (!('transferControlToOffscreen' in canvas)) {
       console.error('OffscreenCanvas rendering is not supported by this browser.');
-      setStatus('unsupported');
+      setStatus('fallback');
       return;
     }
 

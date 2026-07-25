@@ -144,7 +144,7 @@ describe('useCanvasRendererWorker', () => {
     error.mockRestore();
   });
 
-  it('reports unsupported when transferable OffscreenCanvas is unavailable', () => {
+  it('uses the main-thread fallback when transferable OffscreenCanvas is unavailable', () => {
     const canvas = {
       getBoundingClientRect: () => ({ width: 100, height: 50 }),
     } as unknown as HTMLCanvasElement;
@@ -156,7 +156,7 @@ describe('useCanvasRendererWorker', () => {
       useCanvasRendererWorker(canvasRef, workerRef, { zoom: 1, viewX: 0, viewY: 0 }, 'light'),
     );
 
-    expect(result.current).toBe('unsupported');
+    expect(result.current).toBe('fallback');
     expect(constructor).not.toHaveBeenCalled();
     error.mockRestore();
   });

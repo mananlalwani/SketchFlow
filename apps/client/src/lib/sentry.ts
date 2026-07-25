@@ -74,7 +74,9 @@ export function captureOperationalSignal(
     | 'api_5xx'
     | 'persistence_conflict'
     | 'socket_reconnect_exhausted'
-    | 'socket_adapter_error',
+    | 'socket_adapter_error'
+    | 'collaboration_queue_failed'
+    | 'collaboration_replay_conflict',
   details: Record<string, string | number | boolean> = {},
 ): void {
   Sentry.captureMessage(signal, {

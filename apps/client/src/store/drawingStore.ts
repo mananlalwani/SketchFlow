@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { trackToolSelection, trackObjectCreated, trackFeatureUsage } from '../lib/analytics';
 import { FEATURES } from '../config/features';
+import type { StrokePoint } from '@sketchflow/shared';
 
 export type Tool =
   | 'pen'
@@ -43,7 +44,7 @@ export interface DrawingObject {
     | 'image'
     | 'arrow'
     | 'star';
-  points?: { x: number; y: number }[];
+  points?: StrokePoint[];
   x?: number;
   y?: number;
   width?: number;

@@ -3,7 +3,7 @@ import { logger } from '../utils/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { collaborationCommitSchema } from '../validation/project.js';
 
-export type CollaborationCommitKind = 'replace-project' | 'upsert-object' | 'delete-object';
+export type CollaborationCommitKind = 'replace-project' | 'upsert-object' | 'delete-object' | 'batch';
 
 export interface CollaborationCommitInput {
   projectId: string;
@@ -109,7 +109,7 @@ function asCanonicalDocument(data: unknown): CanonicalDocument | null {
 
 function applyObjectOperation(
   currentData: unknown,
-  kind: Exclude<CollaborationCommitKind, 'replace-project'>,
+  kind: Exclude<CollaborationCommitKind, 'replace-project' | 'batch'>,
   payload: unknown,
 ): CanonicalDocument | null {
   const document = asCanonicalDocument(currentData);
@@ -132,6 +132,23 @@ function applyObjectOperation(
   const id = input.id;
   if (typeof id !== 'string' || id.length === 0 || id.length > 200) return null;
   return { ...document, objects: document.objects.filter((entry) => entry.id !== id) };
+}
+
+/** Applies a group atomically so undo/redo never falls back to a board snapshot. */
+function applyBatchOperation(currentData: unknown, payload: unknown): CanonicalDocument | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const operations = (payload as { operations?: unknown }).operations;
+  if (!Array.isArray(operations) || operations.length === 0 || operations.length > 100) return null;
+
+  let data: CanonicalDocument | null = asCanonicalDocument(currentData);
+  for (const operation of operations) {
+    if (!operation || typeof operation !== 'object' || Array.isArray(operation)) return null;
+    const { kind, data: operationData } = operation as { kind?: unknown; data?: unknown };
+    if (kind !== 'upsert-object' && kind !== 'delete-object') return null;
+    data = applyObjectOperation(data, kind, operationData);
+    if (!data) return null;
+  }
+  return data;
 }
 
 export class ProjectService {
@@ -202,7 +219,9 @@ export class ProjectService {
         const data =
           input.kind === 'replace-project'
             ? input.data
-            : applyObjectOperation(project.data, input.kind, input.data);
+            : input.kind === 'batch'
+              ? applyBatchOperation(project.data, input.data)
+              : applyObjectOperation(project.data, input.kind, input.data);
         if (!data) return { status: 'invalid' as const, operationId: input.operationId };
 
         const title = input.title?.trim() ?? project.title;

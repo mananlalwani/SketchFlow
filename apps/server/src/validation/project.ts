@@ -51,7 +51,7 @@ export const collaborationCommitSchema = z
       .max(128)
       .regex(/^[A-Za-z0-9_-]+$/),
     expectedRevision: z.number().int().positive(),
-    kind: z.enum(['replace-project', 'upsert-object', 'delete-object']),
+    kind: z.enum(['replace-project', 'upsert-object', 'delete-object', 'batch']),
     data: z.unknown().refine(isBoundedProjectData, 'Project data exceeds safety limits'),
   })
   .strict();

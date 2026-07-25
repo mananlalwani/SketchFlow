@@ -91,8 +91,11 @@ const envSchema = z
     }
 
     if (data.CORS_ORIGINS.length === 0) {
-      // Not fatal - CORS falls back to allowing all origins when unset
-      console.warn('⚠️  CORS_ORIGINS not set. All origins allowed via CORS.');
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['CORS_ORIGINS'],
+        message: 'Production requires explicit CORS_ORIGINS',
+      });
     }
 
     if (data.SOCKET_INSTANCE_COUNT > 1 && !data.REDIS_URL) {
@@ -101,6 +104,16 @@ const envSchema = z
         path: ['REDIS_URL'],
         message: 'REDIS_URL is required when SOCKET_INSTANCE_COUNT is greater than 1',
       });
+    }
+
+    for (const required of ['RELEASE_ID', 'SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT'] as const) {
+      if (!data[required]) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [required],
+          message: `Production requires ${required} for release observability`,
+        });
+      }
     }
   });
 

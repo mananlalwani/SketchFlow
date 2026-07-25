@@ -39,6 +39,7 @@ describe('canvas pointer helpers', () => {
           y1: 4,
           color: '#000',
           size: 2,
+          pressure: 0.25,
           alpha: 1,
           groupId: 'a',
           timestamp: 1,
@@ -50,15 +51,16 @@ describe('canvas pointer helpers', () => {
           y1: 6,
           color: '#000',
           size: 2,
+          pressure: 0.8,
           alpha: 1,
           groupId: 'a',
           timestamp: 2,
         },
       ]),
     ).toEqual([
-      { x: 1, y: 2 },
-      { x: 3, y: 4 },
-      { x: 5, y: 6 },
+      { x: 1, y: 2, pressure: 0.25, width: 2 },
+      { x: 3, y: 4, pressure: 0.25, width: 2 },
+      { x: 5, y: 6, pressure: 0.8, width: 2 },
     ]);
   });
 
