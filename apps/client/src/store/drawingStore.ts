@@ -58,6 +58,7 @@ export interface DrawingObject {
   rotation?: number;
   hidden?: boolean;
   locked?: boolean;
+  name?: string;
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
   imageData?: string; // Base64 data URL for images

@@ -113,6 +113,25 @@ export function SelectionInspector() {
         {object.locked ? 'Unlock object' : 'Lock object'}
       </Button>
 
+      <div className="space-y-1">
+        <label className="text-xs text-slate-500" htmlFor="selected-object-name">
+          Layer name
+        </label>
+        <input
+          id="selected-object-name"
+          key={object.id}
+          defaultValue={object.name ?? ''}
+          disabled={isReadOnly}
+          placeholder={`Untitled ${object.type}`}
+          onFocus={saveHistory}
+          onBlur={(event) => {
+            const name = event.target.value.trim();
+            if (name !== (object.name ?? '')) updateObject(object.id, { name: name || undefined });
+          }}
+          className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+        />
+      </div>
+
       <div className="grid grid-cols-[1fr_auto] items-center gap-3">
         <label
           className="text-sm text-slate-600 dark:text-slate-300"
