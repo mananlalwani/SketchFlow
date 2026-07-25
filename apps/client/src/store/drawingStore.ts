@@ -88,6 +88,7 @@ interface DrawingState {
   brushColor: string;
   brushOpacity: number;
   selectedObjectId?: string;
+  selectedObjectIds: string[];
 
   // UI state
   isConnected: boolean;
@@ -163,6 +164,8 @@ interface DrawingState {
   setBrushColor: (color: string) => void;
   setBrushOpacity: (opacity: number) => void;
   setSelectedObject: (id: string | undefined) => void;
+  setSelectedObjects: (ids: string[]) => void;
+  toggleSelectedObject: (id: string) => void;
   updateObject: (id: string, changes: Partial<DrawingObject>) => void;
 
   addObject: (object: DrawingObject) => void;
@@ -228,6 +231,7 @@ export const useDrawingStore = create<DrawingState>()(
         brushColor: '#ffffff',
         brushOpacity: 1,
         selectedObjectId: undefined,
+        selectedObjectIds: [],
 
         isConnected: false,
         showToolbar: true,
@@ -282,6 +286,9 @@ export const useDrawingStore = create<DrawingState>()(
             selectedObjectId: objects.some((object) => object.id === state.selectedObjectId)
               ? state.selectedObjectId
               : undefined,
+            selectedObjectIds: state.selectedObjectIds.filter((id) =>
+              objects.some((object) => object.id === id),
+            ),
             unsavedChanges: true,
             documentVersion: state.documentVersion + 1,
           })),
@@ -316,6 +323,7 @@ export const useDrawingStore = create<DrawingState>()(
             objects,
             objectCount: objects.length,
             selectedObjectId: undefined,
+            selectedObjectIds: [],
             history: [objects],
             historyIndex: 0,
             unsavedChanges: false,
@@ -349,6 +357,7 @@ export const useDrawingStore = create<DrawingState>()(
             objects: [],
             objectCount: 0,
             selectedObjectId: undefined,
+            selectedObjectIds: [],
             history: [[]],
             historyIndex: 0,
             projectTitle: 'Untitled',
@@ -372,7 +381,16 @@ export const useDrawingStore = create<DrawingState>()(
         setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(100, size)) }),
         setBrushColor: (color) => set({ brushColor: color }),
         setBrushOpacity: (opacity) => set({ brushOpacity: Math.max(0.1, Math.min(1, opacity)) }),
-        setSelectedObject: (id) => set({ selectedObjectId: id }),
+        setSelectedObject: (id) => set({ selectedObjectId: id, selectedObjectIds: id ? [id] : [] }),
+        setSelectedObjects: (ids) =>
+          set({ selectedObjectId: ids[0], selectedObjectIds: [...new Set(ids)] }),
+        toggleSelectedObject: (id) =>
+          set((state) => {
+            const selectedObjectIds = state.selectedObjectIds.includes(id)
+              ? state.selectedObjectIds.filter((candidate) => candidate !== id)
+              : [...state.selectedObjectIds, id];
+            return { selectedObjectIds, selectedObjectId: selectedObjectIds[0] };
+          }),
         updateObject: (id, changes) =>
           set((state) => {
             const index = state.objects.findIndex((object) => object.id === id);
@@ -411,6 +429,7 @@ export const useDrawingStore = create<DrawingState>()(
               objects: newObjects,
               objectCount: newObjects.length,
               selectedObjectId: state.selectedObjectId === id ? undefined : state.selectedObjectId,
+              selectedObjectIds: state.selectedObjectIds.filter((candidate) => candidate !== id),
               unsavedChanges: true,
               documentVersion: state.documentVersion + 1,
             };
@@ -426,6 +445,7 @@ export const useDrawingStore = create<DrawingState>()(
             objects: [],
             objectCount: 0,
             selectedObjectId: undefined,
+            selectedObjectIds: [],
             unsavedChanges: true,
             documentVersion: currentState.documentVersion + 1,
             needsFullRedraw: true,

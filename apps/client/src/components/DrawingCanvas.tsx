@@ -32,7 +32,11 @@ import {
   getPointerSamples,
   screenPointToWorld,
 } from '@/lib/canvasPointer';
-import { getObjectDragOffset, translateObjectInCollection } from '@/lib/canvasObjectTransform';
+import {
+  getObjectDragOffset,
+  translateObjectInCollection,
+  translateObjectsBy,
+} from '@/lib/canvasObjectTransform';
 import { postRendererViewport } from '@/lib/canvasRendererViewport';
 import { drawingObjectsToRendererScene } from '@/lib/canvasRendererObject';
 import { useToast } from '@/hooks/use-toast';
@@ -143,6 +147,9 @@ export function DrawingCanvas() {
     objectCount,
     selectedObjectId,
     setSelectedObject,
+    selectedObjectIds,
+    setSelectedObjects,
+    toggleSelectedObject,
   } = useDrawingStore();
 
   const selectedObject = objects.find((object) => object.id === selectedObjectId);
@@ -193,8 +200,15 @@ export function DrawingCanvas() {
   const [textInputValue, setTextInputValue] = useState('');
   const [draggedObject, setDraggedObject] = useState<{
     id: string;
+    ids: string[];
     offsetX: number;
     offsetY: number;
+  } | null>(null);
+  const [selectionRect, setSelectionRect] = useState<{
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
   } | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const draggedObjectsRef = useRef<DrawingObject[] | null>(null);
@@ -733,15 +747,26 @@ export function DrawingCanvas() {
         if (hitId) {
           const obj = objects.find((o) => o.id === hitId);
           if (obj) {
-            setSelectedObject(hitId);
+            if (e.shiftKey) {
+              toggleSelectedObject(hitId);
+              return;
+            }
+            if (!selectedObjectIds.includes(hitId)) setSelectedObject(hitId);
             if (obj.locked) return;
             const offset = getObjectDragOffset(obj, worldPos);
-            setDraggedObject({ id: hitId, offsetX: offset.x, offsetY: offset.y });
+            const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : [hitId];
+            setDraggedObject({ id: hitId, ids, offsetX: offset.x, offsetY: offset.y });
             saveHistory();
             return;
           }
         }
-        setSelectedObject(undefined);
+        if (!e.shiftKey) setSelectedObject(undefined);
+        setSelectionRect({
+          startX: worldPos.x,
+          startY: worldPos.y,
+          endX: worldPos.x,
+          endY: worldPos.y,
+        });
         return;
       }
 
@@ -1060,6 +1085,8 @@ export function DrawingCanvas() {
       canDraw,
       toast,
       setSelectedObject,
+      selectedObjectIds,
+      toggleSelectedObject,
     ],
   );
 
@@ -1117,18 +1144,32 @@ export function DrawingCanvas() {
         return;
       }
 
+      if (selectionRect) {
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        setSelectionRect((current) =>
+          current ? { ...current, endX: worldPos.x, endY: worldPos.y } : current,
+        );
+        return;
+      }
+
       if (draggedObject) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const currentObjects = draggedObjectsRef.current || objects;
         const obj = currentObjects.find((o) => o.id === draggedObject.id);
 
         if (obj) {
-          const updatedObjects = translateObjectInCollection(
-            currentObjects,
-            draggedObject.id,
-            worldPos,
-            { x: draggedObject.offsetX, y: draggedObject.offsetY },
-          );
+          const updatedObjects =
+            draggedObject.ids.length > 1
+              ? translateObjectsBy(
+                  currentObjects,
+                  draggedObject.ids,
+                  worldPos.x - draggedObject.offsetX - (obj.x ?? obj.points?.[0]?.x ?? 0),
+                  worldPos.y - draggedObject.offsetY - (obj.y ?? obj.points?.[0]?.y ?? 0),
+                )
+              : translateObjectInCollection(currentObjects, draggedObject.id, worldPos, {
+                  x: draggedObject.offsetX,
+                  y: draggedObject.offsetY,
+                });
 
           draggedObjectsRef.current = updatedObjects;
 
@@ -1316,6 +1357,7 @@ export function DrawingCanvas() {
       isShiftPressed,
       isConstraintMode,
       isPanning,
+      selectionRect,
       panStart,
       zoom,
       setView,
@@ -1336,6 +1378,29 @@ export function DrawingCanvas() {
   );
 
   const stopDrawing = useCallback(() => {
+    if (selectionRect) {
+      const left = Math.min(selectionRect.startX, selectionRect.endX);
+      const right = Math.max(selectionRect.startX, selectionRect.endX);
+      const top = Math.min(selectionRect.startY, selectionRect.endY);
+      const bottom = Math.max(selectionRect.startY, selectionRect.endY);
+      const ids = objects
+        .filter((object) => {
+          if (object.hidden || object.locked) return false;
+          const bounds = getObjectBounds(object);
+          return (
+            bounds &&
+            bounds.x >= left &&
+            bounds.y >= top &&
+            bounds.x + bounds.width <= right &&
+            bounds.y + bounds.height <= bottom
+          );
+        })
+        .map((object) => object.id);
+      setSelectedObjects(ids);
+      setSelectionRect(null);
+      return;
+    }
+
     if (draggedObject) {
       if (draggedObjectsRef.current) {
         const updatedObjects = draggedObjectsRef.current;
@@ -1623,6 +1688,9 @@ export function DrawingCanvas() {
     starPoints,
     theme,
     setObjects,
+    selectionRect,
+    setSelectedObjects,
+    objects,
   ]);
 
   const handleZoomStep = useCallback(
@@ -1926,6 +1994,20 @@ export function DrawingCanvas() {
             strokeWidth="2"
             strokeDasharray="6 4"
             transform={`rotate(${selectedRotation} ${(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom} ${(selectedBounds.y + selectedBounds.height / 2 - viewY) * zoom})`}
+          />
+        </svg>
+      )}
+      {selectionRect && (
+        <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full">
+          <rect
+            x={(Math.min(selectionRect.startX, selectionRect.endX) - viewX) * zoom}
+            y={(Math.min(selectionRect.startY, selectionRect.endY) - viewY) * zoom}
+            width={Math.abs(selectionRect.endX - selectionRect.startX) * zoom}
+            height={Math.abs(selectionRect.endY - selectionRect.startY) * zoom}
+            fill="rgba(37, 99, 235, 0.12)"
+            stroke="#2563eb"
+            strokeWidth="1.5"
+            strokeDasharray="5 3"
           />
         </svg>
       )}
