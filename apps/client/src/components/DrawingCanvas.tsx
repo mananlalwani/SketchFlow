@@ -147,6 +147,7 @@ export function DrawingCanvas() {
 
   const selectedObject = objects.find((object) => object.id === selectedObjectId);
   const selectedBounds = selectedObject ? getObjectBounds(selectedObject) : null;
+  const selectedRotation = selectedObject?.rotation ?? 0;
 
   const { requestCanonicalHydration, commitCollaboration, isConnected, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
@@ -1923,6 +1924,7 @@ export function DrawingCanvas() {
             stroke="#2563eb"
             strokeWidth="2"
             strokeDasharray="6 4"
+            transform={`rotate(${selectedRotation} ${(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom} ${(selectedBounds.y + selectedBounds.height / 2 - viewY) * zoom})`}
           />
         </svg>
       )}
