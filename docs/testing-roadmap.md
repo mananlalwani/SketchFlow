@@ -1,7 +1,7 @@
 # Test roadmap
 
-The repository has unit tests, server REST/Socket.IO integration tests, and Playwright specs. The
-legacy `apps/client/src/__tests__/todo.test.ts` still records future work; it has not been replaced.
+The repository has unit tests, server REST/Socket.IO integration tests, and Playwright specs. Future
+test work is tracked here rather than through skipped placeholder tests.
 
 Existing coverage includes authenticated server boundaries, collaboration receipts, queue storage,
 renderer-worker lifecycle/fallback selection, pressure-point retention, PWA recovery/update, large
