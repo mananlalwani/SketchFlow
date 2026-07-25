@@ -4,7 +4,7 @@ ARG TARGETPLATFORM
 
 # This target is built independently in CI so Docker's own context rules—not a
 # filesystem glob approximation—prove local env files and maps never enter it.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS context-audit
+FROM --platform=$BUILDPLATFORM node:24-alpine AS context-audit
 WORKDIR /context
 COPY . .
 RUN test ! -e .env && \
@@ -12,7 +12,7 @@ RUN test ! -e .env && \
     test ! -e apps/server/.env && \
     ! find . -type f \( -name '*.map' -o \( \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' \) \) -print -quit | grep -q .
 
-FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -79,7 +79,7 @@ RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
     pnpm db:generate
 
 # --- Production Stage ---
-FROM --platform=$TARGETPLATFORM node:20-alpine AS runner
+FROM --platform=$TARGETPLATFORM node:24-alpine AS runner
 
 WORKDIR /app
 
