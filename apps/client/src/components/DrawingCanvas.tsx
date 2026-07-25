@@ -107,6 +107,30 @@ function getObjectBounds(object: DrawingObject) {
   };
 }
 
+type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate';
+
+interface ActiveTransform {
+  handle: TransformHandle;
+  object: DrawingObject;
+  preserveAspectRatio: boolean;
+}
+
+function pointInObjectSpace(point: { x: number; y: number }, object: DrawingObject) {
+  const x = object.x ?? 0;
+  const y = object.y ?? 0;
+  const width = object.width ?? 0;
+  const height = object.height ?? 0;
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const radians = -((object.rotation ?? 0) * Math.PI) / 180;
+  const deltaX = point.x - centerX;
+  const deltaY = point.y - centerY;
+  return {
+    x: centerX + deltaX * Math.cos(radians) - deltaY * Math.sin(radians),
+    y: centerY + deltaX * Math.sin(radians) + deltaY * Math.cos(radians),
+  };
+}
+
 export function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -150,11 +174,26 @@ export function DrawingCanvas() {
     selectedObjectIds,
     setSelectedObjects,
     toggleSelectedObject,
+    updateObject,
+    projectRole,
   } = useDrawingStore();
 
   const selectedObject = objects.find((object) => object.id === selectedObjectId);
   const selectedBounds = selectedObject ? getObjectBounds(selectedObject) : null;
   const selectedRotation = selectedObject?.rotation ?? 0;
+  const canDirectTransform = Boolean(
+    selectedObject &&
+      selectedObjectIds.length === 1 &&
+      !selectedObject.locked &&
+      projectRole !== 'viewer' &&
+      selectedObject.type !== 'stroke' &&
+      selectedObject.type !== 'text' &&
+      !selectedObject.points?.length &&
+      selectedObject.x !== undefined &&
+      selectedObject.y !== undefined &&
+      selectedObject.width !== undefined &&
+      selectedObject.height !== undefined,
+  );
 
   const { requestCanonicalHydration, commitCollaboration, isConnected, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
@@ -210,6 +249,7 @@ export function DrawingCanvas() {
     endX: number;
     endY: number;
   } | null>(null);
+  const [activeTransform, setActiveTransform] = useState<ActiveTransform | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const draggedObjectsRef = useRef<DrawingObject[] | null>(null);
   const dragRedrawScheduledRef = useRef(false);
@@ -257,7 +297,8 @@ export function DrawingCanvas() {
       !unsavedChanges ||
       projectRevision === undefined ||
       collaborationCommitInFlightRef.current ||
-      draggedObject
+      draggedObject ||
+      activeTransform
     ) {
       return;
     }
@@ -362,6 +403,7 @@ export function DrawingCanvas() {
     setSaveStatus,
     unsavedChanges,
     draggedObject,
+    activeTransform,
   ]);
 
   // Replay persisted semantic edits after a reconnect or browser restart. Object
@@ -717,6 +759,85 @@ export function DrawingCanvas() {
     },
     [viewX, viewY, zoom],
   );
+
+  useEffect(() => {
+    if (!activeTransform) return;
+    const { object, handle, preserveAspectRatio } = activeTransform;
+    if (
+      object.x === undefined ||
+      object.y === undefined ||
+      object.width === undefined ||
+      object.height === undefined
+    )
+      return;
+    const objectX = object.x;
+    const objectY = object.y;
+    const objectWidth = object.width;
+    const objectHeight = object.height;
+
+    const onMove = (event: PointerEvent) => {
+      const worldPoint = screenToWorld(event.clientX, event.clientY);
+      if (handle === 'rotate') {
+        const centerX = objectX + objectWidth / 2;
+        const centerY = objectY + objectHeight / 2;
+        const rotation =
+          ((Math.atan2(worldPoint.y - centerY, worldPoint.x - centerX) * 180) / Math.PI +
+            90 +
+            360) %
+          360;
+        updateObject(object.id, { rotation });
+        return;
+      }
+
+      const point = pointInObjectSpace(worldPoint, object);
+      const left = objectX;
+      const top = objectY;
+      const right = objectX + objectWidth;
+      const bottom = objectY + objectHeight;
+      let nextLeft = left;
+      let nextTop = top;
+      let nextRight = right;
+      let nextBottom = bottom;
+      if (handle.includes('w')) nextLeft = Math.min(point.x, right - 8);
+      if (handle.includes('e')) nextRight = Math.max(point.x, left + 8);
+      if (handle.includes('n')) nextTop = Math.min(point.y, bottom - 8);
+      if (handle.includes('s')) nextBottom = Math.max(point.y, top + 8);
+
+      let width = nextRight - nextLeft;
+      let height = nextBottom - nextTop;
+      if (preserveAspectRatio && !['n', 'e', 's', 'w'].includes(handle)) {
+        const ratio = Math.abs(objectWidth / objectHeight) || 1;
+        if (width / height > ratio) height = width / ratio;
+        else width = height * ratio;
+        if (handle.includes('w')) nextLeft = nextRight - width;
+        else nextRight = nextLeft + width;
+        if (handle.includes('n')) nextTop = nextBottom - height;
+        else nextBottom = nextTop + height;
+      }
+
+      updateObject(object.id, {
+        x: nextLeft,
+        y: nextTop,
+        width: nextRight - nextLeft,
+        height: nextBottom - nextTop,
+      });
+    };
+    const onUp = () => setActiveTransform(null);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [activeTransform, screenToWorld, updateObject]);
+
+  const startTransform = (event: React.PointerEvent<SVGElement>, handle: TransformHandle) => {
+    if (!selectedObject || selectedObject.locked || projectRole === 'viewer') return;
+    event.preventDefault();
+    event.stopPropagation();
+    saveHistory();
+    setActiveTransform({ handle, object: selectedObject, preserveAspectRatio: event.shiftKey });
+  };
 
   const startDrawing = useCallback(
     (e: React.PointerEvent) => {
@@ -1992,18 +2113,67 @@ export function DrawingCanvas() {
       </svg>
       {selectedBounds && (
         <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible">
-          <rect
-            x={(selectedBounds.x - viewX) * zoom - 5}
-            y={(selectedBounds.y - viewY) * zoom - 5}
-            width={Math.max(12, selectedBounds.width * zoom + 10)}
-            height={Math.max(12, selectedBounds.height * zoom + 10)}
-            rx="4"
-            fill="none"
-            stroke="#2563eb"
-            strokeWidth="2"
-            strokeDasharray="6 4"
+          <g
             transform={`rotate(${selectedRotation} ${(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom} ${(selectedBounds.y + selectedBounds.height / 2 - viewY) * zoom})`}
-          />
+          >
+            <rect
+              x={(selectedBounds.x - viewX) * zoom - 5}
+              y={(selectedBounds.y - viewY) * zoom - 5}
+              width={Math.max(12, selectedBounds.width * zoom + 10)}
+              height={Math.max(12, selectedBounds.height * zoom + 10)}
+              rx="2"
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth="2"
+            />
+            {canDirectTransform && (
+              <>
+                <line
+                  x1={(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom}
+                  y1={(selectedBounds.y - viewY) * zoom - 5}
+                  x2={(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom}
+                  y2={(selectedBounds.y - viewY) * zoom - 28}
+                  stroke="#2563eb"
+                  strokeWidth="2"
+                />
+                <circle
+                  className="pointer-events-auto cursor-grab active:cursor-grabbing"
+                  cx={(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom}
+                  cy={(selectedBounds.y - viewY) * zoom - 32}
+                  r="6"
+                  fill="white"
+                  stroke="#2563eb"
+                  strokeWidth="2"
+                  onPointerDown={(event) => startTransform(event, 'rotate')}
+                />
+                {(
+                  [
+                    ['nw', 0, 0],
+                    ['n', 0.5, 0],
+                    ['ne', 1, 0],
+                    ['e', 1, 0.5],
+                    ['se', 1, 1],
+                    ['s', 0.5, 1],
+                    ['sw', 0, 1],
+                    ['w', 0, 0.5],
+                  ] as const
+                ).map(([handle, horizontal, vertical]) => (
+                  <rect
+                    key={handle}
+                    className="pointer-events-auto cursor-nwse-resize fill-white"
+                    x={(selectedBounds.x + selectedBounds.width * horizontal - viewX) * zoom - 5}
+                    y={(selectedBounds.y + selectedBounds.height * vertical - viewY) * zoom - 5}
+                    width="10"
+                    height="10"
+                    rx="1"
+                    stroke="#2563eb"
+                    strokeWidth="2"
+                    onPointerDown={(event) => startTransform(event, handle)}
+                  />
+                ))}
+              </>
+            )}
+          </g>
         </svg>
       )}
       {selectionRect && (

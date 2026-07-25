@@ -45,10 +45,12 @@ export function PropertiesPanel() {
   const fontSize = Math.max(16, brushSize * 2);
 
   return (
-    <div className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-l border-slate-200 dark:border-white/10 h-full p-4 flex flex-col gap-6 overflow-y-auto z-20 transition-colors duration-200">
-      <div className="font-semibold text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-        Properties
+    <div className="w-72 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-l border-slate-200 dark:border-white/10 h-full p-5 flex flex-col gap-6 overflow-y-auto z-20 transition-colors duration-200">
+      <div className="font-semibold text-xs text-slate-500 dark:text-slate-400 uppercase tracking-[0.14em]">
+        Inspector
       </div>
+
+      <SelectionInspector />
 
       {showBrushProps && (
         <>
@@ -279,8 +281,6 @@ export function PropertiesPanel() {
           </div>
         </div>
       )}
-
-      <SelectionInspector />
 
       <div className="min-h-[220px] space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
         <div className="font-semibold text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wider">
