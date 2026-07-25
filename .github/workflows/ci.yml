@@ -157,6 +157,8 @@ jobs:
           load: true
           tags: sketchflow:ci
           build-args: |
+            BUILDPLATFORM=linux/amd64
+            TARGETPLATFORM=linux/amd64
             RELEASE_ID=${{ github.sha }}
 
       - name: Audit final production image
@@ -227,6 +229,8 @@ jobs:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           build-args: |
+            BUILDPLATFORM=linux/amd64
+            TARGETPLATFORM=linux/arm64
             RELEASE_ID=${{ github.sha }}
             SENTRY_ORG=${{ vars.SENTRY_ORG }}
             SENTRY_PROJECT=${{ vars.SENTRY_PROJECT }}

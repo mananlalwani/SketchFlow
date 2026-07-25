@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+
 # This target is built independently in CI so Docker's own context rules—not a
 # filesystem glob approximation—prove local env files and maps never enter it.
-FROM node:20-alpine AS context-audit
+FROM --platform=$BUILDPLATFORM node:20-alpine AS context-audit
 WORKDIR /context
 COPY . .
 RUN test ! -e .env && \
@@ -9,7 +12,7 @@ RUN test ! -e .env && \
     test ! -e apps/server/.env && \
     ! find . -type f \( -name '*.map' -o \( \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' \) \) -print -quit | grep -q .
 
-FROM node:20-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -25,11 +28,9 @@ RUN pnpm install --frozen-lockfile
 # Build shared package
 RUN pnpm --filter @sketchflow/shared build
 
-# Generate Prisma client (for build). Prisma resolves DATABASE_URL while loading its
-# configuration, so use an inert build-only URL rather than copying a local env file.
-# Use WASM engine to avoid QEMU illegal instruction issues during cross-platform builds.
+# Generate Prisma client (for build). The builder runs on BUILDPLATFORM (native
+# AMD64), so the native Prisma engine works without QEMU emulation issues.
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
-    PRISMA_CLI_QUERY_ENGINE_TYPE=wasm \
     pnpm --filter @sketchflow/server db:generate
 
 # Build client and server. The Sentry token is mounted only for this build step, never
@@ -66,10 +67,10 @@ RUN cp -r apps/server/prisma /app/deploy/prisma
 # Generate Prisma Data Proxy/Client for the production deploy
 WORKDIR /app/deploy
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
-    PRISMA_CLI_QUERY_ENGINE_TYPE=wasm pnpm db:generate
+    pnpm db:generate
 
 # --- Production Stage ---
-FROM node:20-alpine AS runner
+FROM --platform=$TARGETPLATFORM node:20-alpine AS runner
 
 WORKDIR /app
 
