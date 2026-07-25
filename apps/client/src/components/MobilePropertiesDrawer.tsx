@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { Palette, Layers, Settings, Moon, Sun, Trash2, FolderOpen, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LayerStack } from '@/components/LayerStack';
+import { SelectionInspector } from '@/components/SelectionInspector';
 import {
   Drawer,
   DrawerContent,
@@ -267,6 +268,7 @@ export function MobilePropertiesDrawer({
             </TabsContent>
 
             <TabsContent value="layers" className="h-[300px] overflow-y-auto pr-1">
+              <SelectionInspector />
               <LayerStack />
             </TabsContent>
 

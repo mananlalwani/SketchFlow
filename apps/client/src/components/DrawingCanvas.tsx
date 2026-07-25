@@ -69,6 +69,40 @@ function committedStrokeSize(strokes: StrokeData[], fallback: number): number {
   return strokes.reduce((sum, stroke) => sum + stroke.size, 0) / strokes.length;
 }
 
+function getObjectBounds(object: DrawingObject) {
+  if (object.type === 'stroke' && object.points?.length) {
+    const xs = object.points.map((point) => point.x);
+    const ys = object.points.map((point) => point.y);
+    return {
+      x: Math.min(...xs) - object.size,
+      y: Math.min(...ys) - object.size,
+      width: Math.max(...xs) - Math.min(...xs) + object.size * 2,
+      height: Math.max(...ys) - Math.min(...ys) + object.size * 2,
+    };
+  }
+  if (
+    object.x === undefined ||
+    object.y === undefined ||
+    object.width === undefined ||
+    object.height === undefined
+  )
+    return null;
+  if (object.type === 'text') {
+    return {
+      x: object.x,
+      y: object.y - object.height / 2,
+      width: object.width,
+      height: object.height,
+    };
+  }
+  return {
+    x: Math.min(object.x, object.x + object.width),
+    y: Math.min(object.y, object.y + object.height),
+    width: Math.abs(object.width),
+    height: Math.abs(object.height),
+  };
+}
+
 export function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -107,7 +141,12 @@ export function DrawingCanvas() {
     resetView,
     autoShape,
     objectCount,
+    selectedObjectId,
+    setSelectedObject,
   } = useDrawingStore();
+
+  const selectedObject = objects.find((object) => object.id === selectedObjectId);
+  const selectedBounds = selectedObject ? getObjectBounds(selectedObject) : null;
 
   const { requestCanonicalHydration, commitCollaboration, isConnected, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
@@ -693,12 +732,14 @@ export function DrawingCanvas() {
         if (hitId) {
           const obj = objects.find((o) => o.id === hitId);
           if (obj) {
+            setSelectedObject(hitId);
             const offset = getObjectDragOffset(obj, worldPos);
             setDraggedObject({ id: hitId, offsetX: offset.x, offsetY: offset.y });
             saveHistory();
             return;
           }
         }
+        setSelectedObject(undefined);
         return;
       }
 
@@ -1016,6 +1057,7 @@ export function DrawingCanvas() {
       textInputPos,
       canDraw,
       toast,
+      setSelectedObject,
     ],
   );
 
@@ -1869,6 +1911,21 @@ export function DrawingCanvas() {
           strokeWidth={2}
         />
       </svg>
+      {selectedBounds && (
+        <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible">
+          <rect
+            x={(selectedBounds.x - viewX) * zoom - 5}
+            y={(selectedBounds.y - viewY) * zoom - 5}
+            width={Math.max(12, selectedBounds.width * zoom + 10)}
+            height={Math.max(12, selectedBounds.height * zoom + 10)}
+            rx="4"
+            fill="none"
+            stroke="#2563eb"
+            strokeWidth="2"
+            strokeDasharray="6 4"
+          />
+        </svg>
+      )}
       {/* Zoom controls */}
       <div className="absolute top-4 left-4 z-40 flex items-center space-x-2">
         <Button

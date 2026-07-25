@@ -5,6 +5,7 @@ import { ColorPicker } from '@/components/ColorPicker';
 import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
 import { LayerStack } from '@/components/LayerStack';
+import { SelectionInspector } from '@/components/SelectionInspector';
 
 export function PropertiesPanel() {
   const {
@@ -278,6 +279,8 @@ export function PropertiesPanel() {
           </div>
         </div>
       )}
+
+      <SelectionInspector />
 
       <div className="min-h-[220px] space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
         <div className="font-semibold text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wider">
