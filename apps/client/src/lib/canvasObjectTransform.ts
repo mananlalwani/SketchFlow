@@ -59,3 +59,35 @@ export function translateObjectInCollection(
     object.id === objectId ? translateDrawingObject(object, pointer, offset) : object,
   );
 }
+
+/** Moves an arbitrary set of retained objects by a world-space delta. */
+export function translateObjectsBy(
+  objects: DrawingObject[],
+  ids: readonly string[],
+  deltaX: number,
+  deltaY: number,
+): DrawingObject[] {
+  const selected = new Set(ids);
+  return objects.map((object) => {
+    if (!selected.has(object.id)) return object;
+    if (object.type === 'stroke' && object.points?.length) {
+      return {
+        ...object,
+        points: object.points.map((point) => ({
+          ...point,
+          x: point.x + deltaX,
+          y: point.y + deltaY,
+        })),
+      };
+    }
+    return {
+      ...object,
+      x: object.x === undefined ? undefined : object.x + deltaX,
+      y: object.y === undefined ? undefined : object.y + deltaY,
+      points:
+        object.type === 'triangle' && object.points
+          ? object.points.map((point) => ({ ...point, x: point.x + deltaX, y: point.y + deltaY }))
+          : object.points,
+    };
+  });
+}

@@ -32,14 +32,80 @@ export function SelectionInspector() {
   const {
     objects,
     selectedObjectId,
+    selectedObjectIds,
     setSelectedObject,
     updateObject,
     addObject,
     removeObject,
     saveHistory,
     projectRole,
+    setObjects,
+    requestFullRedraw,
   } = useDrawingStore();
+  const selectedObjects = objects.filter((candidate) => selectedObjectIds.includes(candidate.id));
+  const isMultiSelection = selectedObjects.length > 1;
   const object = objects.find((candidate) => candidate.id === selectedObjectId);
+  const alignSelected = (axis: 'x' | 'y', edge: 'min' | 'max') => {
+    const positioned = selectedObjects.filter(
+      (candidate): candidate is DrawingObject & { x: number; y: number } =>
+        candidate.x !== undefined && candidate.y !== undefined,
+    );
+    if (positioned.length < 2) return;
+    const target =
+      edge === 'min'
+        ? Math.min(...positioned.map((candidate) => candidate[axis]))
+        : Math.max(
+            ...positioned.map(
+              (candidate) =>
+                candidate[axis] + (axis === 'x' ? (candidate.width ?? 0) : (candidate.height ?? 0)),
+            ),
+          );
+    saveHistory();
+    setObjects(
+      objects.map((candidate) => {
+        if (!positioned.some((selected) => selected.id === candidate.id)) return candidate;
+        if (axis === 'x')
+          return { ...candidate, x: target - (edge === 'max' ? (candidate.width ?? 0) : 0) };
+        return { ...candidate, y: target - (edge === 'max' ? (candidate.height ?? 0) : 0) };
+      }),
+    );
+    requestFullRedraw();
+  };
+
+  if (isMultiSelection) {
+    return (
+      <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-500/30 dark:bg-blue-500/[0.08]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700 dark:text-blue-300">
+            {selectedObjects.length} objects selected
+          </p>
+          <p className="text-xs text-slate-500">Drag any selected object to move the set.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="sm" variant="secondary" onClick={() => alignSelected('x', 'min')}>
+            Align left
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => alignSelected('x', 'max')}>
+            Align right
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => alignSelected('y', 'min')}>
+            Align top
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => alignSelected('y', 'max')}>
+            Align bottom
+          </Button>
+        </div>
+        <Button
+          className="w-full"
+          variant="ghost"
+          size="sm"
+          onClick={() => setSelectedObject(undefined)}
+        >
+          Done
+        </Button>
+      </section>
+    );
+  }
   if (!object) return null;
 
   const isEditable = projectRole !== 'viewer';

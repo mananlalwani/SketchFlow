@@ -42,8 +42,9 @@ export function LayerStack({ className }: LayerStackProps) {
     saveHistory,
     requestFullRedraw,
     updateObject,
-    selectedObjectId,
     setSelectedObject,
+    selectedObjectIds,
+    toggleSelectedObject,
   } = useDrawingStore();
 
   const moveLayer = (id: string, direction: -1 | 1) => {
@@ -86,7 +87,7 @@ export function LayerStack({ className }: LayerStackProps) {
         <div className="space-y-2">
           {[...objects].reverse().map((object, reverseIndex) => {
             const index = objects.length - 1 - reverseIndex;
-            const isSelected = selectedObjectId === object.id;
+            const isSelected = selectedObjectIds.includes(object.id);
             const label = layerLabel(object);
             return (
               <div
@@ -101,7 +102,10 @@ export function LayerStack({ className }: LayerStackProps) {
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  onClick={() => setSelectedObject(object.id)}
+                  onClick={(event) => {
+                    if (event.shiftKey) toggleSelectedObject(object.id);
+                    else setSelectedObject(object.id);
+                  }}
                   aria-pressed={isSelected}
                 >
                   <span
