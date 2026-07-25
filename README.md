@@ -121,11 +121,11 @@ pnpm --filter @sketchflow/server db:studio
 
 ### Production release
 
-Push a signed-off `v*` tag to publish the versioned GHCR image and GitHub Release. The protected
-`production` GitHub Environment must provide `DEPLOY_WEBHOOK_URL` and `DEPLOY_WEBHOOK_TOKEN`, plus
-`PRODUCTION_APP_URL` and `PRODUCTION_API_URL` variables. The running service must set `RELEASE_ID`,
-`SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, Clerk live credentials, explicit `CORS_ORIGINS`, and
-`REDIS_URL` when scaled beyond one Socket.IO instance. Auto-shape detection is intentionally opt-in.
+Push a signed-off `v*` tag to validate the source, publish a versioned GHCR image, and create a
+GitHub Release. Deployment is intentionally manual: pull the desired image tag on the VPS and restart
+the container. The running service must set `RELEASE_ID`, `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+Clerk live credentials, explicit `CORS_ORIGINS`, and `REDIS_URL` when scaled beyond one Socket.IO
+instance. Auto-shape detection is intentionally opt-in.
 
 ## Docker Support
 
