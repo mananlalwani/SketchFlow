@@ -3,7 +3,7 @@ import { logger } from '../utils/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { collaborationCommitSchema } from '../validation/project.js';
 
-export type CollaborationCommitKind = 'replace-project';
+export type CollaborationCommitKind = 'replace-project' | 'upsert-object' | 'delete-object';
 
 export interface CollaborationCommitInput {
   projectId: string;
@@ -89,6 +89,51 @@ export interface FolderRecord {
   projectCount?: number;
 }
 
+type CanonicalDocument = Record<string, unknown> & { objects: Array<Record<string, unknown>> };
+
+function asCanonicalDocument(data: unknown): CanonicalDocument | null {
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const document = data as Record<string, unknown>;
+  if (!Array.isArray(document.objects)) return null;
+  if (!document.objects.every((item) => item && typeof item === 'object' && !Array.isArray(item)))
+    return null;
+  return { ...document, objects: document.objects as Array<Record<string, unknown>> };
+}
+
+function applyObjectOperation(
+  currentData: unknown,
+  kind: Exclude<CollaborationCommitKind, 'replace-project'>,
+  payload: unknown,
+): CanonicalDocument | null {
+  const document = asCanonicalDocument(currentData);
+  if (!document || !payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const input = payload as Record<string, unknown>;
+
+  if (kind === 'upsert-object') {
+    const object = input.object;
+    if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
+    const id = (object as { id?: unknown }).id;
+    if (typeof id !== 'string' || id.length === 0 || id.length > 200) return null;
+    const nextObject = object as Record<string, unknown>;
+    const index = document.objects.findIndex((entry) => entry.id === id);
+    const objects = [...document.objects];
+    if (index === -1) objects.push(nextObject);
+    else objects[index] = nextObject;
+    return { ...document, objects };
+  }
+
+  const id = input.id;
+  if (typeof id !== 'string' || id.length === 0 || id.length > 200) return null;
+  return { ...document, objects: document.objects.filter((entry) => entry.id !== id) };
+}
+
 export class ProjectService {
   /**
    * Atomically applies a complete canonical project document. Project.data and
@@ -143,7 +188,10 @@ export class ProjectService {
         if (project.userId !== input.userId && collaborator?.role !== 'editor') {
           return { status: 'forbidden' as const, operationId: input.operationId };
         }
-        if (project.revision !== input.expectedRevision) {
+        // Whole-document replacement must still use a matching base revision.
+        // Object operations are commutative for distinct IDs, so they rebase on
+        // the current canonical document instead of rejecting a stale client.
+        if (input.kind === 'replace-project' && project.revision !== input.expectedRevision) {
           return {
             status: 'conflict' as const,
             operationId: input.operationId,
@@ -151,12 +199,18 @@ export class ProjectService {
           };
         }
 
+        const data =
+          input.kind === 'replace-project'
+            ? input.data
+            : applyObjectOperation(project.data, input.kind, input.data);
+        if (!data) return { status: 'invalid' as const, operationId: input.operationId };
+
         const title = input.title?.trim() ?? project.title;
         const updated = await tx.project.updateMany({
-          where: { id: input.projectId, revision: input.expectedRevision },
+          where: { id: input.projectId, revision: project.revision },
           data: {
             title,
-            data: input.data as object,
+            data: data as object,
             revision: { increment: 1 },
             updatedAt: new Date(),
           },
@@ -192,7 +246,7 @@ export class ProjectService {
             : { status: 'not_found' as const, operationId: input.operationId };
         }
 
-        const revision = input.expectedRevision + 1;
+        const revision = project.revision + 1;
         await tx.collaborationOperation.create({
           data: {
             projectId: input.projectId,
@@ -208,7 +262,7 @@ export class ProjectService {
           status: 'applied' as const,
           operationId: input.operationId,
           revision,
-          data: input.data,
+          data,
           title,
         };
       });

@@ -19,7 +19,10 @@ import { useProjectPermissions } from '@/hooks/useProjectPermissions';
 import { useCanvasRendererWorker } from '@/hooks/useCanvasRendererWorker';
 import { useCanvasToolReset } from '@/hooks/useCanvasToolReset';
 import { useCanvasKeyboardShortcuts } from '@/hooks/useCanvasKeyboardShortcuts';
-import { useCanvasCollaborationAdapter } from '@/hooks/useCanvasCollaborationAdapter';
+import {
+  getAuthoritativeObjects,
+  useCanvasCollaborationAdapter,
+} from '@/hooks/useCanvasCollaborationAdapter';
 import { useCanvasImageInput } from '@/hooks/useCanvasImageInput';
 import { findCanvasObjectIdAt } from '@/lib/canvasSelection';
 import {
@@ -150,13 +153,23 @@ export function DrawingCanvas() {
   const workerFlushScheduledRef = useRef(false);
   const strokeGroupRef = useRef<string | null>(null);
   const collaborationCommitInFlightRef = useRef(false);
+  const collaborationObjectsRef = useRef<DrawingObject[]>([]);
+  const collaborationProjectRef = useRef<string | undefined>();
 
-  // A canvas change is a durable collaboration operation, not a delayed REST
-  // autosave. The server acknowledges the canonical revision before peers are
-  // notified, so they always receive a complete, ordered document snapshot.
+  // Canvas mutations are sent as object operations. Distinct objects can be
+  // committed from two devices (including two sessions of the same account)
+  // without one full-board snapshot replacing the other.
   useEffect(() => {
     if (
-      !currentProjectId ||
+      collaborationProjectRef.current !== currentProjectId ||
+      !unsavedChanges ||
+      !currentProjectId
+    ) {
+      collaborationProjectRef.current = currentProjectId;
+      collaborationObjectsRef.current = objects;
+      return;
+    }
+    if (
       !canDraw ||
       !isConnected ||
       !unsavedChanges ||
@@ -167,8 +180,25 @@ export function DrawingCanvas() {
     }
 
     const projectId = currentProjectId;
+    const previous = collaborationObjectsRef.current;
+    const previousById = new Map(previous.map((object) => [object.id, object]));
+    const currentById = new Map(objects.map((object) => [object.id, object]));
+    const changed = objects.filter(
+      (object) => JSON.stringify(previousById.get(object.id)) !== JSON.stringify(object),
+    );
+    const removed = previous.filter((object) => !currentById.has(object.id));
+    const operation =
+      changed.length === 1 && removed.length === 0
+        ? { kind: 'upsert-object' as const, data: { object: changed[0] } }
+        : changed.length === 0 && removed.length === 1
+          ? { kind: 'delete-object' as const, data: { id: removed[0].id } }
+          : {
+              kind: 'replace-project' as const,
+              data: { version: 1, objects, width: WORLD_WIDTH, height: WORLD_HEIGHT },
+            };
     const committedDocumentVersion = documentVersion;
     collaborationCommitInFlightRef.current = true;
+    collaborationObjectsRef.current = objects;
     setSaveStatus('syncing');
     const operationId =
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -181,8 +211,8 @@ export function DrawingCanvas() {
         projectId,
         operationId,
         expectedRevision: projectRevision,
-        kind: 'replace-project',
-        data: { version: 1, objects, width: WORLD_WIDTH, height: WORLD_HEIGHT },
+        kind: operation.kind,
+        data: operation.data,
         title: projectTitle,
       },
       (result) => {
@@ -191,6 +221,17 @@ export function DrawingCanvas() {
         if (state.currentProjectId !== projectId) return;
 
         if (result.status === 'applied' || result.status === 'duplicate') {
+          // The server may have rebased this object operation over an edit that
+          // arrived from another device. Adopt that canonical result when this
+          // is still the exact local edit we acknowledged.
+          const canonicalObjects =
+            result.status === 'applied' ? getAuthoritativeObjects(result.data) : null;
+          if (canonicalObjects && state.documentVersion === committedDocumentVersion) {
+            state.setObjects(canonicalObjects);
+            state.setProjectRevision(result.revision);
+            state.markSaved(useDrawingStore.getState().documentVersion);
+            return;
+          }
           state.setProjectRevision(result.revision);
           state.markSaved(committedDocumentVersion);
           return;

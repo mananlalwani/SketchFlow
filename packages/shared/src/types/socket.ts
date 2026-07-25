@@ -202,7 +202,7 @@ export interface CollaborationCommit {
   projectId: string;
   operationId: string;
   expectedRevision: number;
-  kind: 'replace-project';
+  kind: 'replace-project' | 'upsert-object' | 'delete-object';
   data: unknown;
   title?: string;
 }
@@ -226,7 +226,7 @@ export interface CollaborationAppliedEvent {
   projectId: string;
   operationId: string;
   revision: number;
-  kind: 'replace-project';
+  kind: 'replace-project' | 'upsert-object' | 'delete-object';
   data: unknown;
   title: string;
 }
