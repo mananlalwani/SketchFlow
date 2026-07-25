@@ -61,6 +61,9 @@ export function MobilePropertiesDrawer({
     setTriangleMode,
     starPoints,
     setStarPoints,
+    projectTitle,
+    setProjectTitle,
+    saveStatus,
   } = useDrawingStore();
   const { theme, toggleTheme } = useTheme();
 
@@ -268,6 +271,31 @@ export function MobilePropertiesDrawer({
             </TabsContent>
 
             <TabsContent value="settings" className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="mobile-project-title"
+                  className="text-sm font-medium text-slate-600 dark:text-slate-300"
+                >
+                  Project title
+                </label>
+                <input
+                  id="mobile-project-title"
+                  value={projectTitle}
+                  onChange={(event) => setProjectTitle(event.target.value)}
+                  placeholder="Untitled project"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+                />
+                <p className="text-xs text-slate-400">
+                  {saveStatus === 'failed'
+                    ? 'Saving failed — your local changes are still available.'
+                    : saveStatus === 'conflict'
+                      ? 'This project has a save conflict. Open it on desktop to resolve it.'
+                      : saveStatus === 'syncing'
+                        ? 'Saving changes…'
+                        : 'Changes save automatically.'}
+                </p>
+              </div>
+
               <Button variant="outline" className="w-full justify-between" onClick={toggleTheme}>
                 <span className="flex items-center">
                   {theme === 'dark' ? (
