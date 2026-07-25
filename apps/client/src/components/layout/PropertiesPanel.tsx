@@ -39,7 +39,9 @@ export function PropertiesPanel() {
   const showStarProps = currentTool === 'star';
   const showTextProps = currentTool === 'text';
 
-  const fontSize = Math.max(12, brushSize * 3);
+  // Text objects are rendered at this size in DrawingCanvas. Keep the desktop
+  // preview and controls in lockstep with what is actually committed.
+  const fontSize = Math.max(16, brushSize * 2);
 
   return (
     <div className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-l border-slate-200 dark:border-white/10 h-full p-4 flex flex-col gap-6 overflow-y-auto z-20 transition-colors duration-200">

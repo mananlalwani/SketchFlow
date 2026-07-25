@@ -226,9 +226,7 @@ export function DrawingCanvas() {
     // A batch is atomic at the server and avoids the old full-document fallback
     // for undo/redo and other compound canvas mutations.
     const operation =
-      changes.length === 1
-        ? changes[0]
-        : { kind: 'batch' as const, data: { operations: changes } };
+      changes.length === 1 ? changes[0] : { kind: 'batch' as const, data: { operations: changes } };
     const committedDocumentVersion = documentVersion;
     collaborationCommitInFlightRef.current = true;
     collaborationObjectsRef.current = objects;
@@ -239,56 +237,55 @@ export function DrawingCanvas() {
         : `operation-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
 
     const commit = {
-        protocolVersion: 1 as const,
-        projectId,
-        operationId,
-        expectedRevision: projectRevision,
-        kind: operation.kind,
-        data: operation.data,
-        title: projectTitle,
-      };
+      protocolVersion: 1 as const,
+      projectId,
+      operationId,
+      expectedRevision: projectRevision,
+      kind: operation.kind,
+      data: operation.data,
+      title: projectTitle,
+    };
     // IndexedDB is the source of truth for unsent edits: a tab close or
     // transient socket failure cannot turn an optimistic edit into data loss.
     void enqueueCollaborationOperation({ ...commit, createdAt: Date.now() })
       .then(() =>
-        commitCollaboration(
-          commit,
-      (result) => {
-        collaborationCommitInFlightRef.current = false;
-        const state = useDrawingStore.getState();
-        if (state.currentProjectId !== projectId) return;
+        commitCollaboration(commit, (result) => {
+          collaborationCommitInFlightRef.current = false;
+          const state = useDrawingStore.getState();
+          if (state.currentProjectId !== projectId) return;
 
-        if (result.status === 'applied' || result.status === 'duplicate') {
-          void removeCollaborationOperation(operationId);
-          // The server may have rebased this object operation over an edit that
-          // arrived from another device. Adopt that canonical result when this
-          // is still the exact local edit we acknowledged.
-          const canonicalObjects =
-            result.status === 'applied' ? getAuthoritativeObjects(result.data) : null;
-          if (canonicalObjects && state.documentVersion === committedDocumentVersion) {
-            state.setObjects(canonicalObjects);
+          if (result.status === 'applied' || result.status === 'duplicate') {
+            void removeCollaborationOperation(operationId);
+            // The server may have rebased this object operation over an edit that
+            // arrived from another device. Adopt that canonical result when this
+            // is still the exact local edit we acknowledged.
+            const canonicalObjects =
+              result.status === 'applied' ? getAuthoritativeObjects(result.data) : null;
+            if (canonicalObjects && state.documentVersion === committedDocumentVersion) {
+              state.setObjects(canonicalObjects);
+              state.setProjectRevision(result.revision);
+              state.markSaved(useDrawingStore.getState().documentVersion);
+              return;
+            }
             state.setProjectRevision(result.revision);
-            state.markSaved(useDrawingStore.getState().documentVersion);
+            state.markSaved(committedDocumentVersion);
             return;
           }
-          state.setProjectRevision(result.revision);
-          state.markSaved(committedDocumentVersion);
-          return;
-        }
 
-        if (result.status === 'conflict') {
-          captureOperationalSignal('collaboration_replay_conflict', { replay: false });
+          if (result.status === 'conflict') {
+            captureOperationalSignal('collaboration_replay_conflict', { replay: false });
+            void markCollaborationOperationAttempt(operationId);
+            state.setSaveStatus('conflict');
+            requestCanonicalHydration(projectId);
+            return;
+          }
+
+          state.setSaveStatus(result.status === 'unavailable' ? 'retrying' : 'failed');
+          captureOperationalSignal('collaboration_queue_failed', {
+            unavailable: result.status === 'unavailable',
+          });
           void markCollaborationOperationAttempt(operationId);
-          state.setSaveStatus('conflict');
-          requestCanonicalHydration(projectId);
-          return;
-        }
-
-        state.setSaveStatus(result.status === 'unavailable' ? 'retrying' : 'failed');
-        captureOperationalSignal('collaboration_queue_failed', { unavailable: result.status === 'unavailable' });
-        void markCollaborationOperationAttempt(operationId);
-      },
-        ),
+        }),
       )
       .catch(() => {
         collaborationCommitInFlightRef.current = false;
@@ -324,22 +321,19 @@ export function DrawingCanvas() {
       for (const operation of queued) {
         if (cancelled || !isConnected) break;
         await new Promise<void>((resolve) => {
-          commitCollaboration(
-            { protocolVersion: 1, ...operation },
-            (result) => {
-              if (result.status === 'applied' || result.status === 'duplicate') {
-                void removeCollaborationOperation(operation.operationId);
-                useDrawingStore.getState().setProjectRevision(result.revision);
-              } else {
-                void markCollaborationOperationAttempt(operation.operationId);
-                if (result.status === 'conflict') {
-                  captureOperationalSignal('collaboration_replay_conflict', { replay: true });
-                  requestCanonicalHydration(currentProjectId);
-                }
+          commitCollaboration({ protocolVersion: 1, ...operation }, (result) => {
+            if (result.status === 'applied' || result.status === 'duplicate') {
+              void removeCollaborationOperation(operation.operationId);
+              useDrawingStore.getState().setProjectRevision(result.revision);
+            } else {
+              void markCollaborationOperationAttempt(operation.operationId);
+              if (result.status === 'conflict') {
+                captureOperationalSignal('collaboration_replay_conflict', { replay: true });
+                requestCanonicalHydration(currentProjectId);
               }
-              resolve();
-            },
-          );
+            }
+            resolve();
+          });
         });
       }
     })()
@@ -461,6 +455,50 @@ export function DrawingCanvas() {
     setTextInputPos(null);
     setTextInputValue('');
   }, []);
+
+  const submitTextInput = useCallback(() => {
+    if (!textInputPos || !textInputValue.trim()) return;
+
+    const text = textInputValue.trim();
+    const fontSize = Math.max(16, brushSize * 2);
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return;
+    ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
+
+    const lines = text.split('\n');
+    const maxWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
+    const height = fontSize * lines.length * 1.2;
+    const textObject = {
+      id: generateId(),
+      type: 'text' as const,
+      x: textInputPos.worldX,
+      y: textInputPos.worldY,
+      text,
+      fontSize,
+      color: brushColor,
+      size: brushSize,
+      alpha: brushOpacity,
+      width: maxWidth,
+      height,
+    };
+
+    saveHistory();
+    addObject(textObject);
+    workerRef.current?.postMessage({
+      type: 'shape',
+      data: { ...textObject, timestamp: Date.now() },
+    });
+    clearTextInput();
+  }, [
+    addObject,
+    brushColor,
+    brushOpacity,
+    brushSize,
+    clearTextInput,
+    saveHistory,
+    textInputPos,
+    textInputValue,
+  ]);
 
   useCanvasToolReset({
     currentTool,
@@ -903,8 +941,8 @@ export function DrawingCanvas() {
         saveHistory();
       } else if (currentTool === 'text') {
         setTextInputPos({
-          x: e.clientX,
-          y: e.clientY,
+          x: Math.max(12, Math.min(e.clientX, window.innerWidth - 292)),
+          y: Math.max(12, Math.min(e.clientY, window.innerHeight - 190)),
           worldX: worldPos.x,
           worldY: worldPos.y,
         });
@@ -2004,7 +2042,7 @@ export function DrawingCanvas() {
           )}
         </svg>
       )}
-      {isMobile && ['rectangle', 'ellipse'].includes(currentTool) && (
+      {isMobile && ['rectangle', 'ellipse', 'triangle'].includes(currentTool) && (
         <Button
           onClick={() => setIsConstraintMode(!isConstraintMode)}
           variant={isConstraintMode ? 'default' : 'glass'}
@@ -2028,67 +2066,49 @@ export function DrawingCanvas() {
         </Button>
       )}
       {textInputPos && (
-        <textarea
-          ref={textInputRef}
-          value={textInputValue}
-          onChange={(e) => setTextInputValue(e.target.value)}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && textInputValue.trim()) {
-              e.preventDefault();
-              const text = textInputValue.trim();
-              const fontSize = Math.max(16, brushSize * 2);
-              const ctx = document.createElement('canvas').getContext('2d');
-              ctx!.font = `${fontSize}px Inter, system-ui, sans-serif`;
-
-              const lines = text.split('\n');
-              const maxWidth = Math.max(...lines.map((line) => ctx!.measureText(line).width));
-              const height = fontSize * lines.length * 1.2;
-
-              const textObj = {
-                id: generateId(),
-                type: 'text' as const,
-                x: textInputPos.worldX,
-                y: textInputPos.worldY,
-                text,
-                fontSize,
-                color: brushColor,
-                size: brushSize,
-                alpha: brushOpacity,
-                width: maxWidth,
-                height,
-              };
-
-              saveHistory();
-              addObject(textObj);
-              workerRef.current?.postMessage({
-                type: 'shape',
-                data: { ...textObj, timestamp: Date.now() },
-              });
-
-              setTextInputPos(null);
-              setTextInputValue('');
-            } else if (e.key === 'Escape') {
-              setTextInputPos(null);
-              setTextInputValue('');
-            }
-          }}
+        <div
+          className="fixed z-[10000] w-[280px] rounded-xl border border-blue-400/70 bg-white p-2 shadow-2xl shadow-slate-900/20 dark:bg-slate-900 dark:shadow-black/40"
+          style={{ left: textInputPos.x, top: textInputPos.y }}
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          autoFocus
-          placeholder="Type here... (Ctrl+Enter to submit)"
-          className="fixed z-[10000] min-w-[250px] min-h-[60px] max-w-[400px] resize font-[Inter,system-ui,sans-serif] leading-[1.4] bg-[#1e1e1e] border-2 border-[#3b82f6] rounded-lg p-3 outline-none"
-          {...{
-            style: {
-              left: textInputPos.x,
-              top: textInputPos.y,
-              fontSize: `${Math.max(16, brushSize * 2)}px`,
+        >
+          <textarea
+            ref={textInputRef}
+            value={textInputValue}
+            onChange={(e) => setTextInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitTextInput();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                clearTextInput();
+              }
+            }}
+            autoFocus
+            aria-label="Text to add to the canvas"
+            placeholder="Write a note…"
+            className="min-h-[88px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-[Inter,system-ui,sans-serif] leading-[1.4] text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+            style={{
+              fontSize: `${Math.min(Math.max(16, brushSize * 2), 32)}px`,
               color: brushColor,
-            },
-          }}
-        />
+            }}
+          />
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-400">
+              Enter to add · Shift+Enter for a new line
+            </span>
+            <div className="flex shrink-0 gap-1.5">
+              <Button size="sm" variant="ghost" onClick={clearTextInput}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={submitTextInput} disabled={!textInputValue.trim()}>
+                Add text
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
       <ShortcutsDialog
         mode="draw"
