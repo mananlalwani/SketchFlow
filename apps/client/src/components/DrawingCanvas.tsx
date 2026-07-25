@@ -751,10 +751,15 @@ export function DrawingCanvas() {
               toggleSelectedObject(hitId);
               return;
             }
-            if (!selectedObjectIds.includes(hitId)) setSelectedObject(hitId);
+            const groupIds = obj.groupId
+              ? objects
+                  .filter((candidate) => candidate.groupId === obj.groupId)
+                  .map((candidate) => candidate.id)
+              : [hitId];
+            if (!selectedObjectIds.includes(hitId)) setSelectedObjects(groupIds);
             if (obj.locked) return;
             const offset = getObjectDragOffset(obj, worldPos);
-            const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : [hitId];
+            const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds;
             setDraggedObject({ id: hitId, ids, offsetX: offset.x, offsetY: offset.y });
             saveHistory();
             return;
@@ -1085,6 +1090,7 @@ export function DrawingCanvas() {
       canDraw,
       toast,
       setSelectedObject,
+      setSelectedObjects,
       selectedObjectIds,
       toggleSelectedObject,
     ],

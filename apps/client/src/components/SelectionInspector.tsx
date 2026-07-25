@@ -72,6 +72,61 @@ export function SelectionInspector() {
     requestFullRedraw();
   };
 
+  const distributeSelected = (axis: 'x' | 'y') => {
+    const positioned = selectedObjects
+      .filter(
+        (candidate): candidate is DrawingObject & { x: number; y: number } =>
+          candidate.x !== undefined && candidate.y !== undefined,
+      )
+      .sort((a, b) => a[axis] - b[axis]);
+    if (positioned.length < 3) return;
+    const first = positioned[0];
+    const last = positioned[positioned.length - 1];
+    const firstEdge = first[axis];
+    const lastEdge = last[axis] + (axis === 'x' ? (last.width ?? 0) : (last.height ?? 0));
+    const occupied = positioned.reduce(
+      (sum, candidate) => sum + (axis === 'x' ? (candidate.width ?? 0) : (candidate.height ?? 0)),
+      0,
+    );
+    const gap = (lastEdge - firstEdge - occupied) / (positioned.length - 1);
+    let cursor = firstEdge;
+    const positions = new Map<string, number>();
+    for (const candidate of positioned) {
+      positions.set(candidate.id, cursor);
+      cursor += (axis === 'x' ? (candidate.width ?? 0) : (candidate.height ?? 0)) + gap;
+    }
+    saveHistory();
+    setObjects(
+      objects.map((candidate) => {
+        const position = positions.get(candidate.id);
+        if (position === undefined) return candidate;
+        return axis === 'x' ? { ...candidate, x: position } : { ...candidate, y: position };
+      }),
+    );
+    requestFullRedraw();
+  };
+
+  const groupSelected = () => {
+    saveHistory();
+    const groupId = generateId();
+    setObjects(
+      objects.map((candidate) =>
+        selectedObjectIds.includes(candidate.id) ? { ...candidate, groupId } : candidate,
+      ),
+    );
+    requestFullRedraw();
+  };
+
+  const ungroupSelected = () => {
+    saveHistory();
+    setObjects(
+      objects.map((candidate) =>
+        selectedObjectIds.includes(candidate.id) ? { ...candidate, groupId: undefined } : candidate,
+      ),
+    );
+    requestFullRedraw();
+  };
+
   if (isMultiSelection) {
     return (
       <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-500/30 dark:bg-blue-500/[0.08]">
@@ -93,6 +148,18 @@ export function SelectionInspector() {
           </Button>
           <Button size="sm" variant="secondary" onClick={() => alignSelected('y', 'max')}>
             Align bottom
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => distributeSelected('x')}>
+            Space across
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => distributeSelected('y')}>
+            Space down
+          </Button>
+          <Button size="sm" variant="secondary" onClick={groupSelected}>
+            Group
+          </Button>
+          <Button size="sm" variant="secondary" onClick={ungroupSelected}>
+            Ungroup
           </Button>
         </div>
         <Button
