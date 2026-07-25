@@ -7,7 +7,7 @@
 
 A real-time collaborative whiteboard application built with React, TypeScript, Socket.IO, PostgreSQL, and Prisma. SketchFlow supports drawing, shapes, presence, project sharing, and an installable web experience.
 
-Performance and collaboration guarantees are validated by the repository's benchmark and integration gates; see [`docs/performance.md`](docs/performance.md) and the release checklist before making deployment claims.
+Collaboration behavior is covered by unit and server integration tests. Browser benchmarks and provider-side monitoring remain release-owner validation work; see [`docs/performance.md`](docs/performance.md) and the release checklist before making deployment claims.
 
 ## Features
 
@@ -56,11 +56,11 @@ This project is a monorepo managed with `pnpm` workspaces.
 
 1.  **Monorepo**: Code is split into `client`, `server`, and `shared` packages for better modularity and type safety.
 2.  **WebSocket Event Flow**:
-    - Clients emit `draw:stroke` or `draw:shape` events.
-    - Server validates data (coordinates, types, permissions).
-    - Valid updates are broadcast to other clients in the same room.
-    - Cursor movements (`cursor:move`) are throttled and broadcast for live presence.
-3.  **Persistence**: Project metadata and permissions are stored in PostgreSQL via Prisma. Drawing data can be snapshotted or stored as event logs (depending on implementation specifics).
+    - Clients persist an idempotent object operation locally, then emit a `collaboration:commit` envelope.
+    - The server authorizes the room and editor, applies the operation transactionally, and broadcasts canonical state.
+    - Different object IDs merge; simultaneous updates to the same ID use server-order last-writer-wins.
+    - Cursor movements are keyed by browser session, so two devices under one account remain visible.
+3.  **Persistence**: PostgreSQL/Prisma stores project metadata, permissions, canonical project JSON, revisions, and collaboration-operation receipts. IndexedDB retains unsent client operations for replay.
 
 ## Getting Started
 

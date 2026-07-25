@@ -1,139 +1,51 @@
 # Deployment
 
-## Database migrations
+SketchFlow is deployed as one Docker image: the Express/Socket.IO server serves the built React
+client. The current production model is a manually promoted VPS container, not Cloudflare Pages.
 
-Apply pending production migrations before starting a new application version:
+## Before deploying
+
+Apply Prisma migrations against the production database:
 
 ```bash
 pnpm --filter @sketchflow/server db:migrate:deploy
 ```
 
-## Cloudflare Pages (Frontend)
+The runtime requires `DATABASE_URL`, `CLERK_SECRET_KEY`, and explicit `CORS_ORIGINS`. Use a
+`CORS_ORIGINS` value of `https://draw.mananlalwani.com` for the current public client. Configure
+`REDIS_URL` only when running more than one Socket.IO instance, together with
+`SOCKET_INSTANCE_COUNT`.
 
-1. Go to [Cloudflare Pages](https://pages.cloudflare.com)
-2. Connect your GitHub repository
-3. Configure build settings:
-   - **Root directory**: `apps/client`
-   - **Build command**: `pnpm build`
-   - **Build output**: `dist`
-4. Add environment variable:
-   - `VITE_CLERK_PUBLISHABLE_KEY` = your Clerk publishable key
-5. Deploy
+Sentry, OpenTelemetry, and `RELEASE_ID` are optional. They are not required for the application to
+start. Browser OpenTelemetry is intentionally disabled: never expose OTLP credentials or headers in
+a `VITE_*` variable.
 
-Your app will be live at `https://your-project.pages.dev`
+## Manual VPS deployment
 
-## Optional: Backend
-
-For the full real-time sync features, you'll need a backend server. For portfolio demos, you can:
-
-- Run locally: `pnpm dev` and demo on localhost
-- Deploy to any Node hosting (Railway, Render, Fly.io)
-
-The frontend works standalone for drawing - real-time sync just won't work without the backend.
-
----
-
-## Observability (OpenTelemetry + Honeycomb)
-
-The application includes full OpenTelemetry instrumentation for traces, logs, and error tracking. By default, telemetry is **disabled** unless you provide the appropriate environment variables.
-
-### Honeycomb (Recommended - Free Tier Available)
-
-[Honeycomb](https://www.honeycomb.io/) offers a generous free tier and excellent trace visualization.
-
-#### Server Environment Variables
+After GitHub Actions has published the image, pull and restart it on the VPS using the existing
+container port and environment values. Prefer an `--env-file` stored only on the VPS over putting
+credentials on the command line.
 
 ```bash
-# Honeycomb convenience variables (recommended)
-HONEYCOMB_API_KEY=your-honeycomb-api-key
-HONEYCOMB_DATASET=live-draw  # optional, defaults to 'live-draw'
-
-# Service identification
-OTEL_SERVICE_NAME=live-draw-server  # optional
-OTEL_SERVICE_VERSION=1.0.0          # optional, uses package.json version if not set
-
-# Logging configuration
-LOG_LEVEL=info      # debug | info | warn | error
-LOG_FORMAT=json     # json | pretty (json recommended for production)
+docker pull ghcr.io/mananlalwani/sketchflow:latest
+docker rm -f live-draw 2>/dev/null || true
+docker run -d --name live-draw --env-file /opt/sketchflow/.env \
+  -p 4967:4967 --restart unless-stopped \
+  ghcr.io/mananlalwani/sketchflow:latest
 ```
 
-#### Client Environment Variables (Vite)
+The environment file should include `PORT=4967` when the host maps port 4967 directly. Verify
+`/api/health` through the API origin and open `/draw` through the client origin after restart.
 
-```bash
-# Honeycomb convenience variables (recommended)
-VITE_HONEYCOMB_API_KEY=your-honeycomb-api-key
-VITE_HONEYCOMB_DATASET=live-draw  # optional
+## Image and GitHub releases
 
-# Service identification
-VITE_OTEL_SERVICE_NAME=live-draw-client  # optional
-VITE_OTEL_SERVICE_VERSION=1.0.0          # optional
-```
+Pushing a `v*` tag runs the release workflow: it validates the source, publishes both the versioned
+GHCR image and `latest`, then creates a GitHub Release. It intentionally does not deploy the VPS.
+Use the image tag for a reproducible rollback or use `latest` for the newest successful main build.
 
-### Alternative: Raw OTLP Configuration
+## Optional observability
 
-If using a different OTLP-compatible backend (Grafana Cloud, Jaeger, etc.):
-
-#### Server
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=https://your-otlp-endpoint:443
-OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer your-token,X-Custom-Header=value
-```
-
-#### Client
-
-```bash
-VITE_OTEL_EXPORTER_OTLP_ENDPOINT=https://your-otlp-endpoint:443
-VITE_OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer your-token
-```
-
-### What Gets Instrumented
-
-**Server (Node.js):**
-
-- HTTP requests/responses (Express)
-- Database queries (Prisma)
-- Socket.IO events
-- Custom application logs with trace correlation
-
-**Client (Browser):**
-
-- Fetch/XHR requests
-- Document load timing
-- User interactions
-- Error tracking with trace correlation
-
-### Log Correlation
-
-All server logs automatically include `traceId` and `spanId` when OpenTelemetry is active. This allows you to correlate logs with traces in Honeycomb.
-
-Example log output (JSON format):
-
-```json
-{
-  "timestamp": "2024-01-15T10:30:00.000Z",
-  "level": "info",
-  "message": "GET /api/projects 200",
-  "requestId": "abc123",
-  "traceId": "1234567890abcdef",
-  "spanId": "fedcba0987654321",
-  "method": "GET",
-  "url": "/api/projects",
-  "statusCode": 200,
-  "durationMs": 45
-}
-```
-
-### Security & Redaction
-
-The logger automatically redacts sensitive fields from logs:
-
-- Authorization headers
-- Cookies
-- Tokens (API keys, JWTs, session tokens)
-- Passwords
-- Clerk-related fields
-
-### Disabling Telemetry
-
-Simply don't set the `HONEYCOMB_API_KEY` or `OTEL_EXPORTER_OTLP_ENDPOINT` environment variables. The application will run normally with local console logging only.
+Server OpenTelemetry starts when `OTEL_EXPORTER_OTLP_ENDPOINT` or `HONEYCOMB_API_KEY` is set.
+Sentry starts when `SENTRY_DSN` is set. These integrations should be configured only after provider
+credentials, origin restrictions, retention, and alerting have been reviewed; see
+[`monitoring.md`](monitoring.md).

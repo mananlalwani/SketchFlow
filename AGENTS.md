@@ -32,7 +32,9 @@
 - **Canvas Rendering**: `DrawingCanvas.tsx` handles raw canvas ops, but logic lies in hooks and utils.
 - **State Sync**:
   - **Local First**: UI updates immediately via Zustand key `objects`.
-  - **Optimistic UI**: Changes pushed to socket, rolled back on error.
+  - **Optimistic UI**: Canvas edits update locally, are persisted as idempotent socket operations,
+    and remain queued for retry/replay on transient failure. Do not discard local work on an
+    acknowledgement failure.
   - **Socket Events**: Defined in `packages/shared/src/types/socket.ts`.
 - **Component Pattern**:
   - Use Radix UI primitives for accessible interactive components.

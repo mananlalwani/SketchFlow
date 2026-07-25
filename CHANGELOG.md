@@ -14,3 +14,6 @@ The project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 ### Changed
 
 - Public release documentation now states privacy and verification boundaries explicitly.
+- Collaboration now uses durable object operations, atomic batches, same-device cursor identities, and replayable IndexedDB operations.
+- Retained strokes preserve point widths for pressure-sensitive rendering and export; unsupported OffscreenCanvas browsers use a main-thread fallback.
+- CI and the production container use Node.js 24. Version tags validate, publish GHCR images, and create GitHub Releases; VPS deployment remains manual.
