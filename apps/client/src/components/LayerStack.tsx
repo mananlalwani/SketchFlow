@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { ChevronDown, ChevronUp, Layers, PenLine, Shapes, Trash2, Type } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -23,8 +22,15 @@ interface LayerStackProps {
 
 /** Retained-object stacking controls shared by desktop and mobile surfaces. */
 export function LayerStack({ className }: LayerStackProps) {
-  const { objects, setObjects, removeObject, saveHistory, requestFullRedraw } = useDrawingStore();
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const {
+    objects,
+    setObjects,
+    removeObject,
+    saveHistory,
+    requestFullRedraw,
+    selectedObjectId,
+    setSelectedObject,
+  } = useDrawingStore();
 
   const moveLayer = (id: string, direction: -1 | 1) => {
     const index = objects.findIndex((object) => object.id === id);
@@ -41,7 +47,6 @@ export function LayerStack({ className }: LayerStackProps) {
     saveHistory();
     removeObject(id);
     requestFullRedraw();
-    setSelectedLayerId((current) => (current === id ? null : current));
   };
 
   return (
@@ -62,7 +67,7 @@ export function LayerStack({ className }: LayerStackProps) {
         <div className="space-y-2">
           {[...objects].reverse().map((object, reverseIndex) => {
             const index = objects.length - 1 - reverseIndex;
-            const isSelected = selectedLayerId === object.id;
+            const isSelected = selectedObjectId === object.id;
             const label = layerLabel(object);
             return (
               <div
@@ -77,7 +82,7 @@ export function LayerStack({ className }: LayerStackProps) {
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  onClick={() => setSelectedLayerId(object.id)}
+                  onClick={() => setSelectedObject(object.id)}
                   aria-pressed={isSelected}
                 >
                   <span

@@ -137,6 +137,34 @@ describe('drawingStore', () => {
       expect(useDrawingStore.getState().objects).toHaveLength(2);
       expect(useDrawingStore.getState().objectCount).toBe(2);
     });
+
+    it('keeps selection valid and updates an individual object', () => {
+      const { addObject, setSelectedObject, updateObject, removeObject } =
+        useDrawingStore.getState();
+      addObject({
+        id: 'selected',
+        type: 'rectangle',
+        x: 1,
+        y: 2,
+        width: 3,
+        height: 4,
+        color: '#fff',
+        size: 2,
+      });
+
+      setSelectedObject('selected');
+      updateObject('selected', { color: '#2563eb', alpha: 0.5, filled: true });
+
+      expect(useDrawingStore.getState()).toMatchObject({ selectedObjectId: 'selected' });
+      expect(useDrawingStore.getState().objects[0]).toMatchObject({
+        color: '#2563eb',
+        alpha: 0.5,
+        filled: true,
+      });
+
+      removeObject('selected');
+      expect(useDrawingStore.getState().selectedObjectId).toBeUndefined();
+    });
   });
 
   describe('authoritative project state', () => {
