@@ -49,6 +49,18 @@ const BG_COLORS = {
   light: '#e0e0e0',
 } as const;
 
+function pressureAdjustedSize(baseSize: number, event: PointerEvent): number {
+  // Mouse/touch report a synthetic pressure of 0 or 0.5; only a pen should
+  // alter the selected brush width. Preserve a usable minimum at light touch.
+  if (event.pointerType !== 'pen' || event.pressure <= 0) return baseSize;
+  return baseSize * (0.25 + event.pressure * 0.75);
+}
+
+function committedStrokeSize(strokes: StrokeData[], fallback: number): number {
+  if (strokes.length === 0) return fallback;
+  return strokes.reduce((sum, stroke) => sum + stroke.size, 0) / strokes.length;
+}
+
 export function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -1082,7 +1094,7 @@ export function DrawingCanvas() {
             x1: p.x,
             y1: p.y,
             color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
-            size: brushSize,
+            size: pressureAdjustedSize(brushSize, ev),
             alpha: brushOpacity,
             timestamp: Date.now(),
             groupId: strokeGroupRef.current,
@@ -1243,7 +1255,7 @@ export function DrawingCanvas() {
               width: normW,
               height: normH,
               color: brushColor,
-              size: brushSize,
+              size: committedStrokeSize(currentStroke, brushSize),
               alpha: brushOpacity,
             } as const;
             let shapeObject: {
@@ -1299,7 +1311,7 @@ export function DrawingCanvas() {
             type: 'stroke' as const,
             points: buildStrokePoints(currentStroke),
             color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
-            size: brushSize,
+            size: committedStrokeSize(currentStroke, brushSize),
             alpha: brushOpacity,
           };
           addObject(drawingObject);
