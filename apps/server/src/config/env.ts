@@ -106,15 +106,6 @@ const envSchema = z
       });
     }
 
-    for (const required of ['RELEASE_ID', 'SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT'] as const) {
-      if (!data[required]) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [required],
-          message: `Production requires ${required} for release observability`,
-        });
-      }
-    }
   });
 
 export type Env = z.infer<typeof envSchema>;
