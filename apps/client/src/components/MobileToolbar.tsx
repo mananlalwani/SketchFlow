@@ -110,7 +110,7 @@ export function MobileToolbar() {
                     variant={currentTool === id ? 'default' : 'ghost'}
                     size="icon"
                     className={cn(
-                      'w-10 h-10 rounded-xl transition-all',
+                      'w-10 h-10 rounded-xl transition-[background-color,color,box-shadow,transform] duration-150',
                       currentTool === id
                         ? 'bg-blue-600 text-white'
                         : 'text-slate-500 dark:text-slate-400',

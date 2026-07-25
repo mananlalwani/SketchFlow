@@ -88,7 +88,7 @@ export function Navbar() {
   return (
     <nav
       className={cn(
-        'fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/20 px-6 py-4 transition-all duration-500 ease-out',
+        'fixed top-0 left-0 right-0 z-50 border-b border-slate-200 bg-white/80 px-6 py-4 backdrop-blur-xl transition-[opacity,transform] duration-300 ease-out dark:border-white/20 dark:bg-slate-900/80',
         navVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0',
       )}
       onMouseEnter={() => {
@@ -124,7 +124,7 @@ export function Navbar() {
 
           {/* Connection status or Guest badge */}
           {isGuest ? (
-            <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 bg-amber-100 dark:bg-gradient-to-r dark:from-amber-500/20 dark:to-yellow-500/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-400/40 shadow-lg shadow-amber-500/10 dark:shadow-amber-500/20">
+            <div className="flex items-center space-x-1.5 rounded-full border border-amber-300 bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow-lg shadow-amber-500/10 transition-[background-color,color,box-shadow] duration-200 dark:border-amber-400/40 dark:bg-gradient-to-r dark:from-amber-500/20 dark:to-yellow-500/20 dark:text-amber-300 dark:shadow-amber-500/20">
               <User className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Guest Mode</span>
             </div>
@@ -133,7 +133,7 @@ export function Navbar() {
               <div className="flex items-center gap-2">
                 <div
                   className={cn(
-                    'flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300',
+                    'flex items-center space-x-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-200',
                     isConnected
                       ? 'bg-green-100 dark:bg-gradient-to-r dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-400/40 shadow-lg shadow-green-500/10 dark:shadow-green-500/20'
                       : 'bg-red-100 dark:bg-gradient-to-r dark:from-red-500/20 dark:to-rose-500/20 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-400/40 shadow-lg shadow-red-500/10 dark:shadow-red-500/20',
@@ -174,7 +174,7 @@ export function Navbar() {
             variant={isDraw ? 'default' : 'secondary'}
             size="sm"
             className={cn(
-              'transition-all duration-300 font-medium',
+              'font-medium transition-[background-color,color,box-shadow,transform] duration-200',
               isDraw &&
                 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 scale-105',
             )}
@@ -190,7 +190,7 @@ export function Navbar() {
             variant={isView ? 'default' : 'secondary'}
             size="sm"
             className={cn(
-              'transition-all duration-300 font-medium',
+              'font-medium transition-[background-color,color,box-shadow,transform] duration-200',
               isView &&
                 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 scale-105',
             )}

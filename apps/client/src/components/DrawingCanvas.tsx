@@ -1842,7 +1842,7 @@ export function DrawingCanvas() {
         >
           <ZoomOut className="w-4 h-4" />
         </Button>
-        <div className="px-3 py-1 glass rounded text-sm font-mono min-w-[80px] text-center">
+        <div className="min-w-[80px] rounded px-3 py-1 text-center font-mono text-sm tabular-nums glass">
           {(zoom * 100).toFixed(0)}%
         </div>
         <Button

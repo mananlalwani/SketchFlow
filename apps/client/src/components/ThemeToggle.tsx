@@ -18,7 +18,14 @@ export function ThemeToggle({ className, size = 'icon' }: ThemeToggleProps) {
       className={className}
       title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      <span className="relative flex h-4 w-4 items-center justify-center" aria-hidden="true">
+        <Sun
+          className={`contextual-icon absolute h-4 w-4 ${theme === 'dark' ? 'scale-100 opacity-100 blur-0' : 'scale-[0.25] opacity-0 blur-[4px]'}`}
+        />
+        <Moon
+          className={`contextual-icon h-4 w-4 ${theme === 'dark' ? 'scale-[0.25] opacity-0 blur-[4px]' : 'scale-100 opacity-100 blur-0'}`}
+        />
+      </span>
     </Button>
   );
 }

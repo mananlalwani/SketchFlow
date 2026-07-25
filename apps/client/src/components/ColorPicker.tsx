@@ -44,7 +44,7 @@ export function ColorPicker() {
         onClick={() => setIsExpanded(!isExpanded)}
         variant="glass"
         size="sm"
-        className="flex items-center gap-2 min-w-[110px] px-3 py-2 hover:scale-105 transition-transform shadow-lg"
+        className="flex items-center gap-2 min-w-[110px] px-3 py-2 shadow-lg"
       >
         <div className="relative w-5 h-5 rounded-lg border-2 border-slate-300 dark:border-white/40 color-preview shadow-lg overflow-hidden">
           <div className="absolute inset-0 bg-slate-100 dark:bg-slate-900" />
@@ -58,7 +58,7 @@ export function ColorPicker() {
       </Button>
 
       {isExpanded && (
-        <div className="absolute left-0 top-full mt-3 p-5 z-50 animate-fade-in min-w-[300px] shadow-2xl rounded-2xl bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/20">
+        <div className="surface-raised absolute left-0 top-full z-50 mt-3 min-w-[300px] rounded-2xl bg-white p-5 shadow-2xl backdrop-blur-xl dark:bg-slate-800/95 animate-fade-in">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-300">
               Color Palette
@@ -79,7 +79,7 @@ export function ColorPicker() {
                 <button
                   onClick={() => handleColorSelect(color)}
                   className={cn(
-                    'w-10 h-10 rounded-xl border-2 transition-all duration-300 hover:scale-110 color-swatch shadow-lg',
+                    'w-10 h-10 rounded-xl border-2 transition-[border-color,box-shadow,transform] duration-200 hover:scale-110 color-swatch shadow-lg',
                     brushColor === color
                       ? 'border-blue-400 shadow-xl shadow-blue-500/50 ring-2 ring-blue-300/50 scale-110'
                       : 'border-slate-300 dark:border-white/30 hover:border-slate-400 dark:hover:border-white/50',
@@ -93,7 +93,7 @@ export function ColorPicker() {
                     onClick={(e) => handleColorRemove(color, e)}
                     size="icon"
                     variant="destructive"
-                    className="absolute -top-2 -right-2 w-5 h-5 opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 rounded-full"
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100 hover:scale-110"
                   >
                     <X className="w-3 h-3" />
                   </Button>
@@ -120,7 +120,7 @@ export function ColorPicker() {
                 onClick={() => setShowColorInput(true)}
                 variant="glass"
                 size="sm"
-                className="flex items-center gap-2 font-medium hover:scale-105 transition-transform"
+                className="flex items-center gap-2 font-medium"
               >
                 <Plus className="w-4 h-4" />
                 <span className="text-sm">Add Color</span>

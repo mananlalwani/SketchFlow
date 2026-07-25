@@ -550,7 +550,7 @@ export function DrawingToolbar() {
               variant={currentTool === id ? 'default' : 'ghost'}
               size="sm"
               className={cn(
-                'transition-all duration-200 focus-visible-ring',
+                'transition-[background-color,color,box-shadow,transform] duration-150 focus-visible-ring',
                 currentTool === id && 'bg-blue-600 hover:bg-blue-700',
               )}
               title={`${label} (${shortcut})`}

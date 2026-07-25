@@ -143,7 +143,7 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
                   key={index}
                   onClick={() => setCurrentStep(index)}
                   className={cn(
-                    'h-2 rounded-full transition-all duration-300',
+                    'h-2 rounded-full transition-[width,background-color] duration-200',
                     index === currentStep
                       ? 'w-8 bg-blue-500'
                       : 'w-2 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600',
