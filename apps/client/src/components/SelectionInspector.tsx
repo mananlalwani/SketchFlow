@@ -1,4 +1,14 @@
-import { Copy, Lock, Trash2, Unlock } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Copy,
+  Lock,
+  RotateCcw,
+  Trash2,
+  Unlock,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -205,6 +215,24 @@ export function SelectionInspector() {
 
   const rotation = ((object.rotation ?? 0) + 360) % 360;
 
+  const nudge = (deltaX: number, deltaY: number) => {
+    if (object.x === undefined || object.y === undefined) return;
+    saveHistory();
+    updateObject(object.id, {
+      x: object.x + deltaX,
+      y: object.y + deltaY,
+      points:
+        object.type === 'triangle' && object.points
+          ? object.points.map((point) => ({ ...point, x: point.x + deltaX, y: point.y + deltaY }))
+          : object.points,
+    });
+  };
+
+  const rotateBy = (delta: number) => {
+    saveHistory();
+    updateObject(object.id, { rotation: ((object.rotation ?? 0) + delta + 360) % 360 });
+  };
+
   const duplicate = () => {
     saveHistory();
     const copy = duplicateObject(object);
@@ -282,6 +310,62 @@ export function SelectionInspector() {
           className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-transparent p-0.5 disabled:cursor-not-allowed dark:border-white/10"
         />
       </div>
+
+      {object.x !== undefined && object.y !== undefined && (
+        <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+          <div>
+            <p className="text-sm text-slate-600 dark:text-slate-300">Position</p>
+            <p className="text-xs text-slate-400">Use Move on canvas or nudge precisely.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-0.5">
+            <span />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={isReadOnly}
+              onClick={() => nudge(0, -10)}
+              aria-label="Move up"
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+            <span />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={isReadOnly}
+              onClick={() => nudge(-10, 0)}
+              aria-label="Move left"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={isReadOnly}
+              onClick={() => nudge(10, 0)}
+              aria-label="Move right"
+            >
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+            <span />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={isReadOnly}
+              onClick={() => nudge(0, 10)}
+              aria-label="Move down"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </Button>
+            <span />
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
@@ -394,6 +478,35 @@ export function SelectionInspector() {
             onPointerDown={saveHistory}
             onValueChange={([value]) => updateObject(object.id, { rotation: value })}
           />
+          <div className="grid grid-cols-3 gap-1.5">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isReadOnly}
+              onClick={() => rotateBy(-15)}
+            >
+              −15°
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={isReadOnly}
+              onClick={() => {
+                saveHistory();
+                updateObject(object.id, { rotation: 0 });
+              }}
+            >
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isReadOnly}
+              onClick={() => rotateBy(15)}
+            >
+              +15°
+            </Button>
+          </div>
         </div>
       )}
 
