@@ -168,11 +168,11 @@ A workspace-wide formatting check also previously passed. It must be run from a 
 
 ## Scorecard
 
-| Area | Current evidence | Remaining before public-release completion |
-| --- | --- | --- |
-| Build quality | Local build, types, lint, tests, E2E, and disposable real-infrastructure suite pass | Hosted-CI evidence; final coverage thresholds and artifact verification |
-| Security | Hygiene/audit/image safeguards and server authorization foundations are implemented | Credential/provider review, hosted rulesets/scanning, remaining moderate/low dependency review |
-| Reliability | PostgreSQL CAS/idempotency, Redis two-instance tests, and client write serialization pass | Restart/convergence/revocation/compaction and Redis runtime-readiness proofs |
-| Performance | Bundle/web-vitals/PWA and 10,000-object correctness/gross-stall evidence pass | Controller extraction, worker recovery contract, repeated/reference benchmark baselines |
-| Observability | Environment-driven privacy filters and source-map upload plumbing exist | Authorized Sentry provider upload/symbolication/privacy/alert validation |
-| Operations | Readiness/container lifecycle and release-hygiene tooling exist | Hosted governance, signing/provenance, runbooks, drills, dashboards, release-owner evidence |
+| Area          | Current evidence                                                                          | Remaining before public-release completion                                                     |
+| ------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Build quality | Local build, types, lint, tests, E2E, and disposable real-infrastructure suite pass       | Hosted-CI evidence; final coverage thresholds and artifact verification                        |
+| Security      | Hygiene/audit/image safeguards and server authorization foundations are implemented       | Credential/provider review, hosted rulesets/scanning, remaining moderate/low dependency review |
+| Reliability   | PostgreSQL CAS/idempotency, Redis two-instance tests, and client write serialization pass | Restart/convergence/revocation/compaction and Redis runtime-readiness proofs                   |
+| Performance   | Bundle/web-vitals/PWA and 10,000-object correctness/gross-stall evidence pass             | Controller extraction, worker recovery contract, repeated/reference benchmark baselines        |
+| Observability | Environment-driven privacy filters and source-map upload plumbing exist                   | Authorized Sentry provider upload/symbolication/privacy/alert validation                       |
+| Operations    | Readiness/container lifecycle and release-hygiene tooling exist                           | Hosted governance, signing/provenance, runbooks, drills, dashboards, release-owner evidence    |

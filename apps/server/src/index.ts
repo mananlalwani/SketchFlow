@@ -201,6 +201,13 @@ export class SketchFlowServer {
     });
     this.app.use((req, res, next) => {
       if (!req.path.startsWith('/api/')) return next();
+      if (
+        req.path === '/api/health' ||
+        req.path === '/api/healthz' ||
+        req.path === '/api/readyz' ||
+        req.path.startsWith('/api/projects/shared/')
+      )
+        return next();
       return clerk(req, res, next);
     });
 

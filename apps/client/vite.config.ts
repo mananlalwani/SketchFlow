@@ -52,6 +52,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        navigateFallback: '/',
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         // PDF tooling is requested explicitly and must not inflate first-install precache.
         globIgnores: [

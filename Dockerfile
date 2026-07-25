@@ -27,7 +27,9 @@ RUN pnpm --filter @sketchflow/shared build
 
 # Generate Prisma client (for build). Prisma resolves DATABASE_URL while loading its
 # configuration, so use an inert build-only URL rather than copying a local env file.
+# Use WASM engine to avoid QEMU illegal instruction issues during cross-platform builds.
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
+    PRISMA_CLI_QUERY_ENGINE_TYPE=wasm \
     pnpm --filter @sketchflow/server db:generate
 
 # Build client and server. The Sentry token is mounted only for this build step, never
@@ -63,7 +65,8 @@ RUN cp -r apps/server/prisma /app/deploy/prisma
 
 # Generate Prisma Data Proxy/Client for the production deploy
 WORKDIR /app/deploy
-RUN pnpm db:generate
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
+    PRISMA_CLI_QUERY_ENGINE_TYPE=wasm pnpm db:generate
 
 # --- Production Stage ---
 FROM node:20-alpine AS runner

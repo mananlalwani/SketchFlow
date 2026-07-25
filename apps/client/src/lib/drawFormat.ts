@@ -18,8 +18,9 @@ const FORMAT_VERSION = 1;
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 
-// App secret - combined with salt for each file
-const APP_SECRET = 'dra-v1-xK9mP2nQ7wL4jF8sY3hT6bV0cR5eZ1aU';
+// Format identifier used for key derivation.
+// This is a client-side constant exposed in the bundle, not a credential.
+const APP_SECRET = import.meta.env.VITE_DRAW_FORMAT_KEY ?? 'sketchflow-dra-v1';
 
 // Additional obfuscation layer
 const OBFUSCATION_KEY = [0x4a, 0x7b, 0x2c, 0x9d, 0x1e, 0x5f, 0x8a, 0x3b];

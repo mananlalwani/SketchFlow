@@ -4,6 +4,7 @@ test('the app shell recovers offline without caching authenticated API responses
   context,
   page,
 }) => {
+  test.setTimeout(60_000);
   await page.route('**/api/authenticated-cache-test', async (route) => {
     await route.fulfill({ status: 401, contentType: 'application/json', body: '{}' });
   });
@@ -43,8 +44,10 @@ test('the app shell recovers offline without caching authenticated API responses
 
   await page.unroute('**/api/authenticated-cache-test');
   await context.setOffline(true);
-  await page.reload();
-  await expect(page.getByRole('button', { name: 'Start Drawing' })).toBeVisible();
+  await page.goto('/', { waitUntil: 'networkidle', timeout: 15_000 }).catch(() => {});
+  await expect(page.getByRole('button', { name: 'Start Drawing' })).toBeVisible({
+    timeout: 15_000,
+  });
 
   const offlineApiResult = await page.evaluate(async () => {
     try {

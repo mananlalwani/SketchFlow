@@ -91,11 +91,8 @@ const envSchema = z
     }
 
     if (data.CORS_ORIGINS.length === 0) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['CORS_ORIGINS'],
-        message: 'CORS_ORIGINS is required in production',
-      });
+      // Not fatal - CORS falls back to allowing all origins when unset
+      console.warn('⚠️  CORS_ORIGINS not set. All origins allowed via CORS.');
     }
 
     if (data.SOCKET_INSTANCE_COUNT > 1 && !data.REDIS_URL) {

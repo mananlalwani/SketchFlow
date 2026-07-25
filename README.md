@@ -1,4 +1,4 @@
-# SketchFlow 🎨
+# SketchFlow
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -9,23 +9,23 @@ A real-time collaborative whiteboard application built with React, TypeScript, S
 
 Performance and collaboration guarantees are validated by the repository's benchmark and integration gates; see [`docs/performance.md`](docs/performance.md) and the release checklist before making deployment claims.
 
-## ✨ Features
+## Features
 
-- **⚡ Real-time Collaboration**: WebSocket-based synchronization ensuring instant updates for all connected users.
-- **🖌️ Advanced Drawing Engine**:
+- **Real-time Collaboration**: WebSocket-based synchronization ensuring instant updates for all connected users.
+- **Advanced Drawing Engine**:
   - Pressure-sensitive plotting for tablets/iPads.
   - Smooth rendering with standard and high-DPI support.
   - Tools: Pen, Eraser, Shapes (Line, Rectangle, Ellipse).
   - Customizable stroke sizes and colors.
-- **👥 Multi-User Presence**: See other users' cursors and actions in real-time.
-- **📱 PWA Support**: Fully installable Progressive Web App with offline capabilities and standalone mode.
-- **🚀 Performance tooling**:
+- **Multi-User Presence**: See other users' cursors and actions in real-time.
+- **PWA Support**: Fully installable Progressive Web App with offline capabilities and standalone mode.
+- **Performance tooling**:
   - Worker-backed rendering with explicit unsupported-browser reporting when transferable OffscreenCanvas is unavailable.
   - Deterministic large-board benchmark fixtures and performance artifacts.
   - Performance limits documented with the benchmark.
-- **🔒 Secure**: Authentication and user management powered by Clerk.
+- **Secure**: Authentication and user management powered by Clerk.
 
-## 🛠 Tech Stack
+## Tech Stack
 
 This project is a monorepo managed with `pnpm` workspaces.
 
@@ -52,7 +52,7 @@ This project is a monorepo managed with `pnpm` workspaces.
 
 - **Shared** (`packages/shared`): Common TypeScript types, utility functions, and constants shared between client and server.
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 1.  **Monorepo**: Code is split into `client`, `server`, and `shared` packages for better modularity and type safety.
 2.  **WebSocket Event Flow**:
@@ -62,7 +62,7 @@ This project is a monorepo managed with `pnpm` workspaces.
     - Cursor movements (`cursor:move`) are throttled and broadcast for live presence.
 3.  **Persistence**: Project metadata and permissions are stored in PostgreSQL via Prisma. Drawing data can be snapshotted or stored as event logs (depending on implementation specifics).
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -119,7 +119,7 @@ pnpm --filter @sketchflow/server db:migrate
 pnpm --filter @sketchflow/server db:studio
 ```
 
-## 🐳 Docker Support
+## Docker Support
 
 Run the application using Docker for an isolated environment.
 
