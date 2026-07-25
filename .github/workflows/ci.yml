@@ -80,6 +80,9 @@ jobs:
             -e CLERK_SECRET_KEY=sk_live_ci_only \
             -e CLERK_PUBLISHABLE_KEY=pk_test_ci_only \
             -e CORS_ORIGINS=http://localhost:3000 \
+            -e RELEASE_ID=ci-smoke \
+            -e SENTRY_DSN=https://public@example.ingest.sentry.io/0 \
+            -e OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
             sketchflow:ci
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://localhost:3000/api/health >/dev/null; then break; fi
