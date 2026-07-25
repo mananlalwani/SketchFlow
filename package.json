@@ -8,9 +8,13 @@
     "build": "pnpm --filter @sketchflow/shared build && pnpm --filter @sketchflow/client build && pnpm --filter @sketchflow/server build",
     "start": "pnpm --filter @sketchflow/server start",
     "test": "pnpm --filter @sketchflow/client test && pnpm --filter @sketchflow/server test",
-    "lint": "pnpm --filter @sketchflow/client lint",
+    "lint": "pnpm --filter @sketchflow/client lint && pnpm --filter @sketchflow/shared type-check",
     "type-check": "pnpm --filter @sketchflow/client type-check && pnpm --filter @sketchflow/server build",
-    "audit:prod": "pnpm audit --prod --audit-level high"
+    "audit:prod": "pnpm audit --prod --audit-level high",
+    "format:check": "node scripts/format-check.mjs",
+    "test:e2e": "pnpm --filter @sketchflow/client test:e2e",
+    "test:coverage": "pnpm --filter @sketchflow/client test:coverage && pnpm --filter @sketchflow/server test -- --coverage",
+    "ci:release-gate": "pnpm build && pnpm lint && pnpm format:check && pnpm type-check && pnpm test && pnpm audit:prod"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
@@ -20,9 +24,9 @@
       "@grpc/grpc-js": "1.14.4",
       "@hono/node-server": "1.19.13",
       "@opentelemetry/auto-instrumentations-node": "0.75.0",
-    "@opentelemetry/exporter-prometheus": "0.217.0",
-    "@opentelemetry/propagator-jaeger": "2.9.0",
-    "@opentelemetry/sdk-node": "0.217.0",
+      "@opentelemetry/exporter-prometheus": "0.217.0",
+      "@opentelemetry/propagator-jaeger": "2.9.0",
+      "@opentelemetry/sdk-node": "0.217.0",
       "defu": "6.1.5",
       "effect": "3.20.0",
       "hono": "4.12.25",

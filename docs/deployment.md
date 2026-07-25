@@ -133,3 +133,52 @@ The logger automatically redacts sensitive fields from logs:
 ### Disabling Telemetry
 
 Simply don't set the `HONEYCOMB_API_KEY` or `OTEL_EXPORTER_OTLP_ENDPOINT` environment variables. The application will run normally with local console logging only.
+
+## Operational runbook
+
+### Release checklist
+
+1. Confirm CI release gate is green for the exact commit being deployed.
+2. Confirm `pnpm audit:prod` has no high or critical production findings.
+3. Confirm environment validation passes in staging with production-equivalent `DATABASE_URL`, `CLERK_SECRET_KEY`, and `CORS_ORIGINS`.
+4. Apply database migrations with `pnpm --filter @sketchflow/server db:migrate:deploy` before shifting traffic.
+5. Deploy the image by immutable SHA, not by a mutable local tag.
+6. Verify `/api/readyz`, `/api/health`, project creation, project save, share-link read, and Socket.IO room join.
+7. Watch request latency, API 5xx rate, database saturation, socket reconnects, and client error rate for at least 30 minutes.
+
+### Rollback
+
+1. Stop the rollout immediately when readiness, persistence, authorization, or realtime collaboration smoke checks fail.
+2. Roll back to the previous image SHA.
+3. If a migration is involved, follow the migration note attached to the release; never run destructive rollback SQL without a fresh backup.
+4. Re-run smoke checks and keep the incident open until dashboards return to baseline.
+
+### Incident response
+
+1. Assign an incident lead and record the timeline in the incident channel.
+2. Classify impact: authentication, persistence, realtime, performance, or external dependency.
+3. Prefer safe degradation: disable realtime fan-out, pause writes, or make affected boards read-only before risking data loss.
+4. Preserve logs, traces, metrics, and database snapshots needed for post-incident analysis.
+5. Publish a postmortem with root cause, customer impact, detection gap, and follow-up owners.
+
+### Backup and restore drills
+
+- Take automated database backups at least daily for production.
+- Test restore into an isolated environment at least quarterly.
+- Record recovery time objective, recovery point objective, backup age, restore duration, validation steps, and owner sign-off.
+
+### Redis failure mode
+
+- Multi-instance realtime deployments require Redis for Socket.IO fan-out.
+- If Redis is unavailable, keep HTTP project access available, block horizontal realtime scale-out, and route collaboration traffic to a single instance only when explicitly approved.
+- Alert on Redis connection failures and socket adapter errors.
+
+### Clerk outage mode
+
+- Existing sessions may continue until expiry if token verification remains available.
+- New sign-ins, share-management writes, and collaborator-management writes should be considered degraded.
+- Keep public status messaging separate from sensitive authentication details.
+
+### Dashboards and alerts
+
+Dashboards must include request latency, API error rate, database health, migration status, socket connection count, reconnect rate, collaboration conflicts, Redis adapter health, client error rate, and release version. Page on sustained readiness failures, elevated 5xxs, database exhaustion, Redis fan-out failures, or authentication verification failures.

@@ -31,11 +31,11 @@ This plan turns the current strong foundation into a production-grade applicatio
 
 - [ ] Add a server ESLint configuration and include both client and server linting in `pnpm lint`.
 - [ ] Add `pnpm format:check` using Prettier (or Biome) and make formatting non-negotiable in CI.
-- [ ] Run Playwright E2E tests in CI with a disposable PostgreSQL service and deterministic test authentication.
+- [x] Run Playwright E2E tests in CI with a disposable PostgreSQL service and deterministic test authentication.
 - [ ] Add an accessibility CI job using axe-core for the draw surface, toolbar, dialogs, project manager, and share flow.
 - [ ] Publish coverage artifacts and set ratcheting thresholds: 80% lines/functions globally, 90% for authorization, validation, persistence, and socket-boundary modules.
-- [ ] Keep the Docker smoke test, but use readiness (`/api/readyz`) with a real CI database instead of liveness alone.
-- [ ] Add a migration test: apply all migrations to a clean database, start the production image, then verify the critical project lifecycle.
+- [x] Keep the Docker smoke test, but use readiness (`/api/readyz`) with a real CI database instead of liveness alone.
+- [x] Add a migration test: apply all migrations to a clean database, start the production image, then verify the critical project lifecycle.
 
 **Verify:** a pull request cannot merge unless lint, format, type-check, unit/integration/E2E/accessibility tests, audit, build, migration, and container checks pass.
 
@@ -86,7 +86,7 @@ This plan turns the current strong foundation into a production-grade applicatio
 
 - [ ] Establish module size guidance: aim for ≤ 400 lines per component/service; require an architectural note and owner approval for exceptions.
 - [ ] Break up `DrawingCanvas.tsx` (currently ~2,900 lines), `src/index.ts` on the server (~1,000 lines), and `ProjectService.ts` (~860 lines) around tested interfaces.
-- [ ] Make `packages/shared` the single source of truth for socket contracts and project domain types. Eliminate the duplicated client/server socket definitions.
+- [x] Make `packages/shared` the single source of truth for socket contracts and project domain types. Eliminate the duplicated client/server socket definitions.
 - [ ] Replace `Record<string, any>` and Socket.IO casts with discriminated domain types or validated unknown values at the boundary.
 - [ ] Remove production `console.log` calls from shape detection; use structured, level-controlled telemetry where diagnostics are needed.
 - [ ] Adopt structured error types (validation, authorization, conflict, not-found, infrastructure) and one centralized HTTP/socket error mapping policy.
@@ -99,10 +99,10 @@ This plan turns the current strong foundation into a production-grade applicatio
 **Priority:** P2.
 
 - [ ] Audit keyboard navigation, focus traps, canvas alternatives, ARIA labels, contrast, touch targets, reduced motion, and screen-reader announcements; resolve all serious axe findings.
-- [ ] Write a runbook for deploys, migrations, rollback, incident response, database backup/restore, Redis failure, Clerk outage, and degraded realtime mode.
+- [x] Write a runbook for deploys, migrations, rollback, incident response, database backup/restore, Redis failure, Clerk outage, and degraded realtime mode.
 - [ ] Implement backup/restore drills at least quarterly and record recovery time and data-loss objectives.
 - [ ] Add dashboards for request latency/error rate, database health, socket connections/reconnects, collaboration conflicts, and client error rate.
-- [ ] Add a release checklist with migration order, environment validation, rollout health signals, rollback criteria, and post-deploy smoke tests.
+- [x] Add a release checklist with migration order, environment validation, rollout health signals, rollback criteria, and post-deploy smoke tests.
 
 **Verify:** a new engineer can execute a staged deployment and rollback from the runbook; accessibility and operational checks are part of the release gate.
 
