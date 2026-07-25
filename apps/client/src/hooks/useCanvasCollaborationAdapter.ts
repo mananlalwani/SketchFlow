@@ -7,6 +7,7 @@ type SocketOn = ReturnType<typeof useDrawingSocket>['on'];
 
 interface CanvasCollaborationAdapterOptions {
   on: SocketOn;
+  isConnected: boolean;
   currentProjectId?: string;
   projectRevision?: number;
   requestCanonicalHydration: (projectId: string) => void;
@@ -32,6 +33,13 @@ function isDrawingObject(value: unknown): value is DrawingObject {
 }
 
 export function getAuthoritativeObjects(data: unknown): DrawingObject[] | null {
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
   if (!data || typeof data !== 'object') return null;
 
   const objects = (data as { objects?: unknown }).objects;
@@ -43,6 +51,7 @@ export function getAuthoritativeObjects(data: unknown): DrawingObject[] | null {
 /** Applies revisioned canonical project state received over the collaboration socket. */
 export function useCanvasCollaborationAdapter({
   on,
+  isConnected,
   currentProjectId,
   projectRevision,
   requestCanonicalHydration,
@@ -51,6 +60,8 @@ export function useCanvasCollaborationAdapter({
   requestFullRedraw,
 }: CanvasCollaborationAdapterOptions) {
   useEffect(() => {
+    if (!isConnected) return;
+
     const applyCanonicalProject = (
       state: CollaborationHydration | CollaborationAppliedEvent,
       allowEqualRevision: boolean,
@@ -100,6 +111,7 @@ export function useCanvasCollaborationAdapter({
   }, [
     applyAuthoritativeProject,
     currentProjectId,
+    isConnected,
     on,
     projectRevision,
     replaceHistory,
