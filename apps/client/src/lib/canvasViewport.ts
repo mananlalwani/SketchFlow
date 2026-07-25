@@ -1,10 +1,41 @@
 export const WORLD_WIDTH = 51200;
 export const WORLD_HEIGHT = 28800;
+export const MIN_ZOOM = 0.1;
+export const MAX_ZOOM = 5;
 
 export type TriangleMode = 'right' | '45-45-90' | '30-60-90';
 export interface CanvasPoint {
   x: number;
   y: number;
+}
+
+export interface ZoomViewportOptions {
+  zoom: number;
+  viewX: number;
+  viewY: number;
+  nextZoom: number;
+  focalX: number;
+  focalY: number;
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
+export interface ZoomViewportResult extends CanvasPoint {
+  zoom: number;
+}
+
+export interface PanViewportOptions {
+  zoom: number;
+  viewX: number;
+  viewY: number;
+  deltaX: number;
+  deltaY: number;
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
+export function clampZoom(zoom: number): number {
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
 }
 
 export function constrainView(
@@ -20,6 +51,52 @@ export function constrainView(
     x: Math.max(0, Math.min(maxX, viewX)),
     y: Math.max(0, Math.min(maxY, viewY)),
   };
+}
+
+/**
+ * Changes zoom while keeping the world coordinate below a canvas focal point stable.
+ */
+export function zoomViewportAtPoint({
+  zoom,
+  viewX,
+  viewY,
+  nextZoom,
+  focalX,
+  focalY,
+  canvasWidth,
+  canvasHeight,
+}: ZoomViewportOptions): ZoomViewportResult {
+  const constrainedZoom = clampZoom(nextZoom);
+  const worldX = viewX + focalX / zoom;
+  const worldY = viewY + focalY / zoom;
+  const view = constrainView(
+    worldX - focalX / constrainedZoom,
+    worldY - focalY / constrainedZoom,
+    constrainedZoom,
+    canvasWidth,
+    canvasHeight,
+  );
+
+  return { zoom: constrainedZoom, ...view };
+}
+
+/** Moves the viewport by a screen-space pointer or wheel delta. */
+export function panViewportBy({
+  zoom,
+  viewX,
+  viewY,
+  deltaX,
+  deltaY,
+  canvasWidth,
+  canvasHeight,
+}: PanViewportOptions): CanvasPoint {
+  return constrainView(
+    viewX + deltaX / zoom,
+    viewY + deltaY / zoom,
+    zoom,
+    canvasWidth,
+    canvasHeight,
+  );
 }
 
 export function calculateTriangleVertices(

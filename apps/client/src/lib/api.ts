@@ -1,5 +1,5 @@
 import { localProjectsService } from './localProjects';
-import { NetworkError, parseHttpError } from './errorHandling';
+import { NetworkError, ValidationError, parseHttpError } from './errorHandling';
 
 export interface ProjectListItem {
   id: string;
@@ -117,6 +117,9 @@ async function httpWithRetry<T>(
       return await http<T>(path, init, token);
     } catch (e) {
       lastError = e;
+      // Client errors (including validation and revision conflicts) are deterministic.
+      // Retrying them only delays conflict recovery and can repeat a stale write.
+      if (e instanceof NetworkError && e.statusCode !== undefined && e.statusCode < 500) break;
       // Exponential backoff: 200ms, 500ms
       const delay = i === 0 ? 200 : 500;
       await new Promise((r) => setTimeout(r, delay));
@@ -152,13 +155,33 @@ export async function getProject<T = unknown>(
   return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, undefined, token);
 }
 
+export async function createProjectOnce<T = unknown>(
+  title: string,
+  data: T,
+  token?: string | null,
+): Promise<ProjectRecord<T>> {
+  if (!token) {
+    return localProjectsService.create(title, data) as Promise<ProjectRecord<T>>;
+  }
+  return http<ProjectRecord<T>>(
+    '/api/projects',
+    {
+      method: 'POST',
+      body: JSON.stringify({ title, data }),
+    },
+    token,
+  );
+}
+
 export async function createProject<T = unknown>(
   title: string,
   data: T,
   token?: string | null,
-  thumbnail?: string | null,
-  expectedRevision?: number,
+  _thumbnail?: string | null,
+  _expectedRevision?: number,
 ): Promise<ProjectRecord<T>> {
+  void _thumbnail;
+  void _expectedRevision;
   if (!token) {
     return localProjectsService.create(title, data) as Promise<ProjectRecord<T>>;
   }
@@ -166,7 +189,32 @@ export async function createProject<T = unknown>(
     '/api/projects',
     {
       method: 'POST',
-      body: JSON.stringify({ title, data, thumbnail, expectedRevision }),
+      body: JSON.stringify({ title, data }),
+    },
+    token,
+  );
+}
+
+export async function updateProjectOnce<T = unknown>(
+  id: string,
+  title: string,
+  data: T,
+  token?: string | null,
+  expectedRevision?: number,
+): Promise<ProjectRecord<T>> {
+  if (!token) {
+    return localProjectsService.save(id, title, data) as Promise<ProjectRecord<T>>;
+  }
+  if (expectedRevision === undefined) {
+    throw new ValidationError(
+      'A project revision is required to save cloud work. Reload the project and try again.',
+    );
+  }
+  return http<ProjectRecord<T>>(
+    `/api/projects/${id}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ title, data, expectedRevision }),
     },
     token,
   );
@@ -177,17 +225,22 @@ export async function updateProject<T = unknown>(
   title: string,
   data: T,
   token?: string | null,
-  thumbnail?: string | null,
+  _thumbnail?: string | null,
   expectedRevision?: number,
 ): Promise<ProjectRecord<T>> {
   if (!token) {
     return localProjectsService.save(id, title, data) as Promise<ProjectRecord<T>>;
   }
+  if (expectedRevision === undefined) {
+    throw new ValidationError(
+      'A project revision is required to save cloud work. Reload the project and try again.',
+    );
+  }
   return httpWithRetry<ProjectRecord<T>>(
     `/api/projects/${id}`,
     {
       method: 'PUT',
-      body: JSON.stringify({ title, data, thumbnail, expectedRevision }),
+      body: JSON.stringify({ title, data, expectedRevision }),
     },
     token,
   );

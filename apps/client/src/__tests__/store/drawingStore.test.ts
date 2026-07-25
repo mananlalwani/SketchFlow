@@ -11,6 +11,7 @@ describe('drawingStore', () => {
       needsFullRedraw: false,
       projectTitle: 'Untitled',
       unsavedChanges: false,
+      documentVersion: 0,
       currentProjectId: undefined,
       brushSize: 4,
       brushColor: '#ffffff',
@@ -138,6 +139,143 @@ describe('drawingStore', () => {
     });
   });
 
+  describe('authoritative project state', () => {
+    it('applies clean canonical state without scheduling a local save', () => {
+      const objects = [
+        {
+          id: 'remote-line',
+          type: 'line' as const,
+          x: 1,
+          y: 2,
+          width: 3,
+          height: 4,
+          color: '#fff',
+          size: 2,
+        },
+      ];
+      useDrawingStore.setState({ unsavedChanges: false, saveStatus: 'syncing' });
+
+      const applied = useDrawingStore.getState().applyAuthoritativeProject({
+        objects,
+        title: 'Canonical board',
+        revision: 7,
+      });
+
+      expect(applied).toBe(true);
+      expect(useDrawingStore.getState()).toMatchObject({
+        objects,
+        objectCount: 1,
+        projectTitle: 'Canonical board',
+        projectRevision: 7,
+        unsavedChanges: false,
+        saveStatus: 'saved',
+        needsFullRedraw: true,
+      });
+    });
+
+    it('does not replace unsaved local work with canonical state', () => {
+      const localObjects = [
+        {
+          id: 'local-line',
+          type: 'line' as const,
+          x: 10,
+          y: 20,
+          width: 30,
+          height: 40,
+          color: '#000',
+          size: 3,
+        },
+      ];
+      useDrawingStore.setState({
+        objects: localObjects,
+        projectTitle: 'Local board',
+        projectRevision: 5,
+        unsavedChanges: true,
+        documentVersion: 11,
+        saveStatus: 'syncing',
+      });
+
+      const applied = useDrawingStore.getState().applyAuthoritativeProject({
+        objects: [],
+        title: 'Remote board',
+        revision: 6,
+      });
+
+      expect(applied).toBe(false);
+      expect(useDrawingStore.getState()).toMatchObject({
+        objects: localObjects,
+        projectTitle: 'Local board',
+        projectRevision: 5,
+        unsavedChanges: true,
+        documentVersion: 11,
+        saveStatus: 'syncing',
+      });
+    });
+
+    it('hydrates a project as one clean revision-aware session baseline', () => {
+      const objects = [
+        {
+          id: 'loaded-line',
+          type: 'line' as const,
+          x: 1,
+          y: 2,
+          width: 3,
+          height: 4,
+          color: '#fff',
+          size: 2,
+        },
+      ];
+      useDrawingStore.setState({
+        currentProjectId: 'previous-project',
+        projectRevision: 2,
+        unsavedChanges: true,
+        documentVersion: 9,
+        history: [[], objects],
+        historyIndex: 1,
+      });
+
+      useDrawingStore.getState().hydrateProject({
+        id: 'loaded-project',
+        objects,
+        title: 'Loaded board',
+        revision: 7,
+        role: 'viewer',
+      });
+
+      expect(useDrawingStore.getState()).toMatchObject({
+        currentProjectId: 'loaded-project',
+        projectTitle: 'Loaded board',
+        projectRevision: 7,
+        projectRole: 'viewer',
+        objects,
+        objectCount: 1,
+        history: [objects],
+        historyIndex: 0,
+        unsavedChanges: false,
+        documentVersion: 10,
+        saveStatus: 'saved',
+        needsFullRedraw: true,
+      });
+
+      useDrawingStore.getState().updatePerformanceStats(60);
+
+      expect(useDrawingStore.getState()).toMatchObject({
+        fps: 60,
+        objects,
+        objectCount: 1,
+        projectTitle: 'Loaded board',
+      });
+    });
+
+    it('clears a previous project revision when changing projects', () => {
+      useDrawingStore.setState({ currentProjectId: 'project-a', projectRevision: 4 });
+
+      useDrawingStore.getState().setCurrentProject('project-b');
+
+      expect(useDrawingStore.getState().projectRevision).toBeUndefined();
+    });
+  });
+
   describe('history', () => {
     it('should save history', () => {
       const { addObject, saveHistory } = useDrawingStore.getState();
@@ -156,11 +294,13 @@ describe('drawingStore', () => {
       saveHistory();
       addObject({ id: 'obj-2', type: 'stroke', points: [], color: '#000', size: 2 });
       saveHistory();
+      useDrawingStore.getState().markSaved();
 
       undo();
 
       expect(useDrawingStore.getState().objects).toHaveLength(1);
       expect(useDrawingStore.getState().historyIndex).toBe(1);
+      expect(useDrawingStore.getState().unsavedChanges).toBe(true);
     });
 
     it('should redo', () => {
@@ -172,9 +312,11 @@ describe('drawingStore', () => {
       saveHistory();
 
       undo();
+      useDrawingStore.getState().markSaved();
       redo();
 
       expect(useDrawingStore.getState().objects).toHaveLength(2);
+      expect(useDrawingStore.getState().unsavedChanges).toBe(true);
     });
 
     it('should report canUndo and canRedo correctly', () => {
@@ -216,6 +358,31 @@ describe('drawingStore', () => {
       expect(useDrawingStore.getState().lastSavedAt).toBeDefined();
     });
 
+    it('keeps newer local edits dirty when an older save completes', () => {
+      const { addObject, markSaved } = useDrawingStore.getState();
+      addObject({ id: 'saved-object', type: 'stroke', points: [], color: '#fff', size: 2 });
+      const savedVersion = useDrawingStore.getState().documentVersion;
+
+      addObject({ id: 'new-object', type: 'stroke', points: [], color: '#000', size: 2 });
+      markSaved(savedVersion);
+
+      expect(useDrawingStore.getState()).toMatchObject({
+        documentVersion: savedVersion + 1,
+        unsavedChanges: true,
+        saveStatus: 'saved',
+      });
+    });
+
+    it('marks the matching document version as saved', () => {
+      const { setProjectTitle, markSaved } = useDrawingStore.getState();
+      setProjectTitle('Versioned save');
+      const savedVersion = useDrawingStore.getState().documentVersion;
+
+      markSaved(savedVersion);
+
+      expect(useDrawingStore.getState().unsavedChanges).toBe(false);
+    });
+
     it('should create new project', () => {
       const { addObject, setProjectTitle, newProject } = useDrawingStore.getState();
 
@@ -228,6 +395,18 @@ describe('drawingStore', () => {
       expect(useDrawingStore.getState().projectTitle).toBe('Untitled');
       expect(useDrawingStore.getState().unsavedChanges).toBe(false);
       expect(useDrawingStore.getState().currentProjectId).toBeUndefined();
+      expect(useDrawingStore.getState().projectRole).toBe('owner');
+    });
+
+    it('clears a stale revision when resetting or clearing the current project', () => {
+      useDrawingStore.setState({ currentProjectId: 'project-1', projectRevision: 4 });
+
+      useDrawingStore.getState().setCurrentProject(undefined);
+      expect(useDrawingStore.getState().projectRevision).toBeUndefined();
+
+      useDrawingStore.setState({ currentProjectId: 'project-2', projectRevision: 5 });
+      useDrawingStore.getState().newProject();
+      expect(useDrawingStore.getState().projectRevision).toBeUndefined();
     });
   });
 

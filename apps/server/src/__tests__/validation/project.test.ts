@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collaborationCommitSchema,
   collaboratorInputSchema,
   collaboratorUserIdSchema,
   folderInputSchema,
@@ -50,6 +51,74 @@ describe('project request validation', () => {
       projectInputSchema.safeParse({
         title: 'Image',
         data: { imageData: 'x'.repeat(7 * 1024 * 1024 + 1) },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('does not let object-count validation bypass nested field and depth limits', () => {
+    const nested: { value?: unknown } = {};
+    let cursor = nested;
+    for (let depth = 0; depth < 21; depth++) cursor = cursor.value = {} as { value?: unknown };
+
+    expect(
+      projectInputSchema.safeParse({
+        title: 'Objects with oversized text',
+        data: { objects: [{ text: 'x'.repeat(100_001) }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      projectInputSchema.safeParse({
+        title: 'Objects with oversized image',
+        data: { objects: [{ imageData: 'x'.repeat(7 * 1024 * 1024 + 1) }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      projectInputSchema.safeParse({ title: 'Objects with deep data', data: { objects: [nested] } })
+        .success,
+    ).toBe(false);
+  });
+
+  it('accepts only bounded, versioned collaboration commit envelopes', () => {
+    expect(
+      collaborationCommitSchema.safeParse({
+        operationId: 'operation_1234567',
+        expectedRevision: 3,
+        kind: 'replace-project',
+        data: { objects: [] },
+      }).success,
+    ).toBe(true);
+
+    expect(
+      collaborationCommitSchema.safeParse({
+        operationId: 'short',
+        expectedRevision: 3,
+        kind: 'replace-project',
+        data: { objects: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      collaborationCommitSchema.safeParse({
+        operationId: 'operation_1234567',
+        expectedRevision: 0,
+        kind: 'replace-project',
+        data: { objects: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      collaborationCommitSchema.safeParse({
+        operationId: 'operation_1234567',
+        expectedRevision: 3,
+        kind: 'unknown',
+        data: { objects: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      collaborationCommitSchema.safeParse({
+        operationId: 'operation_1234567',
+        expectedRevision: 3,
+        kind: 'replace-project',
+        data: { objects: [] },
+        unexpected: true,
       }).success,
     ).toBe(false);
   });

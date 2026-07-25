@@ -5,9 +5,9 @@
 [![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org/)
 [![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 
-A modern, high-performance real-time collaborative whiteboard application. Built with a focus on speed, reliability, and a premium user experience, **SketchFlow** allows multiple users to draw, sketch, and brainstorm together on a shared infinite canvas with sub-millisecond latency.
+A real-time collaborative whiteboard application built with React, TypeScript, Socket.IO, PostgreSQL, and Prisma. SketchFlow supports drawing, shapes, presence, project sharing, and an installable web experience.
 
-Features seamless synchronization across devices, including iPad/tablet support with pressure sensitivity.
+Performance and collaboration guarantees are validated by the repository's benchmark and integration gates; see [`docs/performance.md`](docs/performance.md) and the release checklist before making deployment claims.
 
 ## ✨ Features
 
@@ -19,10 +19,10 @@ Features seamless synchronization across devices, including iPad/tablet support 
   - Customizable stroke sizes and colors.
 - **👥 Multi-User Presence**: See other users' cursors and actions in real-time.
 - **📱 PWA Support**: Fully installable Progressive Web App with offline capabilities and standalone mode.
-- **🚀 High Performance**:
-  - Optimized for 60+ FPS rendering.
-  - Efficient update batching and object pooling.
-  - Hardware acceleration.
+- **🚀 Performance tooling**:
+  - Worker-backed rendering with explicit unsupported-browser reporting when transferable OffscreenCanvas is unavailable.
+  - Deterministic large-board benchmark fixtures and performance artifacts.
+  - Performance limits documented with the benchmark.
 - **🔒 Secure**: Authentication and user management powered by Clerk.
 
 ## 🛠 Tech Stack
@@ -66,16 +66,17 @@ This project is a monorepo managed with `pnpm` workspaces.
 
 ### Prerequisites
 
-- **Node.js**: v18+
-- **pnpm**: v9+
-- **PostgreSQL**: (Local or Cloud)
+- **Node.js**: 20.x (the version used by CI and Docker)
+- **pnpm**: the exact version pinned by the root `packageManager` field; Corepack is recommended.
+- **PostgreSQL**: 16+ for local development and integration testing.
+- **Redis**: required for multi-instance Socket.IO deployments; optional only for explicit single-instance development.
 
 ### Environment Setup
 
 1.  **Clone the repository**:
 
     ```bash
-    git clone https://github.com/my-org/sketchflow.git
+    git clone <your-public-repository-url>
     cd sketchflow
     ```
 
@@ -86,20 +87,14 @@ This project is a monorepo managed with `pnpm` workspaces.
     ```
 
 3.  **Environment Variables**:
-    Create a `.env` file in the root directory:
+    Copy each app's template to a local, ignored file and populate it with development credentials:
 
-    ```env
-    # Authentication (Clerk)
-    VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
-    CLERK_SECRET_KEY=sk_test_...
-
-    # Database
-    DATABASE_URL="postgresql://user:password@localhost:5432/live_draw?schema=public"
-
-    # Server Config
-    PORT=3000
-    NODE_ENV=development
+    ```bash
+    cp apps/client/.env.example apps/client/.env
+    cp apps/server/.env.example apps/server/.env
     ```
+
+    The browser may contain only intentionally public configuration such as the Clerk publishable key, release ID, and a provider-approved Sentry DSN. Keep database URLs, Clerk secret keys, telemetry credentials, source-map upload tokens, and authorization headers server-side or in deployment secret storage. Do not commit either `.env` file.
 
 ### Development
 

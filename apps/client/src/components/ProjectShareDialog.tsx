@@ -279,7 +279,7 @@ export function ProjectShareDialog({
               </div>
             )}
 
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               {isShared
                 ? 'Anyone with the link can view this drawing.'
                 : 'Generate a public link to share with anyone.'}
@@ -312,6 +312,7 @@ export function ProjectShareDialog({
                   }}
                 />
                 <select
+                  aria-label="Collaborator role"
                   value={newCollabRole}
                   onChange={(e) => setNewCollabRole(e.target.value as 'editor' | 'viewer')}
                   className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 rounded px-2 py-2 text-sm text-slate-900 dark:text-slate-100"
@@ -322,6 +323,7 @@ export function ProjectShareDialog({
                 <Button
                   variant="default"
                   size="icon"
+                  aria-label="Add collaborator"
                   onClick={handleAddCollaborator}
                   disabled={loading || !newCollabEmail.trim()}
                 >
@@ -356,7 +358,7 @@ export function ProjectShareDialog({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
                   No collaborators yet. Add someone by their email address.
                 </p>
               )}

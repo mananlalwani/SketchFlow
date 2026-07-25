@@ -1,13 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/store/authStore';
-import type {
-  ServerToClientEvents,
-  ClientToServerEvents,
-  StrokeData,
-  ShapeData,
-  CanvasSnapshot,
-} from '@/types/socket';
+import type { ServerToClientEvents, ClientToServerEvents } from '@/types/socket';
 
 type SocketInstance = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -278,52 +272,15 @@ export const useSocket = () => {
 export const useDrawingSocket = () => {
   const { emit, on } = useSocket();
 
-  const emitStroke = useCallback(
-    (stroke: StrokeData) => {
-      emit('draw:stroke', stroke);
-    },
-    [emit],
-  );
-
-  const emitStrokes = useCallback(
-    (strokes: StrokeData[]) => {
-      emit('draw:strokes', strokes);
-    },
-    [emit],
-  );
-
-  const emitShape = useCallback(
-    (shape: ShapeData) => {
-      emit('draw:shape', shape);
-    },
-    [emit],
-  );
-
-  const emitSnapshot = useCallback(
-    (snapshot: CanvasSnapshot) => {
-      emit('canvas:snapshot', snapshot);
-    },
-    [emit],
-  );
-
-  const emitClear = useCallback(() => {
-    emit('canvas:clear');
-  }, [emit]);
-
-  const emitProjectState = useCallback(
-    (objects: unknown[]) => {
-      emit('project:state', { objects, timestamp: Date.now() });
+  const requestCanonicalHydration = useCallback(
+    (projectId: string) => {
+      emit('room:join', projectId);
     },
     [emit],
   );
 
   return {
-    emitStroke,
-    emitStrokes,
-    emitShape,
-    emitSnapshot,
-    emitClear,
-    emitProjectState,
+    requestCanonicalHydration,
     on,
   };
 };

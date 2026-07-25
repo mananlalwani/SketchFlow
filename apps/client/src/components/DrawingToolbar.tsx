@@ -17,7 +17,6 @@ import {
   Move,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDrawingSocket } from '@/hooks/useSocket';
 import { useToast } from '@/hooks/use-toast';
 import {
   serializeProject,
@@ -107,7 +106,6 @@ export function DrawingToolbar() {
     minParabolaCurvature: autoShapeThresholds?.minParabolaCurvature ?? 1.4,
   } as const;
 
-  const { emitClear } = useDrawingSocket();
   const { toast } = useToast();
 
   const handleClearCanvas = () => {
@@ -116,10 +114,9 @@ export function DrawingToolbar() {
     );
     if (userConfirmed) {
       clearCanvas();
-      emitClear();
       toast({
         title: 'Canvas cleared',
-        description: 'The canvas has been cleared for all users.',
+        description: 'The canvas has been cleared and will be saved automatically.',
       });
     }
   };

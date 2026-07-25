@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { Logger, logger, getTraceContext } from '../utils/logger.js';
 import { createClient } from 'redis';
 import { env, isProd } from '../config/env.js';
+import { captureServerException, captureServerSignal } from '../sentry.js';
 
 /**
  * Request ID middleware - adds correlation ID to all requests
@@ -192,9 +193,15 @@ export function errorHandlerMiddleware(
 
   logger.error('Unhandled error', err, {
     method: req.method,
-    path: req.path,
-    query: req.query,
+    path: req.route?.path || req.path,
     ...(traceContext.traceId && { traceId: traceContext.traceId }),
+  });
+  captureServerException(err, {
+    method: req.method,
+    route: req.route?.path || req.path,
+    status: err.statusCode ?? err.status ?? 500,
+    ...(traceContext.traceId && { traceId: traceContext.traceId }),
+    ...(traceContext.spanId && { spanId: traceContext.spanId }),
   });
 
   // Don't leak error details in production
@@ -203,6 +210,9 @@ export function errorHandlerMiddleware(
   const status = err.statusCode ?? err.status;
   const expectedStatus =
     status === 400 || status === 403 || status === 404 || status === 413 ? status : 500;
+  if (expectedStatus >= 500) {
+    captureServerSignal('api_5xx', { method: req.method, route: req.route?.path || req.path });
+  }
   res.status(expectedStatus).json({
     error: message,
     requestId: req.headers['x-request-id'],

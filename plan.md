@@ -1,127 +1,178 @@
-# SketchFlow: roadmap to a 9–10/10 codebase
+# SketchFlow public-release roadmap
 
 ## Goal and definition of done
 
-This plan turns the current strong foundation into a production-grade application. A 9–10/10 outcome means:
+This roadmap records what has been implemented and independently verified for a public-release-ready repository. A completed repository phase requires repeatable local evidence; provider-side actions are deliberately tracked separately and are **not** marked complete without evidence from the relevant account.
 
-- no tracked secrets or unreviewed high/critical production dependency findings;
-- every pull request passes unit, integration, browser E2E, accessibility, type, lint, build, and container checks;
-- project access, sharing, and realtime permissions are enforced on the server;
-- acknowledged work survives refreshes, reconnects, restarts, and concurrent edits predictably;
-- the first-load and large-board experience meet explicit performance budgets;
-- the codebase has clear module ownership and is straightforward to change safely.
+A public release is ready only when:
+
+- no secrets, non-example environment files, generated build outputs, source maps, reports, or credentials are tracked or included in the production image;
+- required checks cover formatting, lint, types, build, unit/boundary tests, real PostgreSQL/Redis integration, browser/accessibility checks, release hygiene, dependency policy, and production-image lifecycle;
+- project access, sharing, and realtime permissions are enforced by the server;
+- project data and revision are canonical, acknowledged work survives restart/reconnect, and conflicting writes have deterministic recovery semantics;
+- performance assertions prove correctness and gross-stall resistance for the supported board size;
+- external release governance, credentials, registry settings, and observability validation have been completed by the release owner.
+
+## Current local verification snapshot
+
+The following commands have passed in this working tree after the current Phase 1–5 implementation work:
+
+```sh
+pnpm build
+pnpm type-check
+pnpm lint
+pnpm test:infrastructure
+pnpm --filter @sketchflow/client test
+pnpm --filter @sketchflow/client test:e2e
+pnpm check:release-hygiene
+pnpm audit:prod
+git diff --check
+```
+
+`pnpm audit:prod` correctly enforces the configured high/critical threshold, but its last run still reported **2 low and 9 moderate** findings. Those findings remain documented remediation/review work; a passing configured threshold is not the same as a finding-free dependency inventory.
+
+A workspace-wide formatting check also previously passed. It must be run from a clean workspace that excludes temporary agent worktrees; recursive Prettier globbing can otherwise inspect `.claude/worktrees/` copies that are not part of the release tree.
 
 ## Phase 1 — Secure the repository and release process
 
-**Priority:** P0 — complete before the next production release.
+**Priority:** P0.
 
-- [ ] Remove `.env`, `apps/client/.env`, and `apps/server/.env` from Git history and current tracking. Rotate every credential that was ever present in them.
-- [x] Add `.env`, `.env.*`, and application-specific variants to `.gitignore`; explicitly allow only `*.env.example` templates.
-- [x] Create root, client, and server `.env.example` files containing variable names, safe examples, and short descriptions.
-- [x] Make production startup fail fast when `CLERK_SECRET_KEY`, `DATABASE_URL`, or a non-empty `CORS_ORIGINS` allowlist is missing or invalid.
-- [x] Make dependency audit policy enforce zero critical/high findings. Track each remaining moderate finding with owner, reachability, remediation version, and review date in `docs/dependency-audit.md`.
-- [x] Add Dependabot or Renovate for weekly dependency PRs and monthly lockfile refreshes.
-- [x] Protect `main`: require CI, at least one review, and no direct pushes.
+**Repository-local status:** substantially complete and verified. **Release-owner status:** incomplete until provider-side evidence is recorded.
 
-**Verify:** `git ls-files '*env'` returns only example files; `pnpm audit --prod --audit-level high` exits cleanly; a production startup with an incomplete environment exits non-zero.
+- [x] Ignore nested `.env` and `.env.*` files while allowing only `.env.example` templates; exclude generated distributions, maps, coverage, browser reports/results, logs, and local telemetry output from Git and Docker build context.
+- [x] Provide root, client, and server `.env.example` templates with safe variable names and guidance.
+- [x] Make production server startup reject missing/invalid required Clerk, database, and CORS configuration.
+- [x] Add release-hygiene checks that reject tracked environment files, generated outputs, maps, coverage, reports, and browser artifacts.
+- [x] Add Docker-context/final-image auditing and use BuildKit secrets—not Docker `ARG` or `ENV`—for optional Sentry source-map uploads.
+- [x] Keep browser telemetry configuration public-only; do not expose private telemetry headers, upload tokens, or credentials through `VITE_*` values or browser assets.
+- [x] Add public-release documentation and repository policy material, including security/release/dependency-audit guidance.
+- [x] Configure the repository policy to fail `pnpm audit --prod --audit-level high` for high/critical production findings and document the remaining low/moderate findings.
+- [x] Prepare pinned/least-privilege CI workflow configuration, dependency maintenance, and publication supply-chain controls in the repository.
+- [ ] Rotate, revoke, or positively verify every potentially exposed Clerk, database, Sentry/telemetry, deployment, and registry credential before publishing a clean export.
+- [ ] Verify GitHub secret scanning/push protection, branch rulesets, required reviews/status checks, artifact retention, cache/log exposure, and remote branches/tags in the actual hosted repository.
+- [ ] Configure and verify package/image visibility, signing, SBOM/provenance publication, and registry retention in the target public registry.
+
+**Verify locally:** `pnpm check:release-hygiene`, `pnpm audit:prod`, Docker context/image audit, and a production startup with incomplete environment configuration.
+
+**Release-owner evidence required:** credential verification/rotation record, hosted GitHub policy screenshots or API evidence, and registry/signing/provenance evidence.
 
 ## Phase 2 — Make CI a complete release gate
 
 **Priority:** P0.
 
-- [x] Add a server ESLint configuration and include both client and server linting in `pnpm lint`.
-- [x] Add `pnpm format:check` using Prettier (or Biome) and make formatting non-negotiable in CI.
-- [x] Run Playwright E2E tests in CI with a disposable PostgreSQL service and deterministic test authentication.
-- [ ] Add an accessibility CI job using axe-core for the draw surface, toolbar, dialogs, project manager, and share flow.
-- [ ] Publish coverage artifacts and set ratcheting thresholds: 80% lines/functions globally, 90% for authorization, validation, persistence, and socket-boundary modules.
-- [x] Keep the Docker smoke test, but use readiness (`/api/readyz`) with a real CI database instead of liveness alone.
-- [x] Add a migration test: apply all migrations to a clean database, start the production image, then verify the critical project lifecycle.
+**Repository-local status:** core gates and disposable real-infrastructure coverage are implemented. Hosted CI execution and final coverage ratcheting remain open evidence/work.
 
-**Verify:** a pull request cannot merge unless lint, format, type-check, unit/integration/E2E/accessibility tests, audit, build, migration, and container checks pass.
+- [x] Enforce client and server linting through `pnpm lint`.
+- [x] Enforce formatting through `pnpm format:check`.
+- [x] Build shared, client, and server packages and type-check the client in release scripts.
+- [x] Add disposable loopback-only PostgreSQL 16 and Redis 7 services with tmpfs data, dynamic host ports, health checks, migrations, and guaranteed teardown.
+- [x] Add `pnpm test:infrastructure`, which proves real PostgreSQL project CAS/idempotency/cascade behavior and Redis-backed multi-instance Socket.IO behavior.
+- [x] Invoke the canonical disposable-infrastructure harness from CI rather than relying only on mocked integration tests.
+- [x] Run browser, accessibility, PWA update/recovery, web-vitals, and separate 10,000-object renderer benchmark suites in CI configuration.
+- [x] Test production-image readiness with a real database, migrations, a seeded shared-project fixture, and draw/shared-project smoke checks.
+- [x] Prevent image publishing unless test and container jobs complete; production image publication is restricted to `main` and uses BuildKit secrets for optional source-map upload.
+- [~] Publish and ratchet coverage to **80% global lines/functions** and **90% critical-module lines/functions**. Coverage scripts/artifacts and baseline gates exist, but the required final thresholds must be demonstrated without excluding production code.
+- [ ] Verify the complete workflow, artifact publication, protected merge gate, and production image lifecycle in the target hosted GitHub/registry environment.
+
+**Verify locally:** `pnpm build`, `pnpm type-check`, `pnpm lint`, `pnpm format:check`, `pnpm test`, `pnpm test:coverage`, `pnpm test:infrastructure`, browser E2E, container audit/smoke scripts, and `git diff --check`.
 
 ## Phase 3 — Prove authorization and realtime correctness
 
 **Priority:** P0.
 
-- [ ] Write a permission matrix covering owner, editor, viewer, anonymous user, valid public-link visitor, expired/revoked link visitor, and guessed project ID.
-- [ ] Add REST integration tests for every matrix cell: project read/write/delete, folders, collaborators, sharing, and revision conflicts.
-- [ ] Add Socket.IO integration tests for handshake identity, project-room authorization, editor/viewer behavior, session expiry, rate limits, and reconnects.
-- [ ] Require server-side authorization before every room join and every socket mutation; never trust client-provided role, project, or share flags.
-- [ ] Enforce public share-link scope, expiration, revocation, and read-only behavior in both HTTP and Socket.IO paths.
-- [ ] Add payload and operation limits for project saves, snapshot size, object count, image data, socket messages, and event frequency. Return explicit `400`, `403`, `409`, `413`, and `429` errors.
+**Repository-local status:** strong boundary and multi-instance coverage exists; the remaining contract/recovery proof must be completed before claiming public multi-user release readiness.
 
-**Verify:** automated matrix tests show no unauthorized read, join, or mutation path. Security tests include malformed values, stale sessions, and guessed IDs/tokens.
+- [x] Add permission-matrix REST and Socket.IO integration coverage for project access, collaborators, sharing, revision conflicts, room joins, editor/viewer behavior, rate limits, reconnects, and session-related paths.
+- [x] Authorize project access server-side for REST and room joins; do not trust client-provided role/project/share flags.
+- [x] Apply sharing scope, expiration/revocation, and read-only behavior in HTTP and Socket.IO paths.
+- [x] Add validated project/socket payload and rate limits with explicit validation, permission, conflict, size, and rate-limit responses.
+- [x] Make Redis-enabled Socket.IO integration deterministic with event-driven room hydration and two independent server instances.
+- [~] Use a fully runtime-validated, discriminated, acknowledged operation envelope for every durable socket mutation, with bounded future-revision buffering/resync and client-side operation deduplication.
+- [~] Recheck authorization immediately before durable socket commit and evict/downgrade affected sockets across instances after collaborator-role changes, unshare, revocation, or deletion.
+- [~] Complete minimized DTOs and protocol-limit coverage so inappropriate caller classes cannot receive owner identifiers, collaborator metadata, project data, or share-token-derived information.
+- [~] Prove all folder-cycle safeguards and typed infrastructure-failure behavior at REST/socket boundaries.
+
+**Verify:** automated tests must prove no unauthorized read, join, or mutation; delayed authorization and revocation must be tested against a real persistence/Redis path.
 
 ## Phase 4 — Make collaboration durable and deterministic
 
 **Priority:** P0 for multi-user production use.
 
-- [ ] Document the collaboration model and choose one: server-ordered operations, CRDT, or explicit conflict resolution. Record ordering, merge, and undo semantics in an ADR.
-- [ ] Persist acknowledged operations or snapshots transactionally; process-memory state must be an optimization, never the source of truth.
-- [ ] Use project revisions/conditional writes for all saves and return a typed conflict response containing the current revision.
-- [ ] Implement client conflict UX: retry when safe; otherwise present reload/duplicate/export recovery choices without losing local work.
-- [ ] Make offline work an ordered queue in IndexedDB, with bounded storage, retry backoff, conflict handling, and clear recovery status.
-- [ ] Require Redis (or equivalent) for horizontally scaled realtime deployments; document the one-instance development fallback separately.
-- [ ] Add restart, disconnect/reconnect, two-editor, delayed-message, offline replay, and multi-instance integration tests.
+**Repository-local status:** canonical revision/CAS and client write ordering are implemented and tested. Remaining end-to-end recovery and protocol guarantees must be completed before this phase can be marked complete.
 
-**Verify:** a test suite proves that acknowledged edits survive server restart and that simultaneous edits have documented, deterministic outcomes.
+- [x] Treat `Project.data` and `Project.revision` as the canonical document and optimistic-concurrency state.
+- [x] Persist accepted collaboration-operation/idempotency receipts and use transactional PostgreSQL compare-and-swap updates.
+- [x] Prove a concurrent expected-revision race accepts exactly one write, retains the persisted revision/data, deduplicates accepted replay, and cascades collaboration records on deletion using real PostgreSQL.
+- [x] Serialize client writes per logical project using `ProjectWriteCoordinator`; coalesce queued snapshots, progress revisions from acknowledgements, and reject obsolete work after hydration resets.
+- [x] Acquire cloud credentials only immediately before cloud attempts; retry only bounded transient revision-checked updates; never retry ambiguous project creates, conflicts, authorization failures, or validation failures.
+- [x] Pause conflict/permanent-failure lanes, resume only transient failures on reconnect, and make manual Save an explicit resume/retry action.
+- [x] Hydrate project ID/title/objects/revision/role/history/save state atomically and prevent stale write completions from corrupting a newly selected project.
+- [x] Keep real Redis multi-instance tests and PostgreSQL persistence tests in the disposable infrastructure harness.
+- [~] Demonstrate REST-to-socket and socket-to-REST convergence through the same canonical service, including duplicate IDs with altered payloads and strict acknowledgement/broadcast ordering.
+- [~] Reconstruct durable collaboration state after process restart/cache miss; prove restart restoration, clear/compaction equivalence, bounded idempotency retention, and offline replay behavior.
+- [~] Complete client resync behavior for gaps/lower revisions, bounded offline queue age/bytes, and recovery UX for conflict/reload/duplicate/export choices.
+- [~] Complete explicit Redis lifecycle/readiness behavior for disabled single-instance, connecting, ready, and failed states; reject unsafe durable operations when required Redis infrastructure fails.
+
+**Verify:** real-infrastructure tests must demonstrate restart recovery, REST/realtime convergence, deterministic simultaneous edits, replay idempotency, conflict safety, revocation eviction, and Redis startup/runtime readiness—not merely mocked process-local behavior.
 
 ## Phase 5 — Improve performance and resilience with budgets
 
 **Priority:** P1.
 
-- [ ] Establish CI-measured budgets: initial JS ≤ 300 kB gzip (excluding deferred features), LCP ≤ 2.5 s on the chosen mobile profile, INP ≤ 200 ms, CLS ≤ 0.1, and no uncaught error during a 10,000-object board scenario.
-- [ ] Lazy-load PDF import/export and any other infrequently used tooling. Confirm it is absent from the initial route bundle.
-- [ ] Split `DrawingCanvas` rendering, input, selection, transform, viewport, persistence, and collaboration adapters into focused modules; preserve behavior with tests during each extraction.
-- [ ] Add a reproducible 10,000-object benchmark measuring frame time, visible-object count, memory trend, pan/zoom latency, and worker throughput.
-- [ ] Use viewport culling, batching, and worker rendering only where profiling identifies a bottleneck; record before/after profiles in `docs/performance.md`.
-- [ ] Add production error monitoring with private source-map upload, release identifiers, and alerts for client errors, API 5xxs, socket disconnects, and persistence conflicts.
-- [ ] Exercise PWA offline, update, and recovery flows in browser tests; never cache authenticated API responses unless explicitly designed for it.
+**Repository-local status:** correctness gates, browser evidence, PWA flows, and privacy-safe observability foundations are in place. Canvas controller extraction, renderer recovery behavior, benchmark baselines, and external Sentry validation remain incomplete.
 
-**Verify:** CI retains benchmark results and build reports; all budgets pass on the reference profile; PDF code is loaded only when its feature is invoked.
+- [x] Enforce initial JavaScript (300 KB gzip), PWA precache (1 MB), mobile-reference LCP/INP/CLS, and no-uncaught-error 10,000-object scenario gates.
+- [x] Keep PDF/canvas rendering chunks out of the initial graph and lazy-load deferred functionality.
+- [x] Add a deterministic, versioned 10,000-object fixture and browser benchmark that validates shared-project hydration, worker scene/frame acknowledgement, pan/zoom interaction, frame samples, worker retained/visible/culled/render metrics, and JSON/trace artifacts.
+- [x] Repair the document-state invariant exposed by the benchmark: `objectCount` is derived only from document objects and cannot be overwritten by performance reporting.
+- [x] Cover PWA offline, update, and recovery behavior in browser tests without caching authenticated API responses by default.
+- [x] Implement optional environment-driven, privacy-filtered client/server Sentry integration with shared release IDs and BuildKit-secret source-map upload plumbing.
+- [~] Extract pointer drawing and transform orchestration from `DrawingCanvas.tsx` into a tested controller/commit adapter. Existing renderer-worker, keyboard, image-input, collaboration, tool-reset, viewport, and selection adapters are extracted, but the remaining controller boundaries must be completed.
+- [~] Harden renderer worker lifecycle into explicit unsupported/starting/ready/recovering/fallback/failed states with bounded queued messages, initialization timeout, retained-scene reload, bounded crash recovery, and a truthful unsupported-browser fallback policy. Current implementation reports unsupported/starting/ready/failed and cleans up worker listeners/resources, but does not yet provide the full recovery/fallback contract.
+- [~] Expand the large-board benchmark with warm-up/repeated samples, p95/p99 and dropped-frame statistics, long-task observation, repeated heap trends where available, representative mixed fixtures, and a versioned reference-runner baseline before ratcheting timing/memory limits.
+- [~] Add direct, independently tested sanitized operational signals for API 5xx, persistence conflict, socket reconnect exhaustion, Redis adapter failure, and renderer recovery/fallback. Never send canvas/project content, images, share tokens, query strings, request bodies, auth headers, cookies, raw socket payloads, raw user IDs, or PII.
+- [ ] Run authorized staging/production Sentry source-map upload, symbolication, privacy, DSN-origin, retention/access, and alert validation using actual provider credentials. Do not claim this from local wiring alone.
+
+**Verify locally:** `pnpm --filter @sketchflow/client test:e2e`, benchmark artifact review, bundle-budget checks, sanitizer tests, and build-asset/image audits.
+
+**Release-owner evidence required:** authorized Sentry staging validation and provider-side alert/retention/access configuration evidence.
 
 ## Phase 6 — Finish maintainability work
 
 **Priority:** P1.
 
-- [ ] Establish module size guidance: aim for ≤ 400 lines per component/service; require an architectural note and owner approval for exceptions.
-- [ ] Break up `DrawingCanvas.tsx` (currently ~2,900 lines), `src/index.ts` on the server (~1,000 lines), and `ProjectService.ts` (~860 lines) around tested interfaces.
-- [ ] Make `packages/shared` the single source of truth for socket contracts and project domain types. Eliminate the duplicated client/server socket definitions.
-- [ ] Replace `Record<string, any>` and Socket.IO casts with discriminated domain types or validated unknown values at the boundary.
-- [ ] Remove production `console.log` calls from shape detection; use structured, level-controlled telemetry where diagnostics are needed.
-- [ ] Adopt structured error types (validation, authorization, conflict, not-found, infrastructure) and one centralized HTTP/socket error mapping policy.
-- [ ] Add architecture decision records for auth/share links, collaboration conflict behavior, offline strategy, scaling, and rendering boundaries.
-
-**Verify:** the three largest modules are split into cohesive, tested units; no duplicated socket contracts remain; lint rules prevent new unsafe boundary types.
+- [ ] Establish module-size guidance and ownership/architecture-note requirements for exceptions.
+- [~] Continue splitting the largest modules: `DrawingCanvas.tsx` remains large despite extracted adapters; server bootstrap and `ProjectService` still need cohesive boundary extraction.
+- [ ] Make `packages/shared` the sole source of truth for socket contracts and project domain types; remove duplicate client/server definitions.
+- [ ] Replace unsafe `Record<string, any>` and Socket.IO casts with validated boundary types.
+- [ ] Remove production diagnostic console logging in favor of structured, level-controlled telemetry.
+- [ ] Finish centralized typed error mapping and remaining ADRs for auth/sharing, collaboration recovery, scaling, and rendering boundaries.
 
 ## Phase 7 — Polish product quality and operations
 
 **Priority:** P2.
 
-- [ ] Audit keyboard navigation, focus traps, canvas alternatives, ARIA labels, contrast, touch targets, reduced motion, and screen-reader announcements; resolve all serious axe findings.
-- [ ] Write a runbook for deploys, migrations, rollback, incident response, database backup/restore, Redis failure, Clerk outage, and degraded realtime mode.
-- [ ] Implement backup/restore drills at least quarterly and record recovery time and data-loss objectives.
-- [ ] Add dashboards for request latency/error rate, database health, socket connections/reconnects, collaboration conflicts, and client error rate.
-- [ ] Add a release checklist with migration order, environment validation, rollout health signals, rollback criteria, and post-deploy smoke tests.
+- [ ] Complete manual accessibility review for keyboard navigation, focus traps, canvas alternatives, ARIA labels, contrast, touch targets, reduced motion, and screen-reader announcements.
+- [ ] Publish deploy, migration, rollback, incident, backup/restore, Redis-failure, Clerk-outage, and degraded-realtime runbooks.
+- [ ] Run and document backup/restore drills with recovery-time and recovery-point objectives.
+- [ ] Configure dashboards and alerts for request latency/errors, database health, sockets/reconnects, collaboration conflicts, and sanitized client errors.
+- [ ] Finalize release checklist with migration order, environment validation, rollout health, rollback criteria, and post-deploy smoke tests.
 
-**Verify:** a new engineer can execute a staged deployment and rollback from the runbook; accessibility and operational checks are part of the release gate.
+## Recommended completion order
 
-## Recommended execution order
-
-1. Phase 1: secret hygiene and dependency policy.
-2. Phase 2: CI gates, especially E2E/migration/container validation.
-3. Phase 3: authorization matrix and socket boundary proof.
-4. Phase 4: collaboration durability and conflict design.
-5. Phase 5 and Phase 6 in parallel after the collaboration contract stabilizes.
-6. Phase 7 as the final operational-quality pass.
+1. Finish the Phase 3–4 collaboration audit findings: one runtime-validated acknowledged operation contract, convergence/restart/revocation proofs, recovery/compaction, and Redis lifecycle readiness.
+2. Complete Phase 5 canvas-controller and renderer lifecycle recovery work, then establish benchmark baselines before adding tighter budgets.
+3. Raise coverage honestly to the Phase 2 thresholds and verify every hosted CI/container gate.
+4. Complete external Phase 1/Sentry/registry/GitHub release-owner checklist items with provider-side evidence.
+5. Complete Phase 6–7 maintainability and operational work before calling the overall codebase 9–10/10.
 
 ## Scorecard
 
-| Area            | Current signal                                           | Target for 9–10/10                                          |
-| --------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
-| Build quality   | Tests, lint, types, and builds pass                      | Full client/server/E2E/a11y/migration release gate          |
-| Security        | Good validation/rate-limit foundation; tracked env files | No tracked secrets; proven server-side authorization        |
-| Reliability     | Realtime and persistence foundations                     | Restart/offline/concurrent-edit recovery proven by tests    |
-| Performance     | Production build warns about large chunks                | Explicit, CI-enforced loading and board-performance budgets |
-| Maintainability | Large central modules and duplicate contracts            | Focused modules, shared contracts, typed boundaries         |
-| Operations      | Health probes and Docker build exist                     | Runbooks, dashboards, drills, alerting, safe releases       |
+| Area | Current evidence | Remaining before public-release completion |
+| --- | --- | --- |
+| Build quality | Local build, types, lint, tests, E2E, and disposable real-infrastructure suite pass | Hosted-CI evidence; final coverage thresholds and artifact verification |
+| Security | Hygiene/audit/image safeguards and server authorization foundations are implemented | Credential/provider review, hosted rulesets/scanning, remaining moderate/low dependency review |
+| Reliability | PostgreSQL CAS/idempotency, Redis two-instance tests, and client write serialization pass | Restart/convergence/revocation/compaction and Redis runtime-readiness proofs |
+| Performance | Bundle/web-vitals/PWA and 10,000-object correctness/gross-stall evidence pass | Controller extraction, worker recovery contract, repeated/reference benchmark baselines |
+| Observability | Environment-driven privacy filters and source-map upload plumbing exist | Authorized Sentry provider upload/symbolication/privacy/alert validation |
+| Operations | Readiness/container lifecycle and release-hygiene tooling exist | Hosted governance, signing/provenance, runbooks, drills, dashboards, release-owner evidence |

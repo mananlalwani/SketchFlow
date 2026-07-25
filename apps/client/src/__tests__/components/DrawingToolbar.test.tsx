@@ -3,13 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useDrawingStore } from '@/store/drawingStore';
 
-// Mock dependencies
-vi.mock('@/hooks/useSocket', () => ({
-  useDrawingSocket: () => ({
-    emitClear: vi.fn(),
-  }),
-}));
-
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({
     toast: vi.fn(),

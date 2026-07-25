@@ -16,6 +16,7 @@ import {
   moveProjectToFolder,
 } from '@/lib/api';
 import { useDrawingStore } from '@/store/drawingStore';
+import { activeProjectWriteCoordinator } from '@/lib/projectWriteCoordinator';
 import { deserializeProject, serializeProject, generateId } from '@/lib/utils';
 import { encodeDrawFormat, decodeDrawFormat, DRAW_FORMAT_EXTENSION } from '@/lib/drawFormat';
 import { Button } from '@/components/ui/button';
@@ -167,16 +168,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     }
   };
 
-  const {
-    setObjects,
-    replaceHistory,
-    requestFullRedraw,
-    setProjectTitle,
-    setCurrentProject,
-    markSaved,
-    currentProjectId,
-    setProjectRole,
-  } = useDrawingStore();
+  const { hydrateProject, currentProjectId, setCurrentProject, setProjectRevision } =
+    useDrawingStore();
 
   const handleDismissBanner = () => {
     setGuestBannerDismissed(true);
@@ -406,16 +399,19 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       const record = await getProject<ReturnType<typeof serializeProject>>(id, token);
       const objects = deserializeProject(record.data);
 
-      setObjects(objects);
-      replaceHistory(objects);
-      requestFullRedraw();
-      setProjectTitle(record.title);
-      setCurrentProject(record.id);
-      markSaved();
-
-      // Set project role - guests always get 'owner' role for local projects
-      const role = isGuest ? 'owner' : record.role || 'owner';
-      setProjectRole(role);
+      // Install a fully clean project session in one store transition so a load
+      // cannot briefly appear dirty or save with an uninitialized revision.
+      activeProjectWriteCoordinator.reset(record.id, {
+        projectId: record.id,
+        revision: record.revision,
+      });
+      hydrateProject({
+        id: record.id,
+        objects,
+        title: record.title,
+        revision: record.revision,
+        role: isGuest ? 'owner' : record.role || 'owner',
+      });
 
       localStorage.setItem('lastProjectId', record.id);
 
@@ -434,10 +430,20 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     try {
       const token = await getToken();
       const record = await getProject<ReturnType<typeof serializeProject>>(id, token);
-      await updateProject(id, renameValue.trim(), record.data, token);
-      setProjects((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, title: renameValue.trim() } : p)),
+      const updated = await updateProject(
+        id,
+        renameValue.trim(),
+        record.data,
+        token,
+        undefined,
+        record.revision,
       );
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, title: updated.title, revision: updated.revision } : p,
+        ),
+      );
+      if (currentProjectId === id) setProjectRevision(updated.revision);
       setRenamingId(null);
       toast({ title: 'Project renamed' });
     } catch {
@@ -824,7 +830,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
   return (
     <>
-      <div className="flex h-full w-full animate-fade-in bg-slate-50 dark:bg-slate-950 transition-colors duration-200 flex-col">
+      <div className="flex h-full w-full animate-fade-in bg-white dark:bg-slate-950 transition-colors duration-200 flex-col">
         {/* Guest Mode Banner - Dismissable */}
         {isGuest && !guestBannerDismissed && (
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b border-blue-200 dark:border-blue-800/50 px-6 py-3">
@@ -845,6 +851,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
               <Button
                 variant="ghost"
                 size="sm"
+                aria-label="Dismiss guest mode notice"
                 onClick={handleDismissBanner}
                 className="h-8 w-8 p-0 hover:bg-blue-200 dark:hover:bg-blue-900/50"
               >
@@ -856,16 +863,17 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
         <div className="flex flex-1 overflow-hidden">
           {/* Folder Sidebar */}
-          <div className="w-56 border-r border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-900/30 flex flex-col shrink-0 transition-colors duration-200">
+          <div className="w-56 border-r border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900/30 flex flex-col shrink-0 transition-colors duration-200">
             <div className="p-3 border-b border-slate-200 dark:border-white/10">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                   {isGuest ? 'Local Projects' : 'Folders'}
                 </span>
                 {!isGuest && (
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="New folder"
                     className="h-6 w-6 text-slate-500 hover:text-slate-900 dark:hover:text-white"
                     onClick={() => setCreatingFolder(true)}
                     title="New Folder"
@@ -902,7 +910,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 onClick={() => setSelectedFolderId(null)}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
                   selectedFolderId === null && !searchQuery
-                    ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
@@ -934,7 +942,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                       onClick={() => setSelectedFolderId(folder.id)}
                       className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
                         selectedFolderId === folder.id
-                          ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
                           : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
                       }`}
                     >
@@ -1168,6 +1176,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="Grid view"
                     onClick={() => setViewMode('grid')}
                     className={`h-8 w-8 ${viewMode === 'grid' ? 'bg-slate-200 dark:bg-white/10' : ''}`}
                   >
@@ -1176,6 +1185,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="List view"
                     onClick={() => setViewMode('list')}
                     className={`h-8 w-8 ${viewMode === 'list' ? 'bg-slate-200 dark:bg-white/10' : ''}`}
                   >
@@ -1195,7 +1205,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 searchQuery ? (
                   <div className="flex flex-col items-center justify-center h-64 text-center">
                     <Search className="w-12 h-12 text-slate-400 dark:text-slate-600 mb-4" />
-                    <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">
+                    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">
                       No matching projects
                     </h3>
                     <p className="text-slate-500">Try a different search term</p>
@@ -1203,10 +1213,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 ) : (
                   <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-300 dark:border-white/10 rounded-2xl bg-white/50 dark:bg-white/5 p-12">
                     <Sparkles className="w-12 h-12 text-blue-500 dark:text-blue-400 mb-4" />
-                    <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">
+                    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">
                       {isGuest ? 'Start Drawing Locally' : 'Start Creating'}
                     </h3>
-                    <p className="text-slate-500 mb-6 text-center max-w-sm">
+                    <p className="text-slate-900 dark:text-slate-100 mb-6 text-center max-w-sm">
                       {isGuest
                         ? 'Create a local drawing project. Sign in to sync and collaborate.'
                         : 'Create your first drawing or import an existing project.'}
@@ -1456,6 +1466,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label={`Actions for ${project.title || 'Untitled'}`}
                                 className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 h-8 w-8 transition-opacity"
                               >
                                 <MoreHorizontal className="w-4 h-4" />

@@ -53,7 +53,10 @@ if (isOtelEnabled) {
 
   const serviceName = process.env.OTEL_SERVICE_NAME || 'sketchflow-server';
   const serviceVersion =
-    process.env.OTEL_SERVICE_VERSION || process.env.npm_package_version || '1.0.0';
+    process.env.RELEASE_ID ||
+    process.env.OTEL_SERVICE_VERSION ||
+    process.env.npm_package_version ||
+    '1.0.0';
   const environment = process.env.NODE_ENV || 'development';
 
   // Create resource with service info

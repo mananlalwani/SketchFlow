@@ -1,7 +1,66 @@
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { prisma } from '../lib/prisma.js';
-import type { CanvasSnapshot } from '../types/socket.js';
+import { collaborationCommitSchema } from '../validation/project.js';
+
+export type CollaborationCommitKind = 'replace-project';
+
+export interface CollaborationCommitInput {
+  projectId: string;
+  userId: string;
+  operationId: string;
+  expectedRevision: number;
+  data: unknown;
+  title?: string;
+  kind: CollaborationCommitKind;
+}
+
+export type CollaborationCommitResult =
+  | {
+      status: 'applied';
+      operationId: string;
+      revision: number;
+      data: unknown;
+      title: string;
+    }
+  | {
+      status: 'duplicate';
+      operationId: string;
+      revision: number;
+    }
+  | {
+      status: 'conflict';
+      operationId: string;
+      currentRevision: number;
+    }
+  | { status: 'forbidden' | 'not_found' | 'invalid'; operationId: string };
+
+function stableSerialize(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
+    .join(',')}}`;
+}
+
+function collaborationReceiptHash(input: CollaborationCommitInput): string {
+  return createHash('sha256')
+    .update(
+      stableSerialize({
+        projectId: input.projectId,
+        userId: input.userId,
+        operationId: input.operationId,
+        expectedRevision: input.expectedRevision,
+        data: input.data,
+        kind: input.kind,
+        title: input.title ?? null,
+      }),
+    )
+    .digest('hex');
+}
 
 export interface ProjectRecord {
   id: string;
@@ -31,21 +90,168 @@ export interface FolderRecord {
 }
 
 export class ProjectService {
-  public async saveCollaborationSnapshot(
-    projectId: string,
-    snapshot: CanvasSnapshot,
-  ): Promise<void> {
-    await prisma.collaborationSnapshot.upsert({
-      where: { projectId },
-      create: { projectId, data: snapshot as object },
-      update: { data: snapshot as object },
-    });
+  /**
+   * Atomically applies a complete canonical project document. Project.data and
+   * Project.revision are the durable state authority; the operation table only
+   * supplies ordered, idempotent receipts for realtime clients.
+   */
+  public async commitCollaborationOperation(
+    input: CollaborationCommitInput,
+  ): Promise<CollaborationCommitResult> {
+    if (
+      !collaborationCommitSchema.safeParse({
+        operationId: input.operationId,
+        expectedRevision: input.expectedRevision,
+        kind: input.kind,
+        data: input.data,
+      }).success ||
+      (input.title !== undefined &&
+        (input.title.trim().length < 1 || input.title.trim().length > 200))
+    ) {
+      return { status: 'invalid', operationId: input.operationId };
+    }
+
+    const receiptHash = collaborationReceiptHash(input);
+
+    const commit = async (): Promise<CollaborationCommitResult> =>
+      prisma.$transaction(async (tx) => {
+        const existingOperation = await tx.collaborationOperation.findUnique({
+          where: {
+            projectId_operationId: {
+              projectId: input.projectId,
+              operationId: input.operationId,
+            },
+          },
+        });
+        if (existingOperation) {
+          return existingOperation.receiptHash === receiptHash
+            ? {
+                status: 'duplicate' as const,
+                operationId: input.operationId,
+                revision: existingOperation.revision,
+              }
+            : { status: 'invalid' as const, operationId: input.operationId };
+        }
+
+        const project = await tx.project.findUnique({
+          where: { id: input.projectId },
+          include: { collaborators: { select: { userId: true, role: true } } },
+        });
+        if (!project) return { status: 'not_found' as const, operationId: input.operationId };
+
+        const collaborator = project.collaborators.find((entry) => entry.userId === input.userId);
+        if (project.userId !== input.userId && collaborator?.role !== 'editor') {
+          return { status: 'forbidden' as const, operationId: input.operationId };
+        }
+        if (project.revision !== input.expectedRevision) {
+          return {
+            status: 'conflict' as const,
+            operationId: input.operationId,
+            currentRevision: project.revision,
+          };
+        }
+
+        const title = input.title?.trim() ?? project.title;
+        const updated = await tx.project.updateMany({
+          where: { id: input.projectId, revision: input.expectedRevision },
+          data: {
+            title,
+            data: input.data as object,
+            revision: { increment: 1 },
+            updatedAt: new Date(),
+          },
+        });
+        if (updated.count !== 1) {
+          // A matching operation may have committed after our initial receipt
+          // read. Check again before classifying the lost CAS as a conflict.
+          const concurrentOperation = await tx.collaborationOperation.findUnique({
+            where: {
+              projectId_operationId: {
+                projectId: input.projectId,
+                operationId: input.operationId,
+              },
+            },
+          });
+          if (concurrentOperation) {
+            return concurrentOperation.receiptHash === receiptHash
+              ? {
+                  status: 'duplicate' as const,
+                  operationId: input.operationId,
+                  revision: concurrentOperation.revision,
+                }
+              : { status: 'invalid' as const, operationId: input.operationId };
+          }
+
+          const current = await tx.project.findUnique({ where: { id: input.projectId } });
+          return current
+            ? {
+                status: 'conflict' as const,
+                operationId: input.operationId,
+                currentRevision: current.revision,
+              }
+            : { status: 'not_found' as const, operationId: input.operationId };
+        }
+
+        const revision = input.expectedRevision + 1;
+        await tx.collaborationOperation.create({
+          data: {
+            projectId: input.projectId,
+            operationId: input.operationId,
+            actorUserId: input.userId,
+            revision,
+            kind: input.kind,
+            receiptHash,
+          },
+        });
+
+        return {
+          status: 'applied' as const,
+          operationId: input.operationId,
+          revision,
+          data: input.data,
+          title,
+        };
+      });
+
+    try {
+      return await commit();
+    } catch (error) {
+      // A concurrent identical operation can race its first receipt lookup. The
+      // unique receipt index makes the winner durable; resolve the loser as a
+      // duplicate only when its complete canonical payload matches.
+      if (this.isUniqueConstraintError(error)) {
+        const existingOperation = await prisma.collaborationOperation.findUnique({
+          where: {
+            projectId_operationId: {
+              projectId: input.projectId,
+              operationId: input.operationId,
+            },
+          },
+        });
+        if (existingOperation) {
+          return existingOperation.receiptHash === receiptHash
+            ? {
+                status: 'duplicate',
+                operationId: input.operationId,
+                revision: existingOperation.revision,
+              }
+            : { status: 'invalid', operationId: input.operationId };
+        }
+      }
+      logger.error('Failed to commit canonical collaboration operation', error);
+      throw error;
+    }
   }
 
-  public async getCollaborationSnapshot(projectId: string): Promise<CanvasSnapshot | null> {
-    const snapshot = await prisma.collaborationSnapshot.findUnique({ where: { projectId } });
-    return snapshot ? (snapshot.data as unknown as CanvasSnapshot) : null;
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'P2002'
+    );
   }
+
   // Permission checking helper
   public async checkPermission(
     projectId: string,
@@ -273,6 +479,7 @@ export class ProjectService {
         userId: project.userId,
         title: project.title,
         data: project.data,
+        revision: project.revision,
         updatedAt: project.updatedAt.getTime(),
         createdAt: project.createdAt.getTime(),
         shared: project.shared,
@@ -321,127 +528,6 @@ export class ProjectService {
     } catch (e) {
       logger.error('Failed to get project by share token', e);
       return null;
-    }
-  }
-
-  public async save(
-    id: string,
-    userId: string,
-    title: string,
-    data: unknown,
-    expectedRevision?: number,
-  ): Promise<ProjectRecord> {
-    try {
-      let existing;
-
-      try {
-        existing = await prisma.project.findUnique({
-          where: { id },
-        });
-      } catch {
-        // Fallback if collaborators table doesn't exist
-        existing = await prisma.project.findUnique({
-          where: { id },
-        });
-      }
-
-      // Check if user can edit using permission helper
-      if (existing) {
-        const canEdit = await this.checkPermission(id, userId, 'edit');
-        if (!canEdit) {
-          const forbidden = new Error('No permission to edit this project');
-          forbidden.name = 'ProjectAccessError';
-          throw forbidden;
-        }
-        if (expectedRevision !== undefined && existing.revision !== expectedRevision) {
-          const conflict = new Error('Project revision conflict');
-          conflict.name = 'ProjectConflictError';
-          throw conflict;
-        }
-      }
-
-      let project;
-      let resultCollaborators: { userId: string; role: string }[] = [];
-
-      try {
-        if (existing && expectedRevision !== undefined) {
-          const updated = await prisma.project.updateMany({
-            where: { id, userId, revision: expectedRevision },
-            data: {
-              title,
-              data: data as object,
-              revision: { increment: 1 },
-              updatedAt: new Date(),
-            },
-          });
-          if (updated.count !== 1) {
-            const conflict = new Error('Project revision conflict');
-            conflict.name = 'ProjectConflictError';
-            throw conflict;
-          }
-          project = await prisma.project.findUnique({
-            where: { id },
-            include: { collaborators: { select: { userId: true, role: true } } },
-          });
-          if (!project) throw new Error('Project disappeared during save');
-        } else {
-          project = await prisma.project.upsert({
-            where: { id },
-            create: {
-              id,
-              userId,
-              title,
-              data: data as object,
-              shared: false,
-            },
-            update: {
-              title,
-              data: data as object,
-              revision: { increment: 1 },
-              updatedAt: new Date(),
-            },
-            include: {
-              collaborators: {
-                select: { userId: true, role: true },
-              },
-            },
-          });
-        }
-        resultCollaborators = project.collaborators || [];
-      } catch {
-        // Fallback if collaborators table doesn't exist
-        project = await prisma.project.upsert({
-          where: { id },
-          create: {
-            id,
-            userId,
-            title,
-            data: data as object,
-            shared: false,
-          },
-          update: {
-            title,
-            data: data as object,
-            updatedAt: new Date(),
-          },
-        });
-      }
-
-      return {
-        id: project.id,
-        userId: project.userId,
-        title: project.title,
-        data: project.data,
-        revision: project.revision,
-        updatedAt: project.updatedAt.getTime(),
-        createdAt: project.createdAt.getTime(),
-        shared: project.shared,
-        shareToken: project.shareToken ?? undefined,
-        collaborators: resultCollaborators,
-      };
-    } catch (e) {
-      logger.error('Failed to save project', e);
-      throw e;
     }
   }
 
@@ -699,6 +785,7 @@ export class ProjectService {
         userId: project.userId,
         title: project.title,
         data: project.data,
+        revision: project.revision,
         updatedAt: project.updatedAt.getTime(),
         createdAt: project.createdAt.getTime(),
         shared: project.shared,

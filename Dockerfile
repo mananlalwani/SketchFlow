@@ -1,4 +1,14 @@
 # syntax=docker/dockerfile:1
+# This target is built independently in CI so Docker's own context rules—not a
+# filesystem glob approximation—prove local env files and maps never enter it.
+FROM node:20-alpine AS context-audit
+WORKDIR /context
+COPY . .
+RUN test ! -e .env && \
+    test ! -e apps/client/.env && \
+    test ! -e apps/server/.env && \
+    ! find . -type f \( -name '*.map' -o \( \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' \) \) -print -quit | grep -q .
+
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -15,19 +25,39 @@ RUN pnpm install --frozen-lockfile
 # Build shared package
 RUN pnpm --filter @sketchflow/shared build
 
-# Generate Prisma client (for build)
-RUN pnpm --filter @sketchflow/server db:generate
+# Generate Prisma client (for build). Prisma resolves DATABASE_URL while loading its
+# configuration, so use an inert build-only URL rather than copying a local env file.
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
+    pnpm --filter @sketchflow/server db:generate
 
-# Build client and server
-RUN pnpm --filter @sketchflow/client build
+# Build client and server. The Sentry token is mounted only for this build step, never
+# copied into an image layer or exposed as a Vite variable. RELEASE_ID is public release metadata.
+ARG RELEASE_ID=unknown
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT
+RUN --mount=type=secret,id=sentry_auth_token,required=false \
+    if [ -f /run/secrets/sentry_auth_token ]; then \
+      SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
+      SENTRY_ORG="$SENTRY_ORG" \
+      SENTRY_PROJECT="$SENTRY_PROJECT" \
+      VITE_RELEASE_ID="$RELEASE_ID" \
+      pnpm --filter @sketchflow/client build; \
+    else \
+      VITE_RELEASE_ID="$RELEASE_ID" pnpm --filter @sketchflow/client build; \
+    fi && \
+    ! find apps/client/dist -type f -name '*.map' -print -quit | grep -q . && \
+    ! grep -R --include='*.js' --include='*.css' 'sourceMappingURL=' apps/client/dist
 RUN pnpm --filter @sketchflow/server build
 
 # Deploy server (isolated production build)
 # This installs prod dependencies into /app/deploy
 RUN pnpm --filter @sketchflow/server --prod deploy --legacy /app/deploy
 
-# Verify and copy artifacts if needed
-# pnpm deploy might not copy ignored build artifacts like dist, so we copy them explicitly
+# pnpm deploy can include dependency source maps and package env templates. Neither is
+# needed at runtime and retaining either expands the public image surface.
+RUN find /app/deploy -type f \( -name '*.map' -o -name '.env' -o -name '.env.*' \) -delete
+
+# pnpm deploy might not copy ignored build artifacts like dist, so we copy them explicitly.
 RUN cp -r apps/server/dist /app/deploy/dist
 RUN cp -r apps/server/prisma /app/deploy/prisma
 

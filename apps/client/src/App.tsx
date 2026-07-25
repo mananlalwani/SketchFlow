@@ -6,11 +6,10 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
-import { DrawingCanvas } from '@/components/DrawingCanvas';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useSocket } from '@/hooks/useSocket';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { AutoSaveHandler } from '@/components/AutoSaveHandler';
 import { ProjectManager } from '@/components/ProjectManager';
@@ -20,6 +19,11 @@ import { useProjectMigration } from '@/hooks/useProjectMigration';
 import { WelcomeTutorial, EmptyStateHint } from '@/components/WelcomeTutorial';
 import { getSharedProject } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { activeProjectWriteCoordinator } from '@/lib/projectWriteCoordinator';
+
+const DrawingCanvas = lazy(() =>
+  import('@/components/DrawingCanvas').then((module) => ({ default: module.DrawingCanvas })),
+);
 
 function EditorRoute() {
   const {
@@ -29,8 +33,7 @@ function EditorRoute() {
     replaceHistory,
     setProjectTitle,
     requestFullRedraw,
-    setCurrentProject,
-    setProjectRole,
+    hydrateProject,
     projectRole,
   } = useDrawingStore();
   const { userId, isLoaded } = useAuth();
@@ -60,12 +63,17 @@ function EditorRoute() {
 
           const objects = deserializeProject(record.data);
 
-          setObjects(objects);
-          replaceHistory(objects);
-          setProjectTitle(record.title || 'Shared Project');
-          setCurrentProject(record.id);
-          setProjectRole(record.role || 'viewer');
-          requestFullRedraw();
+          activeProjectWriteCoordinator.reset(record.id, {
+            projectId: record.id,
+            revision: record.revision,
+          });
+          hydrateProject({
+            id: record.id,
+            objects,
+            title: record.title || 'Shared Project',
+            revision: record.revision,
+            role: record.role || 'viewer',
+          });
 
           setInitialized(true);
         } catch (e) {
@@ -117,10 +125,9 @@ function EditorRoute() {
     setObjects,
     replaceHistory,
     setProjectTitle,
-    setProjectRole,
     requestFullRedraw,
+    hydrateProject,
     shareToken,
-    setCurrentProject,
     toast,
   ]);
 
@@ -148,7 +155,9 @@ function EditorRoute() {
   return (
     <Layout hideDrawingTools={projectRole === 'viewer'}>
       <AutoSaveHandler />
-      <DrawingCanvas />
+      <Suspense fallback={null}>
+        <DrawingCanvas />
+      </Suspense>
       {!showTutorial && <EmptyStateHint />}
       {showTutorial && <WelcomeTutorial onComplete={() => setShowTutorial(false)} />}
     </Layout>

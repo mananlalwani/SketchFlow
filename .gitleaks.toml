@@ -1,0 +1,15 @@
+title = "SketchFlow secret scanning configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Explicit non-production fixtures and documentation placeholders"
+regexTarget = "match"
+regexes = [
+  '''sk_(test|live)_ci_only''',
+  '''pk_test_ci_only''',
+  '''sk_test_replace_with_your_clerk_secret_key''',
+  '''pk_test_replace_with_your_clerk_publishable_key''',
+  '''ci_shared_project_token_123456789''',
+]

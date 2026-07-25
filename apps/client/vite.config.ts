@@ -1,11 +1,31 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import { VitePWA } from 'vite-plugin-pwa';
+import { sentryVitePlugin } from '@sentry/vite-plugin';
 import path from 'path';
+
+const sentryUploadEnabled = Boolean(
+  process.env.SENTRY_AUTH_TOKEN &&
+    process.env.SENTRY_ORG &&
+    process.env.SENTRY_PROJECT &&
+    process.env.VITE_RELEASE_ID,
+);
 
 export default defineConfig({
   plugins: [
     react(),
+    ...(sentryUploadEnabled
+      ? [
+          sentryVitePlugin({
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            org: process.env.SENTRY_ORG,
+            project: process.env.SENTRY_PROJECT,
+            release: { name: process.env.VITE_RELEASE_ID },
+            sourcemaps: { filesToDeleteAfterUpload: ['dist/**/*.map'] },
+            telemetry: false,
+          }),
+        ]
+      : []),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
@@ -33,6 +53,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // PDF tooling is requested explicitly and must not inflate first-install precache.
+        globIgnores: [
+          'assets/pdf-*.js',
+          'assets/pdf.worker.*',
+          'assets/DrawingCanvas-*.js',
+          'assets/rendererWorker-*.js',
+        ],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -80,9 +107,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    // Source maps may be enabled explicitly for a private error-reporting upload.
-    // They must not be served with the public production bundle by default.
-    sourcemap: process.env.GENERATE_SOURCEMAP === 'true',
+    // Source maps are generated only for authenticated private uploads and deleted afterward.
+    // Public production builds never retain linked source maps.
+    sourcemap: sentryUploadEnabled ? 'hidden' : false,
     rollupOptions: {
       output: {
         // Content-hash based filenames for cache busting

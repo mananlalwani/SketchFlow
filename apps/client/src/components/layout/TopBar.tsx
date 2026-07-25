@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDrawingStore } from '@/store/drawingStore';
-import { useDrawingSocket } from '@/hooks/useSocket';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Save, Trash2, Cloud, Loader2, Share2, Download, AlertCircle } from 'lucide-react';
 import { serializeProject } from '@/lib/utils';
 import { exportAsPNG, exportAsSVG, downloadFile, type ExportQuality } from '@/lib/export';
-import { createProject, updateProject } from '@/lib/api';
-import { generateThumbnail } from '@/lib/thumbnailGenerator';
+import { createProject } from '@/lib/api';
+import {
+  activeProjectWriteCoordinator,
+  ProjectWriteResetError,
+} from '@/lib/projectWriteCoordinator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,16 +32,17 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     setProjectTitle,
     unsavedChanges,
     saveStatus,
-    markSaved,
+    documentVersion,
+    projectRole,
     clearCanvas,
     requestFullRedraw,
     objects,
     currentProjectId,
     setCurrentProject,
+    projectRevision,
     lastSavedAt,
   } = useDrawingStore();
 
-  const { emitClear } = useDrawingSocket();
   const { toast } = useToast();
   const { getToken, userId } = useAuth();
   const { isGuest, isAuthenticated, isLoading } = useAuthStore();
@@ -66,75 +69,68 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   }, [currentProjectId, userId, projectTitle, lastSavedAt]);
 
   const handleSave = useCallback(async () => {
-    if (!userId) {
-      const tempId = currentProjectId || `offline-${Date.now().toString(36)}`;
-      if (!currentProjectId) setCurrentProject(tempId);
-
-      const payload = serializeProject(objects, 4096, 4096);
-      localStorage.setItem(
-        'local_work',
-        JSON.stringify({
-          title: projectTitle,
-          data: payload,
-          updatedAt: Date.now(),
-        }),
-      );
-
-      markSaved();
-      toast({
-        title: 'Saved locally',
-        description: 'Sign in to save to cloud.',
-      });
-      return;
-    }
-
-    setIsSaving(true);
+    if (projectRole === 'viewer') return;
+    const savedProjectId = currentProjectId;
+    const savedDocumentVersion = documentVersion;
+    const savedTitle = projectTitle || 'Untitled';
     const payload = serializeProject(objects, 4096, 4096);
-
-    let thumbnail: string | null = null;
-    try {
-      thumbnail = await generateThumbnail(objects, 4096, 4096);
-    } catch (e) {
-      console.warn('Failed to generate thumbnail:', e);
-    }
+    setIsSaving(true);
 
     try {
-      const token = await getToken();
-      let saved;
-      if (currentProjectId && !currentProjectId.startsWith('offline-')) {
-        saved = await updateProject(currentProjectId, projectTitle, payload, token, thumbnail);
-      } else {
-        saved = await createProject(projectTitle || 'Untitled', payload, token, thumbnail);
-        setCurrentProject(saved.id);
-      }
-      markSaved();
-      toast({ title: 'Saved to cloud' });
+      // Manual save is an explicit retry decision, unlike background autosave.
+      activeProjectWriteCoordinator.resume(savedProjectId ?? 'active-draft');
+      const saved = await activeProjectWriteCoordinator.enqueue({
+        projectKey: savedProjectId ?? 'active-draft',
+        projectId: savedProjectId,
+        title: savedTitle,
+        data: payload,
+        documentVersion: savedDocumentVersion,
+        expectedRevision: projectRevision,
+        cloud: !isGuest,
+        tokenProvider: isGuest ? undefined : getToken,
+      });
+      const currentState = useDrawingStore.getState();
+      const isCurrentSnapshot =
+        currentState.documentVersion === savedDocumentVersion &&
+        (savedProjectId
+          ? currentState.currentProjectId === savedProjectId
+          : !currentState.currentProjectId);
+      if (!isCurrentSnapshot) return;
+
+      if (!savedProjectId) currentState.setCurrentProject(saved.id);
+      currentState.setProjectRevision(saved.revision);
+      currentState.markSaved(savedDocumentVersion);
+      toast({
+        title: isGuest ? 'Saved locally' : 'Saved to cloud',
+        description: isGuest ? 'Sign in to save to cloud.' : undefined,
+      });
     } catch (e) {
+      if (e instanceof ProjectWriteResetError) return;
       console.error('Save failed', e);
       toast({
         title: 'Save failed',
-        description: 'Could not save to cloud.',
+        description: isGuest ? 'Could not save locally.' : 'Could not save to cloud.',
         variant: 'destructive',
       });
     } finally {
       setIsSaving(false);
     }
   }, [
-    objects,
     currentProjectId,
-    projectTitle,
-    setCurrentProject,
-    markSaved,
-    toast,
-    userId,
+    documentVersion,
     getToken,
+    isGuest,
+    objects,
+    projectRevision,
+    projectRole,
+    projectTitle,
+    toast,
   ]);
 
   const handleClear = () => {
     if (window.confirm('Are you sure you want to clear the canvas?')) {
       clearCanvas();
       requestFullRedraw();
-      emitClear();
       toast({ title: 'Canvas cleared' });
     }
   };
@@ -182,6 +178,25 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
       setIsExporting(false);
     }
   }, [objects, projectTitle, toast]);
+
+  const handleDuplicateRecovery = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const token = await getToken();
+      const copy = await createProject(
+        `${projectTitle || 'Untitled Project'} (Conflict recovery)`,
+        serializeProject(objects, 4096, 4096),
+        token,
+      );
+      setCurrentProject(copy.id);
+      toast({
+        title: 'Recovery copy created',
+        description: 'Your local work is now saved as a new project.',
+      });
+    } catch {
+      toast({ title: 'Could not create recovery copy', variant: 'destructive' });
+    }
+  }, [getToken, objects, projectTitle, setCurrentProject, toast, userId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -233,12 +248,33 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
                     <AlertCircle className="w-3 h-3 mr-1" /> Failed
                   </span>
                 ) : saveStatus === 'conflict' ? (
-                  <span
-                    className="flex items-center text-orange-600 dark:text-orange-400"
-                    title="This project changed elsewhere. Your local work is preserved in the emergency backup. Reload the project before saving again."
-                  >
-                    <AlertCircle className="w-3 h-3 mr-1" /> Conflict
-                  </span>
+                  <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
+                    <AlertCircle className="w-3 h-3" /> Conflict
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1 text-xs"
+                      onClick={() => window.location.reload()}
+                    >
+                      Reload
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1 text-xs"
+                      onClick={handleDuplicateRecovery}
+                    >
+                      Duplicate
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1 text-xs"
+                      onClick={handleExportSVG}
+                    >
+                      Export
+                    </Button>
+                  </div>
                 ) : unsavedChanges ? (
                   <span className="text-yellow-600 dark:text-yellow-500 flex items-center">
                     <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" /> Unsaved

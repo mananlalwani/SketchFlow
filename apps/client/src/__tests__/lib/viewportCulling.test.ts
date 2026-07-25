@@ -56,4 +56,19 @@ describe('viewport culling', () => {
       ),
     ).toBe(false);
   });
+
+  it('culls a 10,000-object board to the visible subset within the frame budget', () => {
+    const objects = Array.from({ length: 10_000 }, (_, index) => ({
+      type: 'rectangle',
+      x: index * 20,
+      y: index * 20,
+      width: 10,
+      height: 10,
+    }));
+    const started = performance.now();
+    const visible = objects.filter((object) => objectIntersectsViewport(object, 0, 0, 500, 500));
+
+    expect(visible).toHaveLength(26);
+    expect(performance.now() - started).toBeLessThan(50);
+  });
 });

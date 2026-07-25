@@ -72,6 +72,7 @@ interface DrawingState {
   needsFullRedraw: boolean;
   projectTitle: string;
   unsavedChanges: boolean;
+  documentVersion: number;
   saveStatus: 'saved' | 'syncing' | 'failed' | 'retrying' | 'conflict';
   lastSavedAt?: number;
   currentProjectId?: string;
@@ -128,11 +129,23 @@ interface DrawingState {
   setTool: (tool: Tool) => void;
   setEraserMode: (mode: 'partial' | 'object') => void;
   setObjects: (objects: DrawingObject[]) => void;
+  applyAuthoritativeProject: (input: {
+    objects: DrawingObject[];
+    title: string;
+    revision: number;
+  }) => boolean;
+  hydrateProject: (input: {
+    id: string;
+    objects: DrawingObject[];
+    title: string;
+    revision?: number;
+    role: 'owner' | 'editor' | 'viewer';
+  }) => void;
   replaceHistory: (objects: DrawingObject[]) => void;
   requestFullRedraw: () => void;
   clearFullRedraw: () => void;
   setProjectTitle: (title: string) => void;
-  markSaved: () => void;
+  markSaved: (documentVersion?: number) => void;
   markDirty: () => void;
   setSaveStatus: (status: 'saved' | 'syncing' | 'failed' | 'retrying' | 'conflict') => void;
   newProject: () => void;
@@ -156,7 +169,7 @@ interface DrawingState {
   setAutoShape: (enabled: boolean) => void;
   setAutoShapeThresholds: (t: Partial<DrawingState['autoShapeThresholds']>) => void;
 
-  updatePerformanceStats: (fps: number, objectCount: number) => void;
+  updatePerformanceStats: (fps: number) => void;
 
   // History actions
   saveHistory: () => void;
@@ -199,6 +212,7 @@ export const useDrawingStore = create<DrawingState>()(
         needsFullRedraw: false,
         projectTitle: 'Untitled',
         unsavedChanges: false,
+        documentVersion: 0,
         saveStatus: 'saved',
         currentProjectId: undefined,
         brushSize: 4,
@@ -252,30 +266,93 @@ export const useDrawingStore = create<DrawingState>()(
         },
         setEraserMode: (mode) => set({ eraserMode: mode }),
         setObjects: (objects) =>
-          set({ objects, objectCount: objects.length, unsavedChanges: true }),
+          set((state) => ({
+            objects,
+            objectCount: objects.length,
+            unsavedChanges: true,
+            documentVersion: state.documentVersion + 1,
+          })),
+        applyAuthoritativeProject: ({ objects, title, revision }) => {
+          let applied = false;
+          set((state) => {
+            // An incoming canonical snapshot must never replace local work that has
+            // not been durably acknowledged. The subsequent local save either uses
+            // this revision or receives a conflict while retaining recovery data.
+            if (state.unsavedChanges) return state;
+
+            applied = true;
+            return {
+              objects,
+              objectCount: objects.length,
+              projectTitle: title,
+              projectRevision: revision,
+              unsavedChanges: false,
+              documentVersion: state.documentVersion + 1,
+              saveStatus: 'saved',
+              needsFullRedraw: true,
+            };
+          });
+          return applied;
+        },
+        hydrateProject: ({ id, objects, title, revision, role }) =>
+          set((state) => ({
+            currentProjectId: id,
+            projectTitle: title,
+            projectRevision: revision,
+            projectRole: role,
+            objects,
+            objectCount: objects.length,
+            history: [objects],
+            historyIndex: 0,
+            unsavedChanges: false,
+            documentVersion: state.documentVersion + 1,
+            saveStatus: 'saved',
+            lastSavedAt: Date.now(),
+            needsFullRedraw: true,
+          })),
         replaceHistory: (objects) => set({ history: [objects], historyIndex: 0 }),
         requestFullRedraw: () => set({ needsFullRedraw: true }),
         clearFullRedraw: () => set({ needsFullRedraw: false }),
-        setProjectTitle: (title) => set({ projectTitle: title, unsavedChanges: true }),
-        markSaved: () =>
-          set({ unsavedChanges: false, lastSavedAt: Date.now(), saveStatus: 'saved' }),
-        markDirty: () => set({ unsavedChanges: true }),
+        setProjectTitle: (title) =>
+          set((state) => ({
+            projectTitle: title,
+            unsavedChanges: true,
+            documentVersion: state.documentVersion + 1,
+          })),
+        markSaved: (documentVersion) =>
+          set((state) => {
+            if (documentVersion !== undefined && documentVersion !== state.documentVersion) {
+              return state;
+            }
+            return { unsavedChanges: false, lastSavedAt: Date.now(), saveStatus: 'saved' };
+          }),
+        markDirty: () =>
+          set((state) => ({ unsavedChanges: true, documentVersion: state.documentVersion + 1 })),
         setSaveStatus: (status) => set({ saveStatus: status }),
         setProjectRole: (role) => set({ projectRole: role }),
         newProject: () => {
-          set({
+          set((state) => ({
             objects: [],
             objectCount: 0,
             history: [[]],
             historyIndex: 0,
             projectTitle: 'Untitled',
             unsavedChanges: false,
+            documentVersion: state.documentVersion + 1,
             needsFullRedraw: true,
             currentProjectId: undefined,
-          });
+            projectRevision: undefined,
+            projectRole: 'owner',
+          }));
           localStorage.removeItem('lastProjectId');
         },
-        setCurrentProject: (id) => set({ currentProjectId: id }),
+        setCurrentProject: (id) =>
+          set((state) => ({
+            currentProjectId: id,
+            ...(state.currentProjectId !== id
+              ? { projectRevision: undefined, documentVersion: state.documentVersion + 1 }
+              : {}),
+          })),
         setProjectRevision: (revision) => set({ projectRevision: revision }),
         setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(100, size)) }),
         setBrushColor: (color) => set({ brushColor: color }),
@@ -289,13 +366,24 @@ export const useDrawingStore = create<DrawingState>()(
               filled: object.filled,
             });
             const newObjects = [...state.objects, object];
-            return { objects: newObjects, objectCount: newObjects.length, unsavedChanges: true };
+            return {
+              objects: newObjects,
+              objectCount: newObjects.length,
+              unsavedChanges: true,
+              documentVersion: state.documentVersion + 1,
+            };
           }),
 
         removeObject: (id) =>
           set((state) => {
             const newObjects = state.objects.filter((obj) => obj.id !== id);
-            return { objects: newObjects, objectCount: newObjects.length, unsavedChanges: true };
+            if (newObjects.length === state.objects.length) return state;
+            return {
+              objects: newObjects,
+              objectCount: newObjects.length,
+              unsavedChanges: true,
+              documentVersion: state.documentVersion + 1,
+            };
           }),
 
         clearCanvas: () => {
@@ -304,12 +392,13 @@ export const useDrawingStore = create<DrawingState>()(
           // Save current state to history before clearing
           state.saveHistory();
           // Clear objects and request full redraw
-          set({
+          set((currentState) => ({
             objects: [],
             objectCount: 0,
             unsavedChanges: true,
+            documentVersion: currentState.documentVersion + 1,
             needsFullRedraw: true,
-          });
+          }));
         },
 
         setConnectionStatus: (connected) => set({ isConnected: connected }),
@@ -322,7 +411,7 @@ export const useDrawingStore = create<DrawingState>()(
         setAutoShapeThresholds: (t) =>
           set((s) => ({ autoShapeThresholds: { ...s.autoShapeThresholds, ...t } })),
 
-        updatePerformanceStats: (fps, objectCount) => set({ fps, objectCount }),
+        updatePerformanceStats: (fps) => set({ fps }),
 
         // History actions
         saveHistory: () =>
@@ -356,6 +445,8 @@ export const useDrawingStore = create<DrawingState>()(
                 historyIndex: newIndex,
                 objects,
                 objectCount: objects.length,
+                unsavedChanges: true,
+                documentVersion: state.documentVersion + 1,
                 needsFullRedraw: true,
               };
             }
@@ -372,6 +463,8 @@ export const useDrawingStore = create<DrawingState>()(
                 historyIndex: newIndex,
                 objects,
                 objectCount: objects.length,
+                unsavedChanges: true,
+                documentVersion: state.documentVersion + 1,
                 needsFullRedraw: true,
               };
             }

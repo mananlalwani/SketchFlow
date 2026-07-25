@@ -56,6 +56,11 @@ const envSchema = z
     // Client URL for sharing links (fallback to request host if not set)
     CLIENT_URL: z.string().url().optional(),
     REDIS_URL: z.string().url().optional(),
+    SOCKET_INSTANCE_COUNT: z
+      .string()
+      .default('1')
+      .transform(Number)
+      .pipe(z.number().int().positive()),
 
     // Logging
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -68,6 +73,11 @@ const envSchema = z
     OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
     HONEYCOMB_API_KEY: z.string().optional(),
     HONEYCOMB_DATASET: z.string().optional(),
+
+    // Error monitoring (optional)
+    SENTRY_DSN: z.string().url().optional(),
+    SENTRY_ENVIRONMENT: z.string().min(1).optional(),
+    RELEASE_ID: z.string().min(1).optional(),
   })
   .superRefine((data, context) => {
     if (data.NODE_ENV !== 'production') return;
@@ -85,6 +95,14 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['CORS_ORIGINS'],
         message: 'CORS_ORIGINS is required in production',
+      });
+    }
+
+    if (data.SOCKET_INSTANCE_COUNT > 1 && !data.REDIS_URL) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['REDIS_URL'],
+        message: 'REDIS_URL is required when SOCKET_INSTANCE_COUNT is greater than 1',
       });
     }
   });

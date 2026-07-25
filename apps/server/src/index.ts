@@ -1,5 +1,6 @@
 // Load environment variables in development only (gracefully skip if dotenv missing in production image)
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 
 if (process.env.NODE_ENV !== 'production') {
   const dotenvPath = process.cwd() + '/node_modules/dotenv';
@@ -18,6 +19,10 @@ if (process.env.NODE_ENV !== 'production') {
   }
 }
 
+// Monitoring must initialize before Express and application imports.
+import { initSentry } from './sentry.js';
+initSentry();
+
 // OpenTelemetry must be initialized before other app imports for auto-instrumentation
 import './otel.js';
 import express from 'express';
@@ -30,7 +35,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import { clerkMiddleware, getAuth, requireAuth, clerkClient } from '@clerk/express';
-import { DrawingService } from './services/DrawingService.js';
+import { ConnectionRegistry } from './services/ConnectionRegistry.js';
 import { ProjectService } from './services/ProjectService.js';
 import { logger } from './utils/logger.js';
 import { env, isProd, clerkPublishableKey } from './config/env.js';
@@ -52,10 +57,9 @@ import {
   errorHandlerMiddleware,
 } from './middleware/index.js';
 import type {
-  StrokeData,
-  ShapeData,
-  CanvasSnapshot,
   CursorData,
+  CollaborationCommit,
+  CollaborationCommitResult,
   ClientToServerEvents,
   ServerToClientEvents,
   SocketData,
@@ -80,13 +84,14 @@ export class SketchFlowServer {
     Record<string, never>,
     SocketData
   >;
-  private drawingService = new DrawingService();
+  private connectionRegistry = new ConnectionRegistry();
   private projectService = new ProjectService();
   private isShuttingDown = false;
   private clientDistPath =
     process.env.CLIENT_DIST_PATH || path.join(__dirname, '../../client/dist');
   private redisPublisher: { quit: () => Promise<unknown> } | null = null;
   private redisSubscriber: { quit: () => Promise<unknown> } | null = null;
+  private redisSetup: Promise<void> = Promise.resolve();
 
   constructor() {
     // Configure CORS origins for Socket.IO
@@ -118,11 +123,7 @@ export class SketchFlowServer {
     this.setupMiddleware();
     this.setupRoutes();
     this.setupSocketHandlers();
-    setInterval(
-      () => this.drawingService.cleanupInactiveCanvases(30 * 60 * 1000),
-      5 * 60 * 1000,
-    ).unref();
-    void this.setupRedisAdapter();
+    this.redisSetup = this.setupRedisAdapter();
   }
 
   private async setupRedisAdapter(): Promise<void> {
@@ -143,11 +144,16 @@ export class SketchFlowServer {
       this.redisSubscriber = subscriber;
       logger.info('Socket.IO Redis adapter connected');
     } catch (error) {
+      await Promise.allSettled([publisher.disconnect(), subscriber.disconnect()]);
+      if (env.SOCKET_INSTANCE_COUNT > 1) {
+        throw new Error('Redis is required for multi-instance Socket.IO deployments', {
+          cause: error,
+        });
+      }
       logger.error(
-        'Socket.IO Redis adapter unavailable; continuing in single-instance mode',
+        'Socket.IO Redis adapter unavailable; continuing in explicit single-instance mode',
         error,
       );
-      await Promise.allSettled([publisher.disconnect(), subscriber.disconnect()]);
     }
   }
 
@@ -243,7 +249,7 @@ export class SketchFlowServer {
       res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        connections: this.drawingService.getConnectionCount(),
+        connections: this.connectionRegistry.count(),
       });
     });
 
@@ -272,7 +278,7 @@ export class SketchFlowServer {
       res.json({
         status: 'ok',
         database: 'connected',
-        connections: this.drawingService.getConnectionCount(),
+        connections: this.connectionRegistry.count(),
       });
     });
 
@@ -360,13 +366,48 @@ export class SketchFlowServer {
           const parsed = projectInputSchema.safeParse(req.body);
           if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
           const { title, data, expectedRevision } = parsed.data;
-          const saved = await this.projectService.save(
-            req.params.id,
+          if (expectedRevision === undefined) {
+            return res
+              .status(400)
+              .json({ error: 'expectedRevision is required when updating a project' });
+          }
+          const result = await this.projectService.commitCollaborationOperation({
+            projectId: req.params.id,
             userId,
-            title || 'Untitled',
-            data ?? {},
+            operationId: randomUUID(),
             expectedRevision,
-          );
+            kind: 'replace-project',
+            data: data ?? {},
+            title: title || 'Untitled',
+          });
+
+          if (result.status === 'conflict') {
+            return res.status(409).json({
+              error: 'Project was updated by another editor',
+              currentRevision: result.currentRevision,
+            });
+          }
+          if (result.status === 'forbidden')
+            return res.status(403).json({ error: 'Access denied' });
+          if (result.status === 'not_found')
+            return res.status(404).json({ error: 'Project not found' });
+          if (result.status !== 'applied' && result.status !== 'duplicate') {
+            return res.status(400).json({ error: 'Invalid project update' });
+          }
+
+          const saved = await this.projectService.get(req.params.id, userId);
+          if (!saved) return res.status(404).json({ error: 'Project not found' });
+
+          if (result.status === 'applied') {
+            this.io.to(req.params.id).emit('collaboration:applied', {
+              projectId: req.params.id,
+              operationId: result.operationId,
+              revision: result.revision,
+              kind: 'replace-project',
+              data: result.data,
+              title: result.title,
+            });
+          }
           res.json(saved);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to save project';
@@ -375,8 +416,16 @@ export class SketchFlowServer {
               ? 409
               : error instanceof Error && error.name === 'ProjectAccessError'
                 ? 403
-                : 500;
-          res.status(status).json({ error: message });
+                : error instanceof Error && error.name === 'ProjectNotFoundError'
+                  ? 404
+                  : 500;
+          res.status(status).json({
+            error: message,
+            ...(error instanceof Error &&
+              error.name === 'ProjectConflictError' && {
+                currentRevision: (error as Error & { currentRevision?: number }).currentRevision,
+              }),
+          });
         }
       },
     );
@@ -670,7 +719,7 @@ export class SketchFlowServer {
 
   private setupSocketHandlers(): void {
     this.io.use(async (socket, next) => {
-      if (this.drawingService.getConnectionCount() >= this.drawingService.getMaxConnections()) {
+      if (this.connectionRegistry.count() >= this.connectionRegistry.max()) {
         return next(new Error('Server connection limit reached'));
       }
       const token = socket.handshake.auth.token;
@@ -714,6 +763,9 @@ export class SketchFlowServer {
     this.io.on('connection', (socket) => {
       const clientId = socket.id;
       let currentRoom: string | null = null;
+      // Incremented for every join/leave request so asynchronous authorization
+      // results cannot apply to a room selected after the check started.
+      let roomGeneration = 0;
       const currentUserId = socket.data.userId ?? null;
       const sessionExpiryTimer = socket.data.sessionExpiresAt
         ? setTimeout(
@@ -733,7 +785,10 @@ export class SketchFlowServer {
             cursorWindowStartedAt = now;
             cursorCount = 0;
           }
-          if (++cursorCount > 60) return next(new Error('Cursor rate limit exceeded'));
+          if (++cursorCount > 60) {
+            socket.emit('error', { status: 429, error: 'Cursor rate limit exceeded' });
+            return next(new Error('Cursor rate limit exceeded'));
+          }
           return next();
         }
 
@@ -741,173 +796,97 @@ export class SketchFlowServer {
           operationWindowStartedAt = now;
           operationCount = 0;
         }
-        if (++operationCount > 600) return next(new Error('Socket operation rate limit exceeded'));
+        if (++operationCount > 600) {
+          socket.emit('error', { status: 429, error: 'Socket operation rate limit exceeded' });
+          return next(new Error('Socket operation rate limit exceeded'));
+        }
         next();
       });
 
       logger.info(`Client connected: ${clientId}`);
 
-      this.drawingService.addConnection(clientId);
+      this.connectionRegistry.add(clientId);
 
       // Broadcast updated connection count to all clients
-      this.io.emit('connection:count', this.drawingService.getConnectionCount());
+      this.io.emit('connection:count', this.connectionRegistry.count());
 
-      // Helper to check if user can edit in current room
-      const canUserEdit = async (): Promise<boolean> => {
-        if (!currentRoom || !currentUserId) return false;
+      // Return an immutable room context only if it is still active after the
+      // asynchronous permission check completes.
+      const getEditableRoom = async (): Promise<string | null> => {
+        const room = currentRoom;
+        const generation = roomGeneration;
+        if (!room || !currentUserId) return null;
 
-        // Check permission
-        const canEdit = await this.projectService.checkPermission(
-          currentRoom,
-          currentUserId,
-          'edit',
-        );
-        return canEdit;
+        const canEdit = await this.projectService.checkPermission(room, currentUserId, 'edit');
+        if (
+          !canEdit ||
+          currentRoom !== room ||
+          roomGeneration !== generation ||
+          !socket.rooms.has(room)
+        ) {
+          return null;
+        }
+        return room;
       };
 
-      // Handle drawing strokes
-      socket.on('draw:stroke', async (stroke: StrokeData) => {
-        if (!this.isValidStroke(stroke)) {
-          logger.warn(`Invalid stroke from ${clientId}:`, { stroke });
-          return;
-        }
+      // Versioned canonical collaboration mutations commit Project.data/revision
+      // before either acknowledgement or peer broadcast. This is the only
+      // durable drawing mutation protocol.
+      socket.on(
+        'collaboration:commit',
+        async (
+          commit: CollaborationCommit,
+          acknowledge: (result: CollaborationCommitResult) => void,
+        ) => {
+          if (!commit || commit.protocolVersion !== 1 || typeof acknowledge !== 'function') return;
 
-        // Check if user has edit permission
-        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
-          logger.warn(
-            `User ${currentUserId ?? clientId} attempted to draw without project edit permission`,
-          );
-          return;
-        }
-
-        try {
-          this.drawingService.addStroke(currentRoom, stroke);
-          // Only broadcast to other clients in the same room/project
-          if (currentRoom) {
-            socket.to(currentRoom).emit('draw:stroke', stroke);
+          const room = await getEditableRoom();
+          if (!room || room !== commit.projectId || !currentUserId) {
+            acknowledge({ status: 'forbidden', operationId: commit.operationId });
+            return;
           }
-        } catch (error) {
-          logger.error(`Error processing stroke from ${clientId}:`, error);
-        }
-      });
 
-      // Handle batch strokes
-      socket.on('draw:strokes', async (strokes: StrokeData[]) => {
-        if (!Array.isArray(strokes) || strokes.length === 0) return;
+          try {
+            const result = await this.projectService.commitCollaborationOperation({
+              projectId: room,
+              userId: currentUserId,
+              operationId: commit.operationId,
+              expectedRevision: commit.expectedRevision,
+              kind: commit.kind,
+              data: commit.data,
+              title: commit.title,
+            });
+            acknowledge(result);
 
-        // Check edit permission
-        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
-          logger.warn(
-            `User ${currentUserId ?? clientId} attempted to draw without project edit permission`,
-          );
-          return;
-        }
-
-        const validStrokes = strokes
-          .slice(0, 100) // Limit batch size
-          .filter((s) => this.isValidStroke(s));
-
-        if (validStrokes.length === 0) return;
-
-        try {
-          this.drawingService.addStrokes(currentRoom, validStrokes);
-          // Only broadcast to other clients in the same room/project
-          if (currentRoom) {
-            socket.to(currentRoom).emit('draw:strokes', validStrokes);
-          }
-        } catch (error) {
-          logger.error(`Error processing strokes batch from ${clientId}:`, error);
-        }
-      });
-
-      // Handle shapes
-      socket.on('draw:shape', async (shape: ShapeData) => {
-        if (!this.isValidShape(shape)) {
-          logger.warn(`Invalid shape from ${clientId}:`, { shape });
-          return;
-        }
-
-        // Check edit permission
-        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
-          logger.warn(
-            `User ${currentUserId ?? clientId} attempted to draw without project edit permission`,
-          );
-          return;
-        }
-
-        try {
-          this.drawingService.addShape(currentRoom, shape);
-          // Only broadcast to other clients in the same room/project
-          if (currentRoom) {
-            socket.to(currentRoom).emit('draw:shape', shape);
-          }
-        } catch (error) {
-          logger.error(`Error processing shape from ${clientId}:`, error);
-        }
-      });
-
-      // Handle canvas snapshots
-      socket.on('canvas:snapshot', async (snapshot: CanvasSnapshot) => {
-        if (!currentRoom || !currentUserId) return;
-        if (!(await canUserEdit())) return;
-        if (!this.isValidSnapshot(snapshot)) {
-          logger.warn(`Invalid snapshot from ${clientId}`);
-          return;
-        }
-
-        try {
-          this.drawingService.updateSnapshot(currentRoom, snapshot);
-          await this.projectService.saveCollaborationSnapshot(currentRoom, snapshot);
-          // Throttled broadcast to prevent spam - only to room
-          this.drawingService.broadcastSnapshotThrottled(currentRoom, () => {
-            if (currentRoom) {
-              socket.to(currentRoom).emit('canvas:snapshot', snapshot);
+            if (result.status === 'applied') {
+              socket.to(room).emit('collaboration:applied', {
+                projectId: room,
+                operationId: result.operationId,
+                revision: result.revision,
+                kind: commit.kind,
+                data: result.data,
+                title: result.title,
+              });
             }
-          });
-        } catch (error) {
-          logger.error(`Error processing snapshot from ${clientId}:`, error);
-        }
-      });
-
-      // Handle clear canvas
-      socket.on('canvas:clear', async () => {
-        // Check edit permission
-        if (!currentRoom || !currentUserId || !(await canUserEdit())) {
-          logger.warn(
-            `User ${currentUserId ?? clientId} attempted to clear without project edit permission`,
-          );
-          return;
-        }
-
-        try {
-          this.drawingService.clearCanvas(currentRoom);
-          // Only broadcast to clients in the same room/project
-          if (currentRoom) {
-            socket.to(currentRoom).emit('canvas:clear');
+          } catch (error) {
+            logger.error(`Canonical collaboration commit failed for ${clientId}`, error);
+            acknowledge({
+              status: 'unavailable',
+              operationId: typeof commit.operationId === 'string' ? commit.operationId : '',
+            });
           }
-          logger.info(`Canvas cleared by ${clientId} in room ${currentRoom}`);
-        } catch (error) {
-          logger.error(`Error clearing canvas from ${clientId}:`, error);
-        }
-      });
-
-      socket.on('project:state', async (data: { objects: unknown[]; timestamp: number }) => {
-        if (
-          !currentRoom ||
-          !currentUserId ||
-          !Array.isArray(data?.objects) ||
-          !(await canUserEdit())
-        )
-          return;
-        socket.to(currentRoom).emit('project:state', data);
-      });
+        },
+      );
 
       // Handle room join
       socket.on('room:join', async (projectId: string) => {
+        const joinGeneration = ++roomGeneration;
         if (
           typeof projectId !== 'string' ||
+          !resourceIdSchema.safeParse(projectId).success ||
           !currentUserId ||
-          !(await this.projectService.checkPermission(projectId, currentUserId, 'view'))
+          !(await this.projectService.checkPermission(projectId, currentUserId, 'view')) ||
+          joinGeneration !== roomGeneration
         ) {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
@@ -916,7 +895,7 @@ export class SketchFlowServer {
         if (currentRoom) {
           socket.leave(currentRoom);
           // Remove cursor from previous room
-          if (currentUserId && roomCursors.has(currentRoom)) {
+          if (roomCursors.has(currentRoom)) {
             roomCursors.get(currentRoom)?.delete(currentUserId);
             this.io.to(currentRoom).emit('cursor:leave', currentUserId);
           }
@@ -926,10 +905,24 @@ export class SketchFlowServer {
         currentRoom = projectId;
         socket.join(projectId);
 
-        const currentSnapshot =
-          this.drawingService.getCurrentSnapshot(projectId) ??
-          (await this.projectService.getCollaborationSnapshot(projectId));
-        if (currentSnapshot) socket.emit('canvas:snapshot', currentSnapshot);
+        // New clients hydrate from the one canonical database authority. Legacy
+        // snapshot replay below remains only for clients that have not migrated
+        // to the versioned collaboration protocol.
+        const canonicalProject = await this.projectService.get(projectId, currentUserId);
+        if (
+          !canonicalProject ||
+          joinGeneration !== roomGeneration ||
+          currentRoom !== projectId ||
+          !socket.rooms.has(projectId)
+        ) {
+          return;
+        }
+        socket.emit('collaboration:hydrated', {
+          projectId,
+          revision: canonicalProject.revision ?? 1,
+          data: canonicalProject.data,
+          title: canonicalProject.title,
+        });
 
         // Log room join for debugging
         logger.debug(`Client ${clientId} joined room ${projectId}`);
@@ -951,6 +944,7 @@ export class SketchFlowServer {
 
       // Handle room leave
       socket.on('room:leave', () => {
+        roomGeneration++;
         if (currentRoom && currentUserId) {
           socket.leave(currentRoom);
           // Remove cursor
@@ -1004,7 +998,7 @@ export class SketchFlowServer {
       // Handle disconnection
       socket.on('disconnect', (reason) => {
         if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
-        this.drawingService.removeConnection(clientId);
+        this.connectionRegistry.remove(clientId);
 
         // Clean up cursor from current room
         if (currentRoom && currentUserId) {
@@ -1015,7 +1009,7 @@ export class SketchFlowServer {
         }
 
         // Broadcast updated connection count to all remaining clients
-        this.io.emit('connection:count', this.drawingService.getConnectionCount());
+        this.io.emit('connection:count', this.connectionRegistry.count());
         logger.info(`Client disconnected: ${clientId}, reason: ${reason}`);
       });
 
@@ -1024,55 +1018,6 @@ export class SketchFlowServer {
         logger.error(`Socket error from ${clientId}:`, error);
       });
     });
-  }
-
-  private isValidStroke(stroke: StrokeData): boolean {
-    return (
-      stroke &&
-      typeof stroke === 'object' &&
-      Number.isFinite(stroke.x0) &&
-      Number.isFinite(stroke.y0) &&
-      Number.isFinite(stroke.x1) &&
-      Number.isFinite(stroke.y1) &&
-      typeof stroke.color === 'string' &&
-      Number.isFinite(stroke.size) &&
-      stroke.size > 0 &&
-      stroke.size <= 100 &&
-      /^#[0-9A-Fa-f]{6}$/.test(stroke.color)
-    );
-  }
-
-  private isValidShape(shape: ShapeData): boolean {
-    return (
-      shape &&
-      typeof shape === 'object' &&
-      typeof shape.id === 'string' &&
-      ['line', 'rectangle', 'ellipse'].includes(shape.type) &&
-      typeof shape.x === 'number' &&
-      typeof shape.y === 'number' &&
-      typeof shape.width === 'number' &&
-      typeof shape.height === 'number' &&
-      typeof shape.color === 'string' &&
-      typeof shape.size === 'number' &&
-      typeof shape.alpha === 'number' &&
-      shape.size > 0 &&
-      shape.size <= 100 &&
-      shape.alpha >= 0 &&
-      shape.alpha <= 1 &&
-      /^#[0-9A-Fa-f]{6}$/.test(shape.color) &&
-      // Allow negative width/height for lines (directional)
-      (shape.type === 'line' || (shape.width >= 0 && shape.height >= 0))
-    );
-  }
-
-  private isValidSnapshot(snapshot: CanvasSnapshot): boolean {
-    return (
-      snapshot &&
-      typeof snapshot === 'object' &&
-      typeof snapshot.dataUrl === 'string' &&
-      snapshot.dataUrl.startsWith('data:image/') &&
-      snapshot.dataUrl.length < 8 * 1024 * 1024
-    );
   }
 
   private async getLocalIPs(): Promise<string[]> {
@@ -1093,7 +1038,15 @@ export class SketchFlowServer {
     return ips;
   }
 
+  /** Wait until optional infrastructure is configured before accepting test traffic. */
+  public async waitForInfrastructure(): Promise<void> {
+    await this.redisSetup;
+  }
+
   public async start(): Promise<void> {
+    // Do not accept traffic from a scaled deployment until the Redis adapter is
+    // connected. Falling back would silently split collaboration rooms.
+    await this.waitForInfrastructure();
     return new Promise((resolve) => {
       this.server.listen(env.PORT, env.HOST, async () => {
         const ips = await this.getLocalIPs();
@@ -1102,7 +1055,7 @@ export class SketchFlowServer {
           port: env.PORT,
           host: env.HOST,
           environment: env.NODE_ENV,
-          maxConnections: this.drawingService.getMaxConnections(),
+          maxConnections: this.connectionRegistry.max(),
         });
 
         logger.info(`Server running on:`);

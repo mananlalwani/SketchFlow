@@ -43,7 +43,7 @@ model Project {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
   collaborators ProjectCollaborator[]
-  collaborationSnapshot CollaborationSnapshot?
+  collaborationOperations CollaborationOperation[]
 
   @@index([userId])
   @@index([shareToken])
@@ -53,13 +53,23 @@ model Project {
   @@map("projects")
 }
 
-model CollaborationSnapshot {
-  projectId String @id
-  data      Json
-  updatedAt DateTime @updatedAt
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+// Accepted canonical commits. This is an idempotency receipt and ordered audit
+// trail; Project.data and Project.revision remain the single state authority.
+model CollaborationOperation {
+  id          String   @id @default(cuid())
+  projectId   String
+  operationId String
+  actorUserId String
+  revision    Int
+  kind        String
+  receiptHash String
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@map("collaboration_snapshots")
+  @@unique([projectId, operationId])
+  @@unique([projectId, revision])
+  @@index([projectId, createdAt])
+  @@map("collaboration_operations")
 }
 
 // Collaborator access to projects

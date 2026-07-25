@@ -19,13 +19,13 @@ function hasSafeDepthAndFields(value: unknown, depth = 0): boolean {
   return true;
 }
 
-function isBoundedProjectData(value: unknown): boolean {
+export function isBoundedProjectData(value: unknown): boolean {
   try {
     const encoded = JSON.stringify(value);
     if (!encoded || Buffer.byteLength(encoded, 'utf8') > MAX_PROJECT_BYTES) return false;
     if (typeof value === 'object' && value !== null && 'objects' in value) {
       const objects = (value as { objects?: unknown }).objects;
-      return !Array.isArray(objects) || objects.length <= MAX_OBJECTS;
+      if (Array.isArray(objects) && objects.length > MAX_OBJECTS) return false;
     }
     return hasSafeDepthAndFields(value);
   } catch {
@@ -38,6 +38,21 @@ export const projectInputSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     data: z.unknown().refine(isBoundedProjectData, 'Project data exceeds safety limits'),
     expectedRevision: z.number().int().positive().optional(),
+  })
+  .strict();
+
+/** Wire contract shared by realtime collaboration commit handlers. */
+export const collaborationCommitSchema = z
+  .object({
+    operationId: z
+      .string()
+      .trim()
+      .min(16)
+      .max(128)
+      .regex(/^[A-Za-z0-9_-]+$/),
+    expectedRevision: z.number().int().positive(),
+    kind: z.literal('replace-project'),
+    data: z.unknown().refine(isBoundedProjectData, 'Project data exceeds safety limits'),
   })
   .strict();
 

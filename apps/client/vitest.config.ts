@@ -17,6 +17,16 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      // Baseline gates prevent coverage regressions while the suite is expanded
+      // toward the Phase 2 80% global target.
+      thresholds: {
+        global: {
+          statements: 4,
+          branches: 3,
+          functions: 6,
+          lines: 4,
+        },
+      },
       include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'src/**/*.test.{ts,tsx}',

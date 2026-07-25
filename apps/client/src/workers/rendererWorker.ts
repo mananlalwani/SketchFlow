@@ -96,6 +96,7 @@ type ViewportMessage = {
   canvasWidth: number;
   canvasHeight: number;
   dpr: number;
+  sequence?: number;
 };
 
 type ClearMessage = { type: 'clear' };
@@ -116,6 +117,12 @@ type SnapshotImageMessage = {
 };
 type ThemeMessage = { type: 'theme'; bgColor: string };
 type LoadObjectsMessage = { type: 'load-objects'; data: Shape[] };
+type LoadSceneMessage = {
+  type: 'load-scene';
+  requestId: string;
+  shapes: Shape[];
+  strokes: Stroke[];
+};
 
 type Inbound =
   | InitMessage
@@ -129,9 +136,23 @@ type Inbound =
   | SnapshotMessage
   | SnapshotImageMessage
   | ThemeMessage
-  | LoadObjectsMessage;
+  | LoadObjectsMessage
+  | LoadSceneMessage;
 
-type Outbound = { type: 'snapshot'; dataUrl: string };
+type Outbound =
+  | { type: 'snapshot'; dataUrl: string }
+  | { type: 'ready' }
+  | { type: 'init-error'; reason: string }
+  | { type: 'scene-applied'; requestId: string; objectCount: number; ingestionMs: number }
+  | {
+      type: 'frame-rendered';
+      requestId?: string;
+      viewportSequence?: number;
+      renderMs: number;
+      retainedObjectCount: number;
+      visibleObjectCount: number;
+      culledObjectCount: number;
+    };
 
 let screenCtx: OffscreenCanvasRenderingContext2D | null = null;
 let world: OffscreenCanvas | null = null;
@@ -153,16 +174,19 @@ interface ConsolidatedPath {
 }
 const consolidatedPaths: Map<string, ConsolidatedPath> = new Map();
 
-let lastViewport = {
+let lastViewport: ViewportMessage = {
+  type: 'viewport',
   zoom: 1,
   viewX: 0,
   viewY: 0,
   canvasWidth: 0,
   canvasHeight: 0,
   dpr: 1,
+  sequence: undefined as number | undefined,
 };
 
 let lastBlitTime = 0;
+let lastSceneRequestId: string | undefined;
 let blitScheduled = false;
 let blitTimer: number | null = null;
 const BLIT_INTERVAL_MS = 1000 / 60; // ~60 FPS cap
@@ -406,6 +430,7 @@ function drawShapeToWorld(shape: Shape) {
 
 function blit() {
   if (!screenCtx) return;
+  const renderStartedAt = performance.now();
 
   const { zoom, viewX, viewY, canvasWidth, canvasHeight, dpr } = lastViewport;
 
@@ -473,6 +498,18 @@ function blit() {
   const vy1 = viewY;
   const vx2 = viewX + canvasWidth / Math.max(zoom, 0.0001);
   const vy2 = viewY + canvasHeight / Math.max(zoom, 0.0001);
+  const visibleShapeCount = retainedShapes.filter((shape) =>
+    objectIntersectsViewport(shape, vx1, vy1, vx2, vy2),
+  ).length;
+  const visiblePathCount = Array.from(consolidatedPaths.values()).filter((path) => {
+    const margin = path.size;
+    return !(
+      path.bounds.maxX + margin < vx1 ||
+      path.bounds.minX - margin > vx2 ||
+      path.bounds.maxY + margin < vy1 ||
+      path.bounds.minY - margin > vy2
+    );
+  }).length;
 
   // Supersampled vector render, then composite
   if (ssaaFactor > 1 && ensureVectorSS(targetW, targetH, ssaaFactor) && vectorSSCtx && vectorSS) {
@@ -785,6 +822,16 @@ function blit() {
     screenCtx.drawImage(vectorSS, 0, 0, vectorSS.width, vectorSS.height, 0, 0, targetW, targetH);
     screenCtx.restore();
     anyCtx.imageSmoothingEnabled = false;
+    const retainedObjectCount = retainedShapes.length + consolidatedPaths.size;
+    self.postMessage({
+      type: 'frame-rendered',
+      requestId: lastSceneRequestId,
+      viewportSequence: lastViewport.sequence,
+      renderMs: performance.now() - renderStartedAt,
+      retainedObjectCount,
+      visibleObjectCount: visibleShapeCount + visiblePathCount,
+      culledObjectCount: retainedObjectCount - visibleShapeCount - visiblePathCount,
+    } satisfies Outbound);
     return;
   }
 
@@ -1088,10 +1135,20 @@ function blit() {
   }
 
   screenCtx.restore();
+  const retainedObjectCount = retainedShapes.length + consolidatedPaths.size;
+  self.postMessage({
+    type: 'frame-rendered',
+    requestId: lastSceneRequestId,
+    viewportSequence: lastViewport.sequence,
+    renderMs: performance.now() - renderStartedAt,
+    retainedObjectCount,
+    visibleObjectCount: visibleShapeCount + visiblePathCount,
+    culledObjectCount: retainedObjectCount - visibleShapeCount - visiblePathCount,
+  } satisfies Outbound);
 }
 
 function scheduleBlit() {
-  const now = Date.now();
+  const now = performance.now();
   const elapsed = now - lastBlitTime;
   if (elapsed >= BLIT_INTERVAL_MS) {
     lastBlitTime = now;
@@ -1107,7 +1164,7 @@ function scheduleBlit() {
   blitScheduled = true;
   const delay = Math.max(0, BLIT_INTERVAL_MS - elapsed);
   blitTimer = setTimeout(() => {
-    lastBlitTime = Date.now();
+    lastBlitTime = performance.now();
     blit();
     blitScheduled = false;
     blitTimer = null;
@@ -1119,11 +1176,18 @@ function handleMessage(evt: MessageEvent<Inbound>) {
   switch (msg.type) {
     case 'init': {
       const ctx = msg.canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        self.postMessage({
+          type: 'init-error',
+          reason: 'Unable to acquire a 2D OffscreenCanvas context.',
+        } satisfies Outbound);
+        return;
+      }
       screenCtx = ctx;
       worldW = msg.worldWidth;
       worldH = msg.worldHeight;
       ensureWorld();
+      self.postMessage({ type: 'ready' } satisfies Outbound);
       break;
     }
     case 'stroke': {
@@ -1155,6 +1219,24 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       for (let i = 0; i < loadMsg.data.length; i++) {
         drawShapeToWorld(loadMsg.data[i] as Shape);
       }
+      scheduleBlit();
+      break;
+    }
+    case 'load-scene': {
+      ensureWorld();
+      const startedAt = performance.now();
+      retainedShapes.length = 0;
+      consolidatedPaths.clear();
+      const scene = msg as LoadSceneMessage;
+      lastSceneRequestId = scene.requestId;
+      for (let i = 0; i < scene.strokes.length; i++) drawStrokeToWorld(scene.strokes[i]);
+      for (let i = 0; i < scene.shapes.length; i++) drawShapeToWorld(scene.shapes[i]);
+      self.postMessage({
+        type: 'scene-applied',
+        requestId: scene.requestId,
+        objectCount: scene.shapes.length + scene.strokes.length,
+        ingestionMs: performance.now() - startedAt,
+      } satisfies Outbound);
       scheduleBlit();
       break;
     }

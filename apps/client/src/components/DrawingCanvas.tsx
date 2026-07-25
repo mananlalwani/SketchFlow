@@ -8,22 +8,37 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from './ui/button';
 import { Square, Circle, Triangle, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
-import { generateId, isIOS } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
 import type { DrawingObject } from '@/store/drawingStore';
-import type { StrokeData, ShapeData, CanvasSnapshot } from '@/types/socket';
+import type { StrokeData, ShapeData } from '@/types/socket';
 import { detectShapes } from '@/lib/shapeDetectors';
-import { getImageFromClipboard, compressImage } from '@/lib/clipboard';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { LiveCursors } from './LiveCursors';
 import { useLiveCursors } from '@/hooks/useLiveCursors';
 import { useProjectPermissions } from '@/hooks/useProjectPermissions';
+import { useCanvasRendererWorker } from '@/hooks/useCanvasRendererWorker';
+import { useCanvasToolReset } from '@/hooks/useCanvasToolReset';
+import { useCanvasKeyboardShortcuts } from '@/hooks/useCanvasKeyboardShortcuts';
+import { useCanvasCollaborationAdapter } from '@/hooks/useCanvasCollaborationAdapter';
+import { useCanvasImageInput } from '@/hooks/useCanvasImageInput';
+import { findCanvasObjectIdAt } from '@/lib/canvasSelection';
+import {
+  buildStrokePoints,
+  constrainShapeEnd,
+  getPointerSamples,
+  screenPointToWorld,
+} from '@/lib/canvasPointer';
+import { getObjectDragOffset, translateObjectInCollection } from '@/lib/canvasObjectTransform';
+import { postRendererViewport } from '@/lib/canvasRendererViewport';
+import { drawingObjectsToRendererScene } from '@/lib/canvasRendererObject';
 import { useToast } from '@/hooks/use-toast';
 import { FEATURES } from '@/config/features';
 import {
   calculateTriangleVertices,
-  constrainView,
+  panViewportBy,
   WORLD_HEIGHT,
   WORLD_WIDTH,
+  zoomViewportAtPoint,
 } from '@/lib/canvasViewport';
 
 const BG_COLORS = {
@@ -52,18 +67,20 @@ export function DrawingCanvas() {
     addObject,
     removeObject,
     setObjects,
+    applyAuthoritativeProject,
     replaceHistory,
     saveHistory,
     updatePerformanceStats,
     currentProjectId,
+    projectRevision,
     setZoom,
     setView,
     resetView,
     autoShape,
+    objectCount,
   } = useDrawingStore();
 
-  const { emitStrokes, emitShape, emitSnapshot, emitClear, emitProjectState, on } =
-    useDrawingSocket();
+  const { requestCanonicalHydration, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
@@ -117,78 +134,26 @@ export function DrawingCanvas() {
   const currentPanViewRef = useRef<{ x: number; y: number } | null>(null);
 
   const workerRef = useRef<Worker | null>(null);
-  const pendingReplayRef = useRef<DrawingObject[] | null>(null);
+  const rendererStatus = useCanvasRendererWorker(
+    canvasRef,
+    workerRef,
+    { zoom, viewX, viewY },
+    theme,
+  );
   const workerStrokeQueueRef = useRef<StrokeData[]>([]);
   const workerFlushScheduledRef = useRef(false);
   const strokeGroupRef = useRef<string | null>(null);
 
-  const buildStrokePoints = useCallback((strokes: StrokeData[]) => {
-    if (strokes.length === 0) return [];
-    const first = strokes[0];
-    return [{ x: first.x0, y: first.y0 }, ...strokes.map((s) => ({ x: s.x1, y: s.y1 }))];
-  }, []);
-
   useEffect(() => {
     if (!needsFullRedraw) return;
-    workerRef.current?.postMessage({ type: 'clear' });
-    for (const obj of objects) {
-      if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
-        const strokes: StrokeData[] = [];
-        const objGroupId = obj.id;
-        for (let i = 0; i < obj.points.length - 1; i++) {
-          const a = obj.points[i];
-          const b = obj.points[i + 1];
-          strokes.push({
-            x0: a.x,
-            y0: a.y,
-            x1: b.x,
-            y1: b.y,
-            color: obj.color,
-            size: obj.size,
-            alpha: obj.alpha ?? 1,
-            groupId: objGroupId,
-            timestamp: Date.now(),
-          });
-        }
-        if (strokes.length) workerRef.current?.postMessage({ type: 'strokes', data: strokes });
-      } else if (
-        (obj.type === 'line' ||
-          obj.type === 'rectangle' ||
-          obj.type === 'ellipse' ||
-          obj.type === 'circle' ||
-          obj.type === 'triangle' ||
-          obj.type === 'parabola' ||
-          obj.type === 'text' ||
-          obj.type === 'image' ||
-          obj.type === 'star' ||
-          obj.type === 'arrow') &&
-        obj.x !== undefined &&
-        obj.y !== undefined
-      ) {
-        const shape: ShapeData = {
-          id: obj.id,
-          type: obj.type,
-          x: obj.x,
-          y: obj.y,
-          width: obj.width ?? 0,
-          height: obj.height ?? 0,
-          color: obj.color,
-          size: obj.size,
-          alpha: obj.alpha ?? 1,
-          filled: obj.filled,
-          orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
-          text: obj.text,
-          fontSize: obj.fontSize,
-          imageData: obj.imageData,
-          points: obj.points,
-          properties: obj.properties,
-          timestamp: Date.now(),
-        };
-        workerRef.current?.postMessage({ type: 'shape', data: shape });
-      }
-    }
+    const scene = drawingObjectsToRendererScene(objects);
+    workerRef.current?.postMessage({
+      type: 'load-scene',
+      requestId: `scene-${currentProjectId ?? 'local'}-${objects.length}`,
+      ...scene,
+    });
     clearFullRedraw();
-  }, [needsFullRedraw, clearFullRedraw, objects]);
+  }, [needsFullRedraw, clearFullRedraw, currentProjectId, objects]);
 
   const initializedRef = useRef(false);
   useEffect(() => {
@@ -204,89 +169,12 @@ export function DrawingCanvas() {
     setView(centerViewX, centerViewY);
   }, [setView]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    if (!workerRef.current) {
-      try {
-        const worker = new Worker(new URL('../workers/rendererWorker.ts', import.meta.url), {
-          type: 'module',
-        });
-        workerRef.current = worker;
-
-        if ('transferControlToOffscreen' in canvas) {
-          const offscreen = canvas.transferControlToOffscreen();
-          worker.postMessage(
-            {
-              type: 'init',
-              canvas: offscreen,
-              worldWidth: WORLD_WIDTH,
-              worldHeight: WORLD_HEIGHT,
-            },
-            [offscreen],
-          );
-        } else {
-          console.warn('OffscreenCanvas not supported, using fallback rendering');
-          worker.postMessage({
-            type: 'init-fallback',
-            worldWidth: WORLD_WIDTH,
-            worldHeight: WORLD_HEIGHT,
-          });
-        }
-      } catch (error) {
-        console.error('Worker initialization failed:', error);
-      }
-    }
-
-    const sendViewport = () => {
-      const rect = canvas.getBoundingClientRect();
-      const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-      workerRef.current?.postMessage({
-        type: 'viewport',
-        zoom,
-        viewX,
-        viewY,
-        canvasWidth: rect.width,
-        canvasHeight: rect.height,
-        dpr,
-      });
-    };
-
-    sendViewport();
-    const onResize = () => sendViewport();
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        sendViewport();
-      }
-    };
-    const onFocus = () => {
-      sendViewport();
-    };
-
-    window.addEventListener('resize', onResize);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('focus', onFocus);
-
-    return () => {
-      window.removeEventListener('resize', onResize);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [zoom, viewX, viewY]);
-
-  useEffect(() => {
-    if (!workerRef.current) return;
-    const bgColor = theme === 'dark' ? '#0a0a0a' : '#e0e0e0';
-    workerRef.current.postMessage({ type: 'theme', bgColor });
-  }, [theme]);
-
   const render = useCallback(() => {
     const frameStart = performance.now();
     if (shouldSkipFrame) return;
     const frameEnd = performance.now();
     updateMetrics(frameStart, frameEnd);
-    updatePerformanceStats(fps, 0);
+    updatePerformanceStats(fps);
   }, [shouldSkipFrame, updateMetrics, fps, updatePerformanceStats]);
 
   const flushWorkerStrokes = useCallback(() => {
@@ -299,11 +187,10 @@ export function DrawingCanvas() {
     const batch = workerStrokeQueueRef.current;
     if (batch.length) {
       worker.postMessage({ type: 'strokes', data: batch });
-      emitStrokes(batch);
       workerStrokeQueueRef.current = [];
     }
     workerFlushScheduledRef.current = false;
-  }, [emitStrokes]);
+  }, []);
 
   const enqueueWorkerStroke = useCallback(
     (stroke: StrokeData) => {
@@ -334,577 +221,55 @@ export function DrawingCanvas() {
     return () => cancelAnimationFrame(animationId);
   }, [render]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const state = useDrawingStore.getState();
+  const startSpacePan = useCallback(() => setIsSpacePan(true), []);
+  const endSpacePan = useCallback(() => {
+    setIsSpacePan(false);
+    setIsPanning(false);
+    setPanStart(null);
+  }, []);
 
-      if (e.key === 'Shift') {
-        setIsShiftPressed(true);
-      }
+  useCanvasKeyboardShortcuts({
+    canvasRef,
+    workerRef,
+    setIsShiftPressed,
+    onSpacePanStart: startSpacePan,
+    onSpacePanEnd: endSpacePan,
+    setShowShortcuts,
+  });
 
-      const target = e.target as HTMLElement | null;
-      const isEditable = !!(
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          (target as unknown as { isContentEditable?: boolean }).isContentEditable)
-      );
-
-      if (isEditable) return;
-
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key.toLowerCase() === 'z') {
-          e.preventDefault();
-          if (e.shiftKey) {
-            state.redo();
-          } else {
-            state.undo();
-          }
-        } else if (e.key.toLowerCase() === 'y') {
-          e.preventDefault();
-          state.redo();
-        } else if (e.key === '=' || e.key === '+') {
-          e.preventDefault();
-          const zoom = state.zoom;
-          const newZoom = Math.max(0.1, Math.min(5, zoom * 1.2));
-
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const rect = canvas.getBoundingClientRect();
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-
-            const worldX = state.viewX + centerX / zoom;
-            const worldY = state.viewY + centerY / zoom;
-
-            const unconstrained = {
-              x: worldX - centerX / newZoom,
-              y: worldY - centerY / newZoom,
-            };
-
-            const constrained = constrainView(
-              unconstrained.x,
-              unconstrained.y,
-              newZoom,
-              rect.width,
-              rect.height,
-            );
-
-            state.setZoom(newZoom);
-            state.setView(constrained.x, constrained.y);
-
-            const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-            workerRef.current?.postMessage({
-              type: 'viewport',
-              zoom: newZoom,
-              viewX: constrained.x,
-              viewY: constrained.y,
-              canvasWidth: rect.width,
-              canvasHeight: rect.height,
-              dpr,
-            });
-          }
-        } else if (e.key === '-') {
-          e.preventDefault();
-          const zoom = state.zoom;
-          const newZoom = Math.max(0.1, Math.min(5, zoom / 1.2));
-
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const rect = canvas.getBoundingClientRect();
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-
-            const worldX = state.viewX + centerX / zoom;
-            const worldY = state.viewY + centerY / zoom;
-
-            const unconstrained = {
-              x: worldX - centerX / newZoom,
-              y: worldY - centerY / newZoom,
-            };
-
-            const constrained = constrainView(
-              unconstrained.x,
-              unconstrained.y,
-              newZoom,
-              rect.width,
-              rect.height,
-            );
-
-            state.setZoom(newZoom);
-            state.setView(constrained.x, constrained.y);
-
-            const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-            workerRef.current?.postMessage({
-              type: 'viewport',
-              zoom: newZoom,
-              viewX: constrained.x,
-              viewY: constrained.y,
-              canvasWidth: rect.width,
-              canvasHeight: rect.height,
-              dpr,
-            });
-          }
-        } else if (e.key === '0') {
-          e.preventDefault();
-          state.resetView();
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const rect = canvas.getBoundingClientRect();
-            const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-            workerRef.current?.postMessage({
-              type: 'viewport',
-              zoom: 1,
-              viewX: 0,
-              viewY: 0,
-              canvasWidth: rect.width,
-              canvasHeight: rect.height,
-              dpr,
-            });
-          }
-        } else if (e.key === 'Delete' || e.key === 'Backspace') {
-          e.preventDefault();
-          if (window.confirm('Are you sure you want to clear the canvas?')) {
-            state.clearCanvas();
-            emitClear();
-            workerRef.current?.postMessage({ type: 'clear' });
-          }
-        }
-      } else {
-        switch (e.key.toLowerCase()) {
-          case 'v':
-          case 'h':
-            state.setTool('hand');
-            break;
-          case 'p':
-          case 'b':
-            state.setTool('pen');
-            break;
-          case 'e':
-            state.setTool('eraser');
-            break;
-          case 'l':
-            state.setTool('line');
-            break;
-          case 'r':
-            state.setTool('rectangle');
-            break;
-          case 'c':
-          case 'o':
-            state.setTool('ellipse');
-            break;
-          case 't':
-            state.setTool('text');
-            break;
-          case 'i':
-            state.setTool('eyedropper');
-            break;
-          case '3':
-            state.setTool('triangle');
-            break;
-        }
-
-        if (e.code === 'Space') {
-          e.preventDefault();
-          setIsSpacePan(true);
-        }
-
-        if (e.key === '?' || (e.shiftKey && e.key === '/')) {
-          e.preventDefault();
-          setShowShortcuts(true);
-        }
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') {
-        setIsShiftPressed(false);
-        return;
-      }
-      if (e.code === 'Space') {
-        setIsSpacePan(false);
-        setIsPanning(false);
-        setPanStart(null);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [emitClear]);
-
-  useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      if (textInputPos) return;
-
-      const image = await getImageFromClipboard(e);
-      if (!image) return;
-
-      e.preventDefault();
-
-      const maxSize = 1920;
-      const needsCompression = image.width > maxSize || image.height > maxSize;
-      const finalImage = needsCompression
-        ? await compressImage(image.dataUrl, maxSize, maxSize, 0.85)
-        : image;
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const centerX = viewX + rect.width / 2 / zoom;
-      const centerY = viewY + rect.height / 2 / zoom;
-
-      const imageObject: DrawingObject = {
-        id: generateId(),
-        type: 'image',
-        x: centerX - finalImage.width / 2,
-        y: centerY - finalImage.height / 2,
-        width: finalImage.width,
-        height: finalImage.height,
-        imageData: finalImage.dataUrl,
-        color: '#ffffff',
-        size: 1,
-        alpha: 1,
-      };
-
-      saveHistory();
-      addObject(imageObject);
-      emitProjectState([...objects, imageObject]);
-
-      const shapeData: ShapeData = {
-        id: imageObject.id,
-        type: 'image',
-        x: imageObject.x!,
-        y: imageObject.y!,
-        width: imageObject.width!,
-        height: imageObject.height!,
-        color: imageObject.color,
-        size: imageObject.size,
-        alpha: imageObject.alpha ?? 1,
-        imageData: imageObject.imageData,
-        timestamp: Date.now(),
-      };
-      emitShape(shapeData);
-    };
-
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [
+  const handleImageUpload = useCanvasImageInput({
+    canvasRef,
     viewX,
     viewY,
     zoom,
-    textInputPos,
+    textInputActive: Boolean(textInputPos),
     addObject,
     saveHistory,
-    emitShape,
-    emitProjectState,
-    objects,
-  ]);
+  });
 
-  const handleImageUpload = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const clearConstraintMode = useCallback(() => setIsConstraintMode(false), []);
+  const clearTriangleVertices = useCallback(() => setTriangleVertices([]), []);
+  const clearTextInput = useCallback(() => {
+    setTextInputPos(null);
+    setTextInputValue('');
+  }, []);
 
-      if (!file.type.startsWith('image/')) {
-        console.warn('Invalid file type');
-        return;
-      }
+  useCanvasToolReset({
+    currentTool,
+    clearConstraintMode,
+    clearTriangleVertices,
+    clearTextInput,
+  });
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
-
-        const img = new Image();
-        img.onload = async () => {
-          const maxSize = 1920;
-          const needsCompression = img.width > maxSize || img.height > maxSize;
-          const finalImage = needsCompression
-            ? await compressImage(dataUrl, maxSize, maxSize, 0.85)
-            : { dataUrl, width: img.width, height: img.height };
-
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-
-          const rect = canvas.getBoundingClientRect();
-          const centerX = viewX + rect.width / 2 / zoom;
-          const centerY = viewY + rect.height / 2 / zoom;
-
-          const imageObject: DrawingObject = {
-            id: generateId(),
-            type: 'image',
-            x: centerX - finalImage.width / 2,
-            y: centerY - finalImage.height / 2,
-            width: finalImage.width,
-            height: finalImage.height,
-            imageData: finalImage.dataUrl,
-            color: '#ffffff',
-            size: 1,
-            alpha: 1,
-          };
-
-          saveHistory();
-          addObject(imageObject);
-          emitProjectState([...objects, imageObject]);
-
-          const shapeData: ShapeData = {
-            id: imageObject.id,
-            type: 'image',
-            x: imageObject.x!,
-            y: imageObject.y!,
-            width: imageObject.width!,
-            height: imageObject.height!,
-            color: imageObject.color,
-            size: imageObject.size,
-            alpha: imageObject.alpha ?? 1,
-            imageData: imageObject.imageData,
-            timestamp: Date.now(),
-          };
-          emitShape(shapeData);
-
-          useDrawingStore.getState().setTool('move');
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
-
-      e.target.value = '';
-    },
-    [viewX, viewY, zoom, addObject, saveHistory, emitShape, emitProjectState, objects],
-  );
-
-  useEffect(() => {
-    if (!['rectangle', 'ellipse'].includes(currentTool)) {
-      setIsConstraintMode(false);
-    }
-    if (currentTool !== 'triangle') {
-      setTriangleVertices([]);
-    }
-    if (currentTool !== 'text') {
-      setTextInputPos(null);
-      setTextInputValue('');
-    }
-  }, [currentTool]);
-
-  useEffect(() => {
-    const unsubscribeStroke = on('draw:stroke', (stroke: StrokeData) => {
-      workerRef.current?.postMessage({ type: 'stroke', data: stroke });
-    });
-
-    const unsubscribeStrokes = on('draw:strokes', (strokes: StrokeData[]) => {
-      workerRef.current?.postMessage({ type: 'strokes', data: strokes });
-    });
-
-    const unsubscribeShape = on('draw:shape', (shape: ShapeData) => {
-      workerRef.current?.postMessage({ type: 'shape', data: shape });
-    });
-
-    const unsubscribeSnapshot = on('canvas:snapshot', (snapshot: CanvasSnapshot) => {
-      if (!snapshot?.dataUrl) return;
-      if (isIOS()) return;
-      workerRef.current?.postMessage({
-        type: 'snapshot-image',
-        dataUrl: snapshot.dataUrl,
-        worldWidth: snapshot.worldW ?? WORLD_WIDTH,
-        worldHeight: snapshot.worldH ?? WORLD_HEIGHT,
-      });
-    });
-
-    const unsubscribeClear = on('canvas:clear', () => {
-      workerRef.current?.postMessage({ type: 'clear' });
-      const list = pendingReplayRef.current;
-      if (list && list.length) {
-        for (const obj of list) {
-          if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
-            const strokes: StrokeData[] = [];
-            const objGroupId = obj.id;
-            for (let i = 0; i < obj.points.length - 1; i++) {
-              const a = obj.points[i];
-              const b = obj.points[i + 1];
-              const s: StrokeData = {
-                x0: a.x,
-                y0: a.y,
-                x1: b.x,
-                y1: b.y,
-                color: obj.color,
-                size: obj.size,
-                alpha: obj.alpha ?? 1,
-                groupId: objGroupId,
-                timestamp: Date.now(),
-              };
-              strokes.push(s);
-            }
-            if (strokes.length) {
-              workerRef.current?.postMessage({
-                type: 'strokes',
-                data: strokes,
-              });
-            }
-          } else if (
-            (obj.type === 'line' ||
-              obj.type === 'rectangle' ||
-              obj.type === 'ellipse' ||
-              obj.type === 'circle' ||
-              obj.type === 'triangle' ||
-              obj.type === 'parabola' ||
-              obj.type === 'text') &&
-            obj.x !== undefined &&
-            obj.y !== undefined
-          ) {
-            const shape: ShapeData = {
-              id: obj.id,
-              type: obj.type,
-              x: obj.x,
-              y: obj.y,
-              width: obj.width ?? 0,
-              height: obj.height ?? 0,
-              color: obj.color,
-              size: obj.size,
-              alpha: obj.alpha ?? 1,
-              filled: obj.filled,
-              orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' }).orientation,
-              text: obj.text,
-              fontSize: obj.fontSize,
-              timestamp: Date.now(),
-            };
-            workerRef.current?.postMessage({ type: 'shape', data: shape });
-          }
-        }
-        pendingReplayRef.current = null;
-      }
-    });
-
-    const unsubscribeProjectState = on('project:state', (data: { objects: unknown[] }) => {
-      const objects = data.objects as DrawingObject[];
-      setObjects(objects);
-      replaceHistory(objects);
-      requestFullRedraw();
-    });
-
-    return () => {
-      unsubscribeStroke();
-      unsubscribeStrokes();
-      unsubscribeShape();
-      unsubscribeSnapshot();
-      unsubscribeClear();
-      unsubscribeProjectState();
-    };
-  }, [on, emitShape, emitStrokes, replaceHistory, requestFullRedraw, setObjects]);
-
-  const distancePointToSegment = useCallback(
-    (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      if (dx === 0 && dy === 0) {
-        const ddx = px - x1;
-        const ddy = py - y1;
-        return Math.sqrt(ddx * ddx + ddy * ddy);
-      }
-      const t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
-      const tt = Math.max(0, Math.min(1, t));
-      const projX = x1 + tt * dx;
-      const projY = y1 + tt * dy;
-      const ddx = px - projX;
-      const ddy = py - projY;
-      return Math.sqrt(ddx * ddx + ddy * ddy);
-    },
-    [],
-  );
-
-  const findHitObjectIdAt = useCallback(
-    (x: number, y: number, options?: { includeImages?: boolean }) => {
-      const includeImages = options?.includeImages ?? false;
-      for (let i = objects.length - 1; i >= 0; i--) {
-        const obj = objects[i];
-        const tol = Math.max(6, obj.size);
-
-        if (
-          obj.type === 'image' &&
-          obj.x !== undefined &&
-          obj.y !== undefined &&
-          obj.width !== undefined &&
-          obj.height !== undefined
-        ) {
-          if (!includeImages) continue;
-          const minX = obj.x - tol;
-          const minY = obj.y - tol;
-          const maxX = obj.x + obj.width + tol;
-          const maxY = obj.y + obj.height + tol;
-          if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-            return obj.id;
-          }
-          continue;
-        }
-        if (obj.type === 'stroke' && obj.points && obj.points.length > 1) {
-          const normalizedColor = obj.color.toLowerCase();
-          if (normalizedColor === BG_COLORS.dark || normalizedColor === BG_COLORS.light) {
-            continue;
-          }
-          for (let p = 0; p < obj.points.length - 1; p++) {
-            const a = obj.points[p];
-            const b = obj.points[p + 1];
-            if (distancePointToSegment(x, y, a.x, a.y, b.x, b.y) <= tol) {
-              return obj.id;
-            }
-          }
-        } else if (
-          obj.type === 'line' &&
-          obj.x !== undefined &&
-          obj.y !== undefined &&
-          obj.width !== undefined &&
-          obj.height !== undefined
-        ) {
-          const x1 = obj.x;
-          const y1 = obj.y;
-          const x2 = obj.x + obj.width;
-          const y2 = obj.y + obj.height;
-          if (distancePointToSegment(x, y, x1, y1, x2, y2) <= tol) {
-            return obj.id;
-          }
-        } else if (
-          (obj.type === 'rectangle' ||
-            obj.type === 'ellipse' ||
-            obj.type === 'circle' ||
-            obj.type === 'triangle' ||
-            obj.type === 'star' ||
-            obj.type === 'parabola') &&
-          obj.x !== undefined &&
-          obj.y !== undefined &&
-          obj.width !== undefined &&
-          obj.height !== undefined
-        ) {
-          const minX = Math.min(obj.x, obj.x + obj.width) - tol;
-          const minY = Math.min(obj.y, obj.y + obj.height) - tol;
-          const maxX = Math.max(obj.x, obj.x + obj.width) + tol;
-          const maxY = Math.max(obj.y, obj.y + obj.height) + tol;
-          if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-            return obj.id;
-          }
-        } else if (
-          obj.type === 'text' &&
-          obj.x !== undefined &&
-          obj.y !== undefined &&
-          obj.width !== undefined &&
-          obj.height !== undefined
-        ) {
-          const minX = obj.x - tol;
-          const minY = obj.y - obj.height / 2 - tol;
-          const maxX = obj.x + obj.width + tol;
-          const maxY = obj.y + obj.height / 2 + tol;
-          if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-            return obj.id;
-          }
-        }
-      }
-      return null;
-    },
-    [objects, distancePointToSegment],
-  );
+  useCanvasCollaborationAdapter({
+    on,
+    currentProjectId,
+    projectRevision,
+    requestCanonicalHydration,
+    applyAuthoritativeProject,
+    replaceHistory,
+    requestFullRedraw,
+  });
 
   const detectShapeFromStroke = useCallback(
     (
@@ -1040,37 +405,14 @@ export function DrawingCanvas() {
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
       if (!canvas) return { x: 0, y: 0 };
-
-      const rect = canvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-
-      return {
-        x: viewX + x / zoom,
-        y: viewY + y / zoom,
-      };
+      return screenPointToWorld(
+        canvas.getBoundingClientRect(),
+        { zoom, viewX, viewY },
+        clientX,
+        clientY,
+      );
     },
     [viewX, viewY, zoom],
-  );
-
-  const constrainShape = useCallback(
-    (startX: number, startY: number, endX: number, endY: number, shapeType: string) => {
-      if (
-        (isShiftPressed || isConstraintMode) &&
-        (shapeType === 'rectangle' || shapeType === 'ellipse')
-      ) {
-        const deltaX = endX - startX;
-        const deltaY = endY - startY;
-        const size = Math.min(Math.abs(deltaX), Math.abs(deltaY));
-
-        return {
-          endX: startX + (deltaX >= 0 ? size : -size),
-          endY: startY + (deltaY >= 0 ? size : -size),
-        };
-      }
-      return { endX, endY };
-    },
-    [isShiftPressed, isConstraintMode],
   );
 
   const startDrawing = useCallback(
@@ -1098,24 +440,14 @@ export function DrawingCanvas() {
       }
 
       if (currentTool === 'move') {
-        const hitId = findHitObjectIdAt(worldPos.x, worldPos.y, {
+        const hitId = findCanvasObjectIdAt(objects, worldPos.x, worldPos.y, {
           includeImages: true,
         });
         if (hitId) {
           const obj = objects.find((o) => o.id === hitId);
           if (obj) {
-            let offsetX = 0;
-            let offsetY = 0;
-
-            if (obj.x !== undefined && obj.y !== undefined) {
-              offsetX = worldPos.x - obj.x;
-              offsetY = worldPos.y - obj.y;
-            } else if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
-              offsetX = worldPos.x - obj.points[0].x;
-              offsetY = worldPos.y - obj.points[0].y;
-            }
-
-            setDraggedObject({ id: hitId, offsetX, offsetY });
+            const offset = getObjectDragOffset(obj, worldPos);
+            setDraggedObject({ id: hitId, offsetX: offset.x, offsetY: offset.y });
             saveHistory();
             return;
           }
@@ -1134,7 +466,7 @@ export function DrawingCanvas() {
       }
 
       if (currentTool === 'eraser' && eraserMode === 'object') {
-        const hitId = findHitObjectIdAt(worldPos.x, worldPos.y, {
+        const hitId = findCanvasObjectIdAt(objects, worldPos.x, worldPos.y, {
           includeImages: true,
         });
         if (hitId) {
@@ -1345,7 +677,6 @@ export function DrawingCanvas() {
               }
             }
           }
-          emitProjectState(remaining);
         }
         return;
       }
@@ -1402,16 +733,10 @@ export function DrawingCanvas() {
 
             saveHistory();
             addObject(triangleObject);
-            emitProjectState([...objects, triangleObject]);
 
             workerRef.current?.postMessage({
               type: 'shape',
               data: triangleObject,
-            });
-
-            emitShape({
-              ...triangleObject,
-              timestamp: Date.now(),
             });
 
             setTriangleVertices([]);
@@ -1429,7 +754,6 @@ export function DrawingCanvas() {
       eraserMode,
       screenToWorld,
       saveHistory,
-      findHitObjectIdAt,
       removeObject,
       objects,
       viewX,
@@ -1441,8 +765,6 @@ export function DrawingCanvas() {
       brushSize,
       brushOpacity,
       addObject,
-      emitShape,
-      emitProjectState,
       setDraggedObject,
       textInputPos,
       canDraw,
@@ -1452,12 +774,8 @@ export function DrawingCanvas() {
 
   const draw = useCallback(
     (e: React.PointerEvent) => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
-        const worldPos = screenToWorld(screenX, screenY);
+      if (canvasRef.current) {
+        const worldPos = screenToWorld(e.clientX, e.clientY);
         emitCursor(worldPos.x, worldPos.y);
       }
 
@@ -1469,18 +787,15 @@ export function DrawingCanvas() {
         const deltaX = e.clientX - panStart.x;
         const deltaY = e.clientY - panStart.y;
 
-        const unconstrained = {
-          x: panStart.viewX - deltaX / zoom,
-          y: panStart.viewY - deltaY / zoom,
-        };
-
-        const constrained = constrainView(
-          unconstrained.x,
-          unconstrained.y,
+        const constrained = panViewportBy({
           zoom,
-          rect.width,
-          rect.height,
-        );
+          viewX: panStart.viewX,
+          viewY: panStart.viewY,
+          deltaX: -deltaX,
+          deltaY: -deltaY,
+          canvasWidth: rect.width,
+          canvasHeight: rect.height,
+        });
         const newViewX = constrained.x;
         const newViewY = constrained.y;
 
@@ -1500,15 +815,10 @@ export function DrawingCanvas() {
             const canvas = canvasRef.current;
             if (canvas) {
               const rect = canvas.getBoundingClientRect();
-              const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-              workerRef.current?.postMessage({
-                type: 'viewport',
+              postRendererViewport(workerRef.current, rect, {
                 zoom,
                 viewX: latestView.x,
                 viewY: latestView.y,
-                canvasWidth: rect.width,
-                canvasHeight: rect.height,
-                dpr,
               });
             }
           });
@@ -1518,52 +828,16 @@ export function DrawingCanvas() {
 
       if (draggedObject) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        const newX = worldPos.x - draggedObject.offsetX;
-        const newY = worldPos.y - draggedObject.offsetY;
-
         const currentObjects = draggedObjectsRef.current || objects;
         const obj = currentObjects.find((o) => o.id === draggedObject.id);
 
         if (obj) {
-          let updatedObjects;
-
-          if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
-            const deltaX = newX - obj.points[0].x;
-            const deltaY = newY - obj.points[0].y;
-
-            updatedObjects = currentObjects.map((o) =>
-              o.id === draggedObject.id
-                ? {
-                    ...o,
-                    points: o.points!.map((p) => ({
-                      x: p.x + deltaX,
-                      y: p.y + deltaY,
-                    })),
-                  }
-                : o,
-            );
-          } else if (obj.type === 'triangle' && obj.points && obj.points.length > 0) {
-            const deltaX = newX - (obj.x ?? 0);
-            const deltaY = newY - (obj.y ?? 0);
-
-            updatedObjects = currentObjects.map((o) =>
-              o.id === draggedObject.id
-                ? {
-                    ...o,
-                    x: newX,
-                    y: newY,
-                    points: o.points!.map((p) => ({
-                      x: p.x + deltaX,
-                      y: p.y + deltaY,
-                    })),
-                  }
-                : o,
-            );
-          } else {
-            updatedObjects = currentObjects.map((o) =>
-              o.id === draggedObject.id ? { ...o, x: newX, y: newY } : o,
-            );
-          }
+          const updatedObjects = translateObjectInCollection(
+            currentObjects,
+            draggedObject.id,
+            worldPos,
+            { x: draggedObject.offsetX, y: draggedObject.offsetY },
+          );
 
           draggedObjectsRef.current = updatedObjects;
 
@@ -1665,9 +939,7 @@ export function DrawingCanvas() {
         : e) as unknown as PointerEvent & {
         getCoalescedEvents?: () => PointerEvent[];
       };
-      const coalesced =
-        typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : null;
-      const events = coalesced && coalesced.length ? coalesced : [native];
+      const events = getPointerSamples(native);
 
       if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
         let lp = lastPoint;
@@ -1704,13 +976,13 @@ export function DrawingCanvas() {
       } else if (['line', 'rectangle', 'ellipse', 'star'].includes(currentTool) && startPoint) {
         const lastEv = events[events.length - 1];
         const endPos = screenToWorld(lastEv.clientX, lastEv.clientY);
-        const { endX, endY } = constrainShape(
-          startPoint.x,
-          startPoint.y,
-          endPos.x,
-          endPos.y,
+        const constrainedEnd = constrainShapeEnd(
+          startPoint,
+          endPos,
           currentTool,
+          isShiftPressed || isConstraintMode,
         );
+        const { x: endX, y: endY } = constrainedEnd;
 
         setPreviewShape({
           type: currentTool,
@@ -1749,7 +1021,8 @@ export function DrawingCanvas() {
       brushSize,
       brushOpacity,
       enqueueWorkerStroke,
-      constrainShape,
+      isShiftPressed,
+      isConstraintMode,
       isPanning,
       panStart,
       zoom,
@@ -1775,33 +1048,6 @@ export function DrawingCanvas() {
       if (draggedObjectsRef.current) {
         const updatedObjects = draggedObjectsRef.current;
         setObjects(updatedObjects);
-        const updatedObj = updatedObjects.find((o) => o.id === draggedObject.id);
-        if (updatedObj) {
-          if (updatedObj.type === 'stroke') {
-            emitProjectState(updatedObjects);
-          } else if (updatedObj.x !== undefined && updatedObj.y !== undefined) {
-            emitShape({
-              id: updatedObj.id,
-              type: updatedObj.type,
-              x: updatedObj.x,
-              y: updatedObj.y,
-              width: updatedObj.width ?? 0,
-              height: updatedObj.height ?? 0,
-              color: updatedObj.color,
-              size: updatedObj.size,
-              alpha: updatedObj.alpha ?? 1,
-              filled: updatedObj.filled,
-              orientation: (updatedObj as { orientation?: 'up' | 'down' | 'left' | 'right' })
-                .orientation,
-              text: updatedObj.text,
-              fontSize: updatedObj.fontSize,
-              imageData: updatedObj.imageData,
-              points: updatedObj.points,
-              properties: updatedObj.properties,
-              timestamp: Date.now(),
-            });
-          }
-        }
         draggedObjectsRef.current = null;
       }
       setDraggedObject(null);
@@ -1912,12 +1158,10 @@ export function DrawingCanvas() {
 
             addObject(shapeObject);
             saveHistory();
-            emitProjectState([...objects, shapeObject]);
             workerRef.current?.postMessage({
               type: 'shape',
               data: shapeObject,
             });
-            emitShape({ ...shapeObject, timestamp: Date.now() });
           } else {
             const drawingObject = {
               id: generateId(),
@@ -1929,7 +1173,6 @@ export function DrawingCanvas() {
             };
             addObject(drawingObject);
             saveHistory();
-            emitProjectState([...objects, drawingObject]);
           }
         } else {
           const drawingObject = {
@@ -1942,7 +1185,6 @@ export function DrawingCanvas() {
           };
           addObject(drawingObject);
           saveHistory();
-          emitProjectState([...objects, drawingObject]);
         }
       }
     } else if (
@@ -1979,16 +1221,10 @@ export function DrawingCanvas() {
       }
 
       addObject(shapeObject);
-      emitProjectState([...objects, shapeObject]);
 
       workerRef.current?.postMessage({
         type: 'shape',
         data: shapeObject,
-      });
-
-      emitShape({
-        ...shapeObject,
-        timestamp: Date.now(),
       });
     } else if (currentTool === 'star' && startPoint && previewShape) {
       const dx = previewShape.endX - startPoint.x;
@@ -2017,16 +1253,10 @@ export function DrawingCanvas() {
       };
 
       addObject(starObject);
-      emitProjectState([...objects, starObject]);
 
       workerRef.current?.postMessage({
         type: 'shape',
         data: starObject,
-      });
-
-      emitShape({
-        ...starObject,
-        timestamp: Date.now(),
       });
     } else if (
       currentTool === 'triangle' &&
@@ -2064,16 +1294,10 @@ export function DrawingCanvas() {
       };
 
       addObject(triangleObject);
-      emitProjectState([...objects, triangleObject]);
 
       workerRef.current?.postMessage({
         type: 'shape',
         data: triangleObject,
-      });
-
-      emitShape({
-        ...triangleObject,
-        timestamp: Date.now(),
       });
     }
 
@@ -2083,27 +1307,6 @@ export function DrawingCanvas() {
     strokeGroupRef.current = null;
     setStartPoint(null);
     setPreviewShape(null);
-
-    if (!isIOS()) {
-      setTimeout(() => {
-        if (workerRef.current) {
-          const handler = (e: MessageEvent) => {
-            const msg = e.data;
-            if (msg?.type === 'snapshot' && typeof msg.dataUrl === 'string') {
-              emitSnapshot({
-                dataUrl: msg.dataUrl,
-                worldW: WORLD_WIDTH,
-                worldH: WORLD_HEIGHT,
-                timestamp: Date.now(),
-              });
-              workerRef.current?.removeEventListener('message', handler as EventListener);
-            }
-          };
-          workerRef.current.addEventListener('message', handler as EventListener);
-          workerRef.current.postMessage({ type: 'snapshot' });
-        }
-      }, 100);
-    }
   }, [
     isDrawing,
     currentStroke,
@@ -2116,8 +1319,6 @@ export function DrawingCanvas() {
     saveHistory,
     startPoint,
     previewShape,
-    emitShape,
-    emitSnapshot,
     flushWorkerStrokes,
     autoShape,
     detectShapeFromStroke,
@@ -2130,9 +1331,6 @@ export function DrawingCanvas() {
     starPoints,
     theme,
     setObjects,
-    emitProjectState,
-    buildStrokePoints,
-    objects,
   ]);
 
   const handleZoomStep = useCallback(
@@ -2140,36 +1338,23 @@ export function DrawingCanvas() {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const newZoom = Math.max(0.1, Math.min(5, zoom * factor));
-      const worldX = viewX + centerX / zoom;
-      const worldY = viewY + centerY / zoom;
-
-      const unconstrained = {
-        x: worldX - centerX / newZoom,
-        y: worldY - centerY / newZoom,
-      };
-
-      const constrained = constrainView(
-        unconstrained.x,
-        unconstrained.y,
-        newZoom,
-        rect.width,
-        rect.height,
-      );
-
-      setZoom(newZoom);
-      setView(constrained.x, constrained.y);
-      const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-      workerRef.current?.postMessage({
-        type: 'viewport',
-        zoom: newZoom,
-        viewX: constrained.x,
-        viewY: constrained.y,
+      const viewport = zoomViewportAtPoint({
+        zoom,
+        viewX,
+        viewY,
+        nextZoom: zoom * factor,
+        focalX: rect.width / 2,
+        focalY: rect.height / 2,
         canvasWidth: rect.width,
         canvasHeight: rect.height,
-        dpr,
+      });
+
+      setZoom(viewport.zoom);
+      setView(viewport.x, viewport.y);
+      postRendererViewport(workerRef.current, rect, {
+        zoom: viewport.zoom,
+        viewX: viewport.x,
+        viewY: viewport.y,
       });
     },
     [zoom, viewX, viewY, setZoom, setView],
@@ -2182,16 +1367,7 @@ export function DrawingCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-    workerRef.current?.postMessage({
-      type: 'viewport',
-      zoom: 1,
-      viewX: 0,
-      viewY: 0,
-      canvasWidth: rect.width,
-      canvasHeight: rect.height,
-      dpr,
-    });
+    postRendererViewport(workerRef.current, rect, { zoom: 1, viewX: 0, viewY: 0 });
   }, [resetView]);
 
   const [isMobile, setIsMobile] = useState(false);
@@ -2231,31 +1407,22 @@ export function DrawingCanvas() {
             const deltaX = clientX - panStart.x;
             const deltaY = clientY - panStart.y;
 
-            const unconstrained = {
-              x: panStart.viewX - deltaX / zoom,
-              y: panStart.viewY - deltaY / zoom,
-            };
-
-            const constrained = constrainView(
-              unconstrained.x,
-              unconstrained.y,
+            const constrained = panViewportBy({
               zoom,
-              rect.width,
-              rect.height,
-            );
+              viewX: panStart.viewX,
+              viewY: panStart.viewY,
+              deltaX: -deltaX,
+              deltaY: -deltaY,
+              canvasWidth: rect.width,
+              canvasHeight: rect.height,
+            });
 
             setView(constrained.x, constrained.y);
 
-            // Send viewport update to worker
-            const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-            workerRef.current?.postMessage({
-              type: 'viewport',
+            postRendererViewport(workerRef.current, rect, {
               zoom,
               viewX: constrained.x,
               viewY: constrained.y,
-              canvasWidth: rect.width,
-              canvasHeight: rect.height,
-              dpr,
             });
           } else if (!active) {
             setIsPanning(false);
@@ -2301,10 +1468,6 @@ export function DrawingCanvas() {
           return { initialZoom: zoom };
         }
 
-        const newZoom = memo.initialZoom * s;
-        // Constrain zoom
-        const clampedZoom = Math.max(0.1, Math.min(5, newZoom));
-
         const canvas = canvasRef.current;
         if (canvas) {
           const rect = canvas.getBoundingClientRect();
@@ -2312,34 +1475,24 @@ export function DrawingCanvas() {
           const pinchX = cx - rect.left;
           const pinchY = cy - rect.top;
 
-          // World coordinates of pinch center
-          const worldX = viewX + pinchX / zoom;
-          const worldY = viewY + pinchY / zoom;
-
-          // New view position to keep pinch center stable
-          const newViewX = worldX - pinchX / clampedZoom;
-          const newViewY = worldY - pinchY / clampedZoom;
-
-          const constrained = constrainView(
-            newViewX,
-            newViewY,
-            clampedZoom,
-            rect.width,
-            rect.height,
-          );
-
-          setZoom(clampedZoom);
-          setView(constrained.x, constrained.y);
-
-          const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-          workerRef.current?.postMessage({
-            type: 'viewport',
-            zoom: clampedZoom,
-            viewX: constrained.x,
-            viewY: constrained.y,
+          const viewport = zoomViewportAtPoint({
+            zoom,
+            viewX,
+            viewY,
+            nextZoom: memo.initialZoom * s,
+            focalX: pinchX,
+            focalY: pinchY,
             canvasWidth: rect.width,
             canvasHeight: rect.height,
-            dpr,
+          });
+
+          setZoom(viewport.zoom);
+          setView(viewport.x, viewport.y);
+
+          postRendererViewport(workerRef.current, rect, {
+            zoom: viewport.zoom,
+            viewX: viewport.x,
+            viewY: viewport.y,
           });
         }
         return memo;
@@ -2349,7 +1502,6 @@ export function DrawingCanvas() {
           // Zoom
           event.preventDefault();
           const delta = dy > 0 ? 0.9 : 1.1; // Invert direction for standard feel
-          const newZoom = Math.max(0.1, Math.min(5, zoom * delta));
 
           const canvas = canvasRef.current;
           if (!canvas) return;
@@ -2359,32 +1511,24 @@ export function DrawingCanvas() {
           const mouseX = pointerEvent.clientX - rect.left;
           const mouseY = pointerEvent.clientY - rect.top;
 
-          const worldX = viewX + mouseX / zoom;
-          const worldY = viewY + mouseY / zoom;
-
-          const unconstrainedX = worldX - mouseX / newZoom;
-          const unconstrainedY = worldY - mouseY / newZoom;
-
-          const constrained = constrainView(
-            unconstrainedX,
-            unconstrainedY,
-            newZoom,
-            rect.width,
-            rect.height,
-          );
-
-          setZoom(newZoom);
-          setView(constrained.x, constrained.y);
-
-          const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-          workerRef.current?.postMessage({
-            type: 'viewport',
-            zoom: newZoom,
-            viewX: constrained.x,
-            viewY: constrained.y,
+          const viewport = zoomViewportAtPoint({
+            zoom,
+            viewX,
+            viewY,
+            nextZoom: zoom * delta,
+            focalX: mouseX,
+            focalY: mouseY,
             canvasWidth: rect.width,
             canvasHeight: rect.height,
-            dpr,
+          });
+
+          setZoom(viewport.zoom);
+          setView(viewport.x, viewport.y);
+
+          postRendererViewport(workerRef.current, rect, {
+            zoom: viewport.zoom,
+            viewX: viewport.x,
+            viewY: viewport.y,
           });
         } else {
           // Pan
@@ -2393,21 +1537,21 @@ export function DrawingCanvas() {
             if (!canvas) return;
             const rect = canvas.getBoundingClientRect();
 
-            const newViewX = viewX + dx / zoom;
-            const newViewY = viewY + dy / zoom;
-
-            const constrained = constrainView(newViewX, newViewY, zoom, rect.width, rect.height);
+            const constrained = panViewportBy({
+              zoom,
+              viewX,
+              viewY,
+              deltaX: dx,
+              deltaY: dy,
+              canvasWidth: rect.width,
+              canvasHeight: rect.height,
+            });
             setView(constrained.x, constrained.y);
 
-            const dpr = isIOS() ? 1 : window.devicePixelRatio || 1;
-            workerRef.current?.postMessage({
-              type: 'viewport',
+            postRendererViewport(workerRef.current, rect, {
               zoom,
               viewX: constrained.x,
               viewY: constrained.y,
-              canvasWidth: rect.width,
-              canvasHeight: rect.height,
-              dpr,
             });
           }
         }
@@ -2429,6 +1573,7 @@ export function DrawingCanvas() {
     >
       <canvas
         ref={canvasRef}
+        data-object-count={objectCount}
         className={`absolute inset-0 w-full h-full touch-none ${
           currentTool === 'hand' || isSpacePan || isPanning
             ? isPanning
@@ -2439,6 +1584,20 @@ export function DrawingCanvas() {
         onContextMenu={(e) => e.preventDefault()}
         onClick={handleCanvasClick}
       />
+      {(rendererStatus === 'unsupported' || rendererStatus === 'failed') && (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 p-6 text-center"
+          role="alert"
+        >
+          <div>
+            <p className="font-semibold">Canvas renderer unavailable</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This browser cannot start the required OffscreenCanvas renderer. Use a supported
+              browser to edit this board.
+            </p>
+          </div>
+        </div>
+      )}
       {/* Live Cursors */}
       {canvasRef.current && (
         <LiveCursors
@@ -2694,12 +1853,10 @@ export function DrawingCanvas() {
 
               saveHistory();
               addObject(textObj);
-              emitProjectState([...objects, textObj]);
               workerRef.current?.postMessage({
                 type: 'shape',
                 data: { ...textObj, timestamp: Date.now() },
               });
-              emitShape({ ...textObj, timestamp: Date.now() } as ShapeData);
 
               setTextInputPos(null);
               setTextInputValue('');

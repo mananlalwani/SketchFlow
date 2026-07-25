@@ -1,16 +1,36 @@
 /* eslint-disable react-refresh/only-export-components -- Vite aliases this module only for Playwright. */
 import type { ReactNode } from 'react';
 
+const isAuthenticatedForE2E = () =>
+  typeof window !== 'undefined' && window.localStorage.getItem('e2e-authenticated') === 'true';
+
 export function ClerkProvider({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
 export function useAuth() {
-  return { userId: null, isLoaded: true, isSignedIn: false, getToken: async () => null };
+  const isSignedIn = isAuthenticatedForE2E();
+  return {
+    userId: isSignedIn ? 'e2e-user' : null,
+    isLoaded: true,
+    isSignedIn,
+    getToken: async () => (isSignedIn ? 'e2e-token' : null),
+  };
 }
 
 export function useUser() {
-  return { user: null, isLoaded: true };
+  const isSignedIn = isAuthenticatedForE2E();
+  return {
+    user: isSignedIn
+      ? {
+          id: 'e2e-user',
+          username: 'E2E User',
+          firstName: 'E2E',
+          primaryEmailAddress: { emailAddress: 'e2e@example.test' },
+        }
+      : null,
+    isLoaded: true,
+  };
 }
 
 export function useClerk() {

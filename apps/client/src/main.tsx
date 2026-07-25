@@ -1,6 +1,9 @@
-// Initialize OpenTelemetry before any other imports
+// Initialize observability before React renders.
 import { initOtel } from './lib/otel';
+import { initSentry } from './lib/sentry';
+
 initOtel();
+initSentry();
 
 // Start tool usage analytics
 import { startAnalyticsLogging } from './lib/analytics';

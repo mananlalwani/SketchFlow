@@ -2,33 +2,44 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProjectService } from '../../services/ProjectService.js';
 
 // Mock prisma
-vi.mock('../../lib/prisma.js', () => ({
-  prisma: {
-    project: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      upsert: vi.fn(),
-      delete: vi.fn(),
+vi.mock('../../lib/prisma.js', () => {
+  const project = {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    upsert: vi.fn(),
+    delete: vi.fn(),
+  };
+  const collaborationOperation = {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  };
+
+  return {
+    prisma: {
+      project,
+      projectCollaborator: {
+        upsert: vi.fn(),
+        deleteMany: vi.fn(),
+      },
+      collaborationSnapshot: {
+        upsert: vi.fn(),
+        findUnique: vi.fn(),
+      },
+      collaborationOperation,
+      folder: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      $transaction: vi.fn((callback) => callback({ project, collaborationOperation })),
     },
-    projectCollaborator: {
-      upsert: vi.fn(),
-      deleteMany: vi.fn(),
-    },
-    collaborationSnapshot: {
-      upsert: vi.fn(),
-      findUnique: vi.fn(),
-    },
-    folder: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-  },
-}));
+  };
+});
 
 // Mock logger
 vi.mock('../../utils/logger.js', () => ({
@@ -121,20 +132,135 @@ describe('ProjectService', () => {
     });
   });
 
-  describe('collaboration snapshots', () => {
-    it('persists and reloads a snapshot across service instances', async () => {
-      const snapshot = { dataUrl: 'data:image/png;base64,recovery', timestamp: 1 };
-      vi.mocked(prisma.collaborationSnapshot.upsert).mockResolvedValue({} as never);
-      vi.mocked(prisma.collaborationSnapshot.findUnique).mockResolvedValue({
-        projectId: 'proj-1',
-        data: snapshot,
-        updatedAt: new Date(),
+  describe('canonical collaboration commits', () => {
+    const project = {
+      id: 'proj-1',
+      userId: 'owner',
+      title: 'Board',
+      data: { objects: [] },
+      revision: 3,
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      shared: false,
+      shareToken: null,
+      collaborators: [{ userId: 'editor', role: 'editor' }],
+    };
+    const operation = {
+      projectId: 'proj-1',
+      userId: 'editor',
+      operationId: 'operation_1234567',
+      expectedRevision: 3,
+      kind: 'replace-project' as const,
+      data: { objects: [{ id: 'shape-1', type: 'rectangle' }] },
+    };
+
+    it('persists one accepted canonical revision and its idempotency receipt', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue(project as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockResolvedValue({} as never);
+
+      await expect(service.commitCollaborationOperation(operation)).resolves.toMatchObject({
+        status: 'applied',
+        revision: 4,
+        data: operation.data,
+      });
+      expect(prisma.project.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'proj-1', revision: 3 } }),
+      );
+      expect(prisma.collaborationOperation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            operationId: operation.operationId,
+            actorUserId: 'editor',
+            revision: 4,
+            kind: 'replace-project',
+            receiptHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }),
+        }),
+      );
+    });
+
+    it('returns an existing matching operation as a duplicate without writing again', async () => {
+      const receiptHash = 'a'.repeat(64);
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue({
+        receiptHash,
+        revision: 4,
       } as never);
 
-      await expect(service.saveCollaborationSnapshot('proj-1', snapshot)).resolves.toBeUndefined();
-      await expect(new ProjectService().getCollaborationSnapshot('proj-1')).resolves.toEqual(
-        snapshot,
-      );
+      // Use the hash captured from a first local application so this test remains
+      // independent of serialization implementation details.
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValueOnce(null);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue(project as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockImplementation(async (args) => {
+        vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue({
+          receiptHash: args.data.receiptHash,
+          revision: 4,
+        } as never);
+        return {} as never;
+      });
+      await service.commitCollaborationOperation(operation);
+
+      await expect(service.commitCollaborationOperation(operation)).resolves.toEqual({
+        status: 'duplicate',
+        operationId: operation.operationId,
+        revision: 4,
+      });
+      expect(prisma.project.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects altered payload reuse of an operation ID', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue({
+        receiptHash: 'different-receipt',
+        revision: 4,
+      } as never);
+
+      await expect(service.commitCollaborationOperation(operation)).resolves.toEqual({
+        status: 'invalid',
+        operationId: operation.operationId,
+      });
+      expect(prisma.project.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('returns the latest revision when a concurrent commit wins the CAS', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.project.findUnique)
+        .mockResolvedValueOnce(project as never)
+        .mockResolvedValueOnce({ ...project, revision: 4 } as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 0 } as never);
+
+      await expect(service.commitCollaborationOperation(operation)).resolves.toEqual({
+        status: 'conflict',
+        operationId: operation.operationId,
+        currentRevision: 4,
+      });
+      expect(prisma.collaborationOperation.create).not.toHaveBeenCalled();
+    });
+
+    it('recognizes an identical operation that commits while its CAS is pending', async () => {
+      let receiptHash = '';
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue(project as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockImplementation(async (args) => {
+        receiptHash = args.data.receiptHash;
+        return {} as never;
+      });
+      await service.commitCollaborationOperation(operation);
+
+      vi.mocked(prisma.collaborationOperation.findUnique).mockReset();
+      vi.mocked(prisma.collaborationOperation.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ receiptHash, revision: 4 } as never);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue(project as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 0 } as never);
+
+      await expect(service.commitCollaborationOperation(operation)).resolves.toEqual({
+        status: 'duplicate',
+        operationId: operation.operationId,
+        revision: 4,
+      });
     });
   });
 
@@ -407,6 +533,36 @@ describe('ProjectService', () => {
       expect(result.id).toBe('new-folder');
       expect(result.name).toBe('New Folder');
       expect(result.color).toBe('#ff0000');
+    });
+
+    it.each(['editor', 'viewer'])(
+      'does not let a %s update or delete an owner folder',
+      async (userId) => {
+        vi.mocked(prisma.folder.findUnique).mockResolvedValue({
+          id: 'folder-1',
+          userId: 'owner',
+        } as never);
+
+        await expect(service.updateFolder('folder-1', userId, 'Renamed')).resolves.toBeNull();
+        await expect(service.deleteFolder('folder-1', userId)).resolves.toBe(false);
+        expect(prisma.folder.update).not.toHaveBeenCalled();
+        expect(prisma.folder.delete).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('collaborator management', () => {
+    it.each(['editor', 'viewer'])('does not let a %s manage collaborators', async (userId) => {
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        id: 'proj-1',
+        userId: 'owner',
+      } as never);
+
+      await expect(service.addCollaborator('proj-1', userId, 'new-user')).resolves.toBe(false);
+      await expect(service.removeCollaborator('proj-1', userId, 'editor')).resolves.toBe(false);
+      await expect(service.getCollaborators('proj-1', userId)).resolves.toEqual([]);
+      expect(prisma.projectCollaborator.upsert).not.toHaveBeenCalled();
+      expect(prisma.projectCollaborator.deleteMany).not.toHaveBeenCalled();
     });
   });
 });

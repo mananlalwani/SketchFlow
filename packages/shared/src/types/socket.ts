@@ -197,33 +197,66 @@ export interface ProjectFile {
   objects: ProjectObject[];
 }
 
+export interface CollaborationCommit {
+  protocolVersion: 1;
+  projectId: string;
+  operationId: string;
+  expectedRevision: number;
+  kind: 'replace-project';
+  data: unknown;
+  title?: string;
+}
+
+export type CollaborationCommitResult =
+  | {
+      status: 'applied';
+      operationId: string;
+      revision: number;
+      data: unknown;
+      title: string;
+    }
+  | { status: 'duplicate'; operationId: string; revision: number }
+  | { status: 'conflict'; operationId: string; currentRevision: number }
+  | {
+      status: 'forbidden' | 'not_found' | 'invalid' | 'too_large' | 'unavailable';
+      operationId: string;
+    };
+
+export interface CollaborationAppliedEvent {
+  projectId: string;
+  operationId: string;
+  revision: number;
+  kind: 'replace-project';
+  data: unknown;
+  title: string;
+}
+
+export interface CollaborationHydration {
+  projectId: string;
+  revision: number;
+  data: unknown;
+  title: string;
+}
+
 export interface ServerToClientEvents {
-  'draw:stroke': (stroke: StrokeData) => void;
-  'draw:strokes': (strokes: StrokeData[]) => void;
-  'draw:shape': (shape: ShapeData) => void;
-  'canvas:snapshot': (snapshot: CanvasSnapshot) => void;
-  'canvas:clear': () => void;
   'connection:count': (count: number) => void;
   'cursor:move': (cursor: CursorData) => void;
   'cursor:join': (cursor: CursorData) => void;
   'cursor:leave': (userId: string) => void;
   'cursors:all': (cursors: CursorData[]) => void;
-  'project:state': (data: { objects: unknown[]; timestamp: number }) => void;
-  'object:delete': (objectId: string, userId: string) => void;
+  'collaboration:hydrated': (state: CollaborationHydration) => void;
+  'collaboration:applied': (event: CollaborationAppliedEvent) => void;
+  error: (error: { status: 429; error: string }) => void;
 }
 
 export interface ClientToServerEvents {
-  'draw:stroke': (stroke: StrokeData) => void;
-  'draw:strokes': (strokes: StrokeData[]) => void;
-  'draw:shape': (shape: ShapeData) => void;
-  'canvas:snapshot': (snapshot: CanvasSnapshot) => void;
-  'canvas:clear': () => void;
   'cursor:move': (cursor: CursorData) => void;
   'room:join': (projectId: string) => void;
   'room:leave': () => void;
-  'project:request-state': () => void;
-  'object:delete': (objectId: string) => void;
-  'project:state': (data: { objects: unknown[]; timestamp: number }) => void;
+  'collaboration:commit': (
+    commit: CollaborationCommit,
+    acknowledge: (result: CollaborationCommitResult) => void,
+  ) => void;
 }
 
 export interface InterServerEvents {

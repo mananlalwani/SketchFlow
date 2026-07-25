@@ -6,6 +6,7 @@
  * like Sentry, LogRocket, etc.
  */
 import { getTraceContext, recordError, getTracer } from './otel';
+import { captureException, setSentryUser } from './sentry';
 
 interface ErrorContext {
   componentStack?: string;
@@ -20,6 +21,11 @@ let currentUserId: string | null = null;
  */
 export function reportError(error: Error, context?: ErrorContext): void {
   const traceContext = getTraceContext();
+  captureException(error, {
+    ...context,
+    ...(traceContext.traceId && { traceId: traceContext.traceId }),
+    ...(traceContext.spanId && { spanId: traceContext.spanId }),
+  });
 
   // Record error on current OTel span if available
   recordError(error);
@@ -69,9 +75,13 @@ export function reportError(error: Error, context?: ErrorContext): void {
  */
 export function setErrorUser(userId: string | null): void {
   currentUserId = userId;
+  setSentryUser(userId);
 
   if (import.meta.env.DEV) {
-    console.debug('[Error Tracking] User set:', userId);
+    console.debug(
+      '[Error Tracking] authentication state set:',
+      userId ? 'authenticated' : 'anonymous',
+    );
   }
 }
 
