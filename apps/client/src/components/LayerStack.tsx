@@ -127,12 +127,12 @@ export function LayerStack({ className }: LayerStackProps) {
                   </span>
                 </button>
                 {isSelected && (
-                  <div className="ml-11 flex basis-full flex-wrap items-center gap-1 border-t border-blue-200/70 pt-2 dark:border-blue-500/20">
+                  <div className="ml-11 grid basis-full grid-cols-2 gap-1.5 border-t border-blue-200/70 pt-2 dark:border-blue-500/20">
                     <Button
                       type="button"
                       variant="secondary"
                       size="sm"
-                      className="h-8"
+                      className="h-8 w-full justify-start px-2"
                       onClick={() => updateLayer(object.id, { hidden: !object.hidden })}
                       aria-label={`${object.hidden ? 'Show' : 'Hide'} ${label}`}
                     >
@@ -147,7 +147,7 @@ export function LayerStack({ className }: LayerStackProps) {
                       type="button"
                       variant="secondary"
                       size="sm"
-                      className="h-8"
+                      className="h-8 w-full justify-start px-2"
                       onClick={() => updateLayer(object.id, { locked: !object.locked })}
                       aria-label={`${object.locked ? 'Unlock' : 'Lock'} ${label}`}
                     >
@@ -162,29 +162,29 @@ export function LayerStack({ className }: LayerStackProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2"
+                      className="h-8 w-full justify-start px-2"
                       disabled={index === objects.length - 1}
                       onClick={() => moveLayer(object.id, 1)}
                       aria-label={`Move ${label} forward`}
                     >
-                      <ChevronUp className="mr-1 h-3.5 w-3.5" /> Forward
+                      <ChevronUp className="mr-1 h-3.5 w-3.5" /> Bring forward
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2"
+                      className="h-8 w-full justify-start px-2"
                       disabled={index === 0}
                       onClick={() => moveLayer(object.id, -1)}
                       aria-label={`Move ${label} backward`}
                     >
-                      <ChevronDown className="mr-1 h-3.5 w-3.5" /> Back
+                      <ChevronDown className="mr-1 h-3.5 w-3.5" /> Send backward
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2 text-slate-400 hover:text-red-500"
+                      className="col-span-2 h-8 w-full justify-start px-2 text-slate-400 hover:text-red-500"
                       onClick={() => deleteLayer(object.id)}
                       aria-label={`Delete ${label}`}
                     >
