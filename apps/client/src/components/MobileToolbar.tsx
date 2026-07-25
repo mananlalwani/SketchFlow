@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useDrawingStore, type Tool } from '@/store/drawingStore';
+import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import {
   Pen,
@@ -20,6 +21,13 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MobilePropertiesDrawer } from './MobilePropertiesDrawer';
+import { useAuth } from '@clerk/clerk-react';
+import { useToast } from '@/hooks/use-toast';
+import { serializeProject } from '@/lib/utils';
+import {
+  activeProjectWriteCoordinator,
+  ProjectWriteResetError,
+} from '@/lib/projectWriteCoordinator';
 
 const tools = [
   { id: 'hand', icon: Hand, label: 'Pan' },
@@ -36,9 +44,73 @@ const tools = [
 ] as const;
 
 export function MobileToolbar() {
-  const { currentTool, setTool, clearCanvas, undo, redo, canUndo, canRedo } = useDrawingStore();
+  const {
+    currentTool,
+    setTool,
+    clearCanvas,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    currentProjectId,
+    documentVersion,
+    projectRevision,
+    projectRole,
+    projectTitle,
+    objects,
+    unsavedChanges,
+    setCurrentProject,
+  } = useDrawingStore();
+  const { isGuest } = useAuthStore();
+  const { getToken } = useAuth();
+  const { toast } = useToast();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const handleSave = useCallback(async () => {
+    if (projectRole === 'viewer') return;
+    const savedProjectId = currentProjectId;
+    const savedDocumentVersion = documentVersion;
+    const payload = serializeProject(objects, 4096, 4096);
+
+    try {
+      activeProjectWriteCoordinator.resume(savedProjectId ?? 'active-draft');
+      const saved = await activeProjectWriteCoordinator.enqueue({
+        projectKey: savedProjectId ?? 'active-draft',
+        projectId: savedProjectId,
+        title: projectTitle || 'Untitled',
+        data: payload,
+        documentVersion: savedDocumentVersion,
+        expectedRevision: projectRevision,
+        cloud: !isGuest,
+        tokenProvider: isGuest ? undefined : getToken,
+      });
+      const currentState = useDrawingStore.getState();
+      if (currentState.documentVersion !== savedDocumentVersion) return;
+      if (!savedProjectId) currentState.setCurrentProject(saved.id);
+      currentState.setProjectRevision(saved.revision);
+      currentState.markSaved(savedDocumentVersion);
+      toast({ title: isGuest ? 'Saved locally' : 'Saved to cloud' });
+    } catch (error) {
+      if (error instanceof ProjectWriteResetError) return;
+      console.error('Save failed', error);
+      toast({
+        title: 'Save failed',
+        description: isGuest ? 'Could not save locally.' : 'Could not save to cloud.',
+        variant: 'destructive',
+      });
+    }
+  }, [
+    currentProjectId,
+    documentVersion,
+    getToken,
+    isGuest,
+    objects,
+    projectRevision,
+    projectRole,
+    projectTitle,
+    toast,
+  ]);
 
   // Find current tool icon
   const CurrentIcon = tools.find((t) => t.id === currentTool)?.icon || Pen;
@@ -61,14 +133,23 @@ export function MobileToolbar() {
         setIsDrawerOpen(false);
       }
     } else if (action === 'save') {
-      // Trigger save
+      void handleSave();
       setIsDrawerOpen(false);
+    } else if (action === 'open') {
+      if (
+        !unsavedChanges ||
+        window.confirm('Open your projects? Unsaved changes in this drawing will be discarded.')
+      ) {
+        setCurrentProject(undefined);
+        clearCanvas();
+        setIsDrawerOpen(false);
+      }
     }
   };
 
   return (
     <>
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 sm:hidden flex items-end gap-3">
+      <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 items-end gap-3 sm:hidden">
         {/* Properties Toggle */}
         <Button
           onClick={() => setIsDrawerOpen(true)}

@@ -123,18 +123,43 @@ export function MobilePropertiesDrawer({
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <label className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                    Size
+                    {currentTool === 'text' ? 'Font size' : 'Size'}
                   </label>
-                  <span className="text-xs text-slate-400">{brushSize}px</span>
+                  <span className="text-xs text-slate-400">
+                    {currentTool === 'text' ? Math.max(16, brushSize * 2) : brushSize}px
+                  </span>
                 </div>
                 <Slider
                   value={[brushSize]}
                   min={1}
-                  max={100}
+                  max={currentTool === 'text' ? 50 : 100}
                   step={1}
                   onValueChange={([val]) => setBrushSize(val)}
                 />
               </div>
+
+              {currentTool === 'text' && (
+                <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">
+                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Text note
+                  </p>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center dark:border-white/10 dark:bg-white/[0.03]">
+                    <span
+                      className="block truncate"
+                      style={{
+                        color: brushColor,
+                        fontSize: `${Math.min(32, Math.max(16, brushSize * 2))}px`,
+                      }}
+                    >
+                      Preview
+                    </span>
+                  </div>
+                  <p className="text-xs leading-5 text-slate-500">
+                    Tap the canvas, write your note, then tap Add text. Use Shift+Enter for a new
+                    line.
+                  </p>
+                </div>
+              )}
 
               {/* Opacity Slider */}
               <div className="space-y-3">

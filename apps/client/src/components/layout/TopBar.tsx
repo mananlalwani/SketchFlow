@@ -211,8 +211,8 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   }, [handleSave]);
 
   return (
-    <div className="h-14 border-b border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center px-4 justify-between z-30 relative transition-colors duration-200">
-      <div className="flex items-center gap-4">
+    <div className="relative z-30 flex h-14 items-center justify-between border-b border-slate-200 bg-white/80 px-3 backdrop-blur-md transition-colors duration-200 dark:border-white/10 dark:bg-slate-900/80 sm:px-4">
+      <div className="flex min-w-0 items-center gap-4">
         <div
           className="font-bold text-xl text-blue-600 dark:text-blue-400 cursor-pointer"
           onClick={goToHome}
@@ -221,7 +221,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         </div>
 
         {!hideProjectControls && (
-          <>
+          <div className="hidden items-center sm:flex">
             <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
 
             <div className="flex items-center gap-2 group">
@@ -286,11 +286,11 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
                 )}
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="hidden items-center gap-2 sm:flex">
         {!hideProjectControls && (
           <>
             <Button
@@ -433,6 +433,49 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
 
         <ConnectionStatus />
         <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+        <SettingsDropdown />
+      </div>
+      <div className="flex items-center gap-1 sm:hidden">
+        {!hideProjectControls && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleSave}
+              disabled={isSaving || projectRole === 'viewer'}
+              title="Save drawing"
+              aria-label="Save drawing"
+            >
+              <Save className="h-4 w-4" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={isExporting || objects.length === 0}
+                  title="Export drawing"
+                  aria-label="Export drawing"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExportPNG('1x', 'png')}>
+                  PNG image
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportSVG}>SVG vector</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {!isGuest && currentProject && (
+              <ProjectShareDialog
+                project={currentProject}
+                triggerClassName="h-9 w-9 text-slate-600 dark:text-slate-300"
+              />
+            )}
+          </>
+        )}
+        <ConnectionStatus />
         <SettingsDropdown />
       </div>
     </div>
