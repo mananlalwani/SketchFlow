@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # This target is built independently in CI so Docker's own context rules—not a
 # filesystem glob approximation—prove local env files and maps never enter it.
-FROM node:20-alpine AS context-audit
+FROM node:26-alpine AS context-audit
 WORKDIR /context
 COPY . .
 RUN test ! -e .env && \
@@ -9,7 +9,7 @@ RUN test ! -e .env && \
     test ! -e apps/server/.env && \
     ! find . -type f \( -name '*.map' -o \( \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' \) \) -print -quit | grep -q .
 
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -66,7 +66,7 @@ WORKDIR /app/deploy
 RUN pnpm db:generate
 
 # --- Production Stage ---
-FROM node:20-alpine AS runner
+FROM node:26-alpine AS runner
 
 WORKDIR /app
 
