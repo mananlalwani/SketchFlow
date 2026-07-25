@@ -1,0 +1,427 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+
+    --radius: 0.5rem;
+
+    /* App-specific light theme colors */
+    --app-bg: 210 20% 98%;
+    --app-surface: 0 0% 100%;
+    --app-surface-hover: 210 20% 96%;
+    --app-border: 214 32% 91%;
+    --app-text: 222 47% 11%;
+    --app-text-muted: 215 16% 47%;
+    --app-canvas-bg: 0 0% 100%;
+    --app-sidebar-bg: 210 20% 96%;
+    --app-topbar-bg: 0 0% 100%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    /* Dark theme */
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+
+    /* App-specific dark theme colors */
+    --app-bg: 222 47% 4%;
+    --app-surface: 222 47% 8%;
+    --app-surface-hover: 222 47% 12%;
+    --app-border: 217 33% 17%;
+    --app-text: 210 40% 98%;
+    --app-text-muted: 215 20% 65%;
+    --app-canvas-bg: 222 47% 11%;
+    --app-sidebar-bg: 222 47% 6%;
+    --app-topbar-bg: 222 47% 7%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+
+  .light {
+    /* Explicit light theme (same as :root) */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 221 83% 53%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    /* App-specific light theme colors */
+    --app-bg: 210 20% 98%;
+    --app-surface: 0 0% 100%;
+    --app-surface-hover: 210 20% 96%;
+    --app-border: 214 32% 91%;
+    --app-text: 222 47% 11%;
+    --app-text-muted: 215 16% 47%;
+    --app-canvas-bg: 0 0% 100%;
+    --app-sidebar-bg: 210 20% 96%;
+    --app-topbar-bg: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overscroll-behavior: none;
+  }
+}
+
+@layer components {
+  /* Glass morphism effects */
+  .glass {
+    @apply bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-xl border border-white/20 shadow-2xl;
+  }
+  .light .glass {
+    @apply from-black/5 via-black/5 to-transparent border-black/10;
+  }
+  
+  .glass-button {
+    @apply glass hover:from-white/15 hover:via-white/10 hover:to-transparent active:scale-95 transition-all duration-300 ease-out;
+  }
+  .light .glass-button {
+    @apply hover:from-black/10 hover:via-black/5;
+  }
+
+  .glass-card {
+    @apply glass rounded-2xl p-6 shadow-xl;
+  }
+
+  /* Theme-aware app backgrounds */
+  .app-bg {
+    background-color: hsl(var(--app-bg));
+  }
+  
+  .app-surface {
+    background-color: hsl(var(--app-surface));
+  }
+
+  .app-surface-hover:hover {
+    background-color: hsl(var(--app-surface-hover));
+  }
+
+  .app-border {
+    border-color: hsl(var(--app-border));
+  }
+
+  .app-text {
+    color: hsl(var(--app-text));
+  }
+
+  .app-text-muted {
+    color: hsl(var(--app-text-muted));
+  }
+
+  /* Theme-aware gradient backgrounds */
+  .gradient-bg {
+    @apply bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50;
+  }
+  .dark .gradient-bg {
+    @apply bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950;
+  }
+
+  .gradient-text {
+    @apply text-foreground;
+  }
+
+  /* Theme-aware borders */
+  .theme-border {
+    @apply border-slate-200;
+  }
+  .dark .theme-border {
+    @apply border-white/10;
+  }
+
+  /* Theme-aware surfaces */
+  .theme-surface {
+    @apply bg-white;
+  }
+  .dark .theme-surface {
+    @apply bg-slate-900;
+  }
+
+  .theme-surface-elevated {
+    @apply bg-white shadow-sm;
+  }
+  .dark .theme-surface-elevated {
+    @apply bg-slate-800/50 shadow-none;
+  }
+
+  /* Theme-aware text */
+  .theme-text {
+    @apply text-slate-900;
+  }
+  .dark .theme-text {
+    @apply text-slate-100;
+  }
+
+  .theme-text-muted {
+    @apply text-slate-500;
+  }
+  .dark .theme-text-muted {
+    @apply text-slate-400;
+  }
+
+  /* Color picker styles */
+  .color-preview {
+    @apply shadow-lg ring-2 ring-white/20;
+  }
+  .light .color-preview {
+    @apply ring-black/10;
+  }
+  
+  .color-swatch {
+    @apply transition-all duration-200 hover:scale-110 hover:shadow-lg;
+  }
+
+  .tool-button {
+    @apply relative overflow-hidden transition-all duration-300 hover:scale-105 active:scale-95;
+  }
+
+  .tool-button::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 transition-opacity duration-300;
+  }
+  .light .tool-button::before {
+    @apply from-black/5;
+  }
+
+  .tool-button:hover::before {
+    @apply opacity-100;
+  }
+}
+
+/* Canvas specific styles */
+canvas {
+  touch-action: none;
+  -ms-interpolation-mode: nearest-neighbor;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: pixelated;
+}
+
+/* Performance optimizations */
+.hw-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .mobile-hide {
+    display: none;
+  }
+}
+
+/* Custom scrollbar - Dark theme */
+.dark ::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.5), rgba(6, 182, 212, 0.5));
+  border-radius: 9999px;
+  border: 2px solid rgba(15, 23, 42, 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.7), rgba(6, 182, 212, 0.7));
+}
+
+/* Custom scrollbar - Light theme */
+.light ::-webkit-scrollbar {
+  width: 10px;
+}
+
+.light ::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 1);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.4), rgba(6, 182, 212, 0.4));
+  border-radius: 9999px;
+  border: 2px solid rgba(241, 245, 249, 1);
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.6), rgba(6, 182, 212, 0.6));
+}
+
+/* Smooth animations */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 1000px 100%;
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Accessibility - Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Accessibility - Focus visible */
+.focus-visible-ring:focus-visible {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-900;
+}
+
+/* Accessibility - Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Accessibility - High contrast mode */
+@media (prefers-contrast: high) {
+  .theme-border {
+    @apply border-2;
+  }
+  
+  .tool-button {
+    @apply border-2;
+  }
+  
+  button:focus-visible {
+    @apply outline-4 outline-offset-2;
+  }
+}

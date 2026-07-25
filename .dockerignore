@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+**/node_modules
+.pnpm-store
+**/.pnpm-store
+
+# Build outputs (we build in Docker)
+dist
+**/dist
+coverage
+**/coverage
+playwright-report
+**/playwright-report
+test-results
+**/test-results
+*.tsbuildinfo
+*.map
+
+# Development files. Docker paths are relative to the build context, so explicitly
+# exclude nested app env files as well as root files. Templates remain available.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Tests
+coverage
+.nyc_output
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*

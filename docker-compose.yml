@@ -1,0 +1,57 @@
+# Docker Compose for local development/testing
+# Usage: docker compose up -d
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: sketchflow-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL database
+  db:
+    image: postgres:16-alpine
+    container_name: sketchflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sketchflow
+      POSTGRES_PASSWORD: sketchflow_dev_password
+      POSTGRES_DB: sketchflow
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sketchflow -d sketchflow']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  # SketchFlow application (uncomment for full local stack)
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: sketchflow-app
+  #   restart: unless-stopped
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   environment:
+  #     NODE_ENV: production
+  #     DATABASE_URL: postgresql://sketchflow:sketchflow_dev_password@db:5432/sketchflow
+  #     CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+  #     CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+  #     CORS_ORIGINS: http://localhost:3000
+  #   ports:
+  #     - "3000:3000"
+
+volumes:
+  pgdata:
+  redisdata:

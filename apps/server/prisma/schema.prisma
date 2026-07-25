@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Folder model for organizing projects
+model Folder {
+  id        String    @id @default(cuid())
+  userId    String    // Clerk user ID (owner)
+  name      String
+  color     String?   @default("#3b82f6") // Folder color for visual distinction
+  parentId  String?   // For nested folders (optional)
+  parent    Folder?   @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]  @relation("FolderHierarchy")
+  projects  Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([parentId])
+  @@map("folders")
+}
+
+// Project model - linked to Clerk user ID
+model Project {
+  id            String               @id @default(cuid())
+  userId        String               // Clerk user ID (owner)
+  title         String
+  data          Json                 // Project data (strokes, shapes, etc.)
+  revision      Int                  @default(1)
+  shared        Boolean              @default(false)
+  shareToken    String?              @unique
+  shareExpiresAt DateTime?
+  shareRevokedAt DateTime?
+  folderId      String?              // Optional folder
+  folder        Folder?              @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  collaborators ProjectCollaborator[]
+  collaborationOperations CollaborationOperation[]
+
+  @@index([userId])
+  @@index([shareToken])
+  @@index([shareExpiresAt])
+  @@index([folderId])
+  @@unique([id, revision])
+  @@map("projects")
+}
+
+// Accepted canonical commits. This is an idempotency receipt and ordered audit
+// trail; Project.data and Project.revision remain the single state authority.
+model CollaborationOperation {
+  id          String   @id @default(cuid())
+  projectId   String
+  operationId String
+  actorUserId String
+  revision    Int
+  kind        String
+  receiptHash String
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, operationId])
+  @@unique([projectId, revision])
+  @@index([projectId, createdAt])
+  @@map("collaboration_operations")
+}
+
+// Collaborator access to projects
+model ProjectCollaborator {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String   // Clerk user ID
+  role      String   @default("editor") // "editor" | "viewer"
+  addedAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_collaborators")
+}
