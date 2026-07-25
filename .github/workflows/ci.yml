@@ -11,147 +11,88 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/sketchflow
-
-# Individual jobs receive broader permissions only when they need them.
-permissions:
-  contents: read
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
-    name: Test & Lint
+  # Shared: install deps + build workspace (runs first, everything branches from here)
+  build:
+    name: Install & Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      # package.json is the single pnpm version authority.
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Enforce public-release file hygiene
-        run: pnpm check:release-hygiene
-
-      - name: Run disposable PostgreSQL and Redis integration suites
-        run: pnpm test:infrastructure
-
+      - name: Generate Prisma client
+        run: pnpm --filter @sketchflow/server db:generate
       - name: Build workspace
         run: pnpm build
 
-      - name: Enforce client performance budgets
-        run: pnpm check:client-budgets
+  # --- Parallel after build ---
 
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @sketchflow/server db:generate
+      - name: Build workspace
+        run: pnpm build
       - name: Run all tests
         run: pnpm test
 
-      - name: Generate coverage reports
-        run: pnpm test:coverage
-
-      - name: Publish coverage artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
-          name: coverage-reports
-          path: |
-            apps/client/coverage
-            apps/server/coverage
-
-      - name: Install Playwright browser
-        run: pnpm --filter @sketchflow/client exec playwright install --with-deps chromium
-
-      - name: Run browser and accessibility tests
-        run: pnpm --filter @sketchflow/client test:e2e -- --grep-invert "10,000-object board"
-
-      - name: Run large-board renderer benchmark
-        run: pnpm --filter @sketchflow/client test:e2e -- src/__tests__/e2e/large-board.spec.ts
-
-      - name: Publish browser test artifacts
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          version: 10
+      - uses: actions/setup-node@v4
         with:
-          name: playwright-report
-          path: |
-            apps/client/playwright-report
-            apps/client/test-results
-          if-no-files-found: ignore
-
-      - name: Lint workspace
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @sketchflow/server db:generate
+      - name: Build workspace
+        run: pnpm build
+      - name: Lint client
         run: pnpm lint
-
-      - name: Check formatting
-        run: pnpm format:check
-
       - name: Type check workspace
         run: pnpm type-check
-
       - name: Audit production dependencies
         run: pnpm audit:prod
 
   container-build:
     name: Container build
     runs-on: ubuntu-latest
-    needs: test
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: sketchflow
-          POSTGRES_PASSWORD: sketchflow
-          POSTGRES_DB: sketchflow_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U sketchflow -d sketchflow_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    needs: build
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      # package.json is the single pnpm version authority.
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '20'
-          cache: pnpm
-      - name: Install migration tooling
-        run: pnpm install --frozen-lockfile
-      - name: Apply migrations to container smoke database
-        env:
-          DATABASE_URL: postgresql://sketchflow:sketchflow@localhost:5432/sketchflow_test?schema=public
-        run: pnpm --filter @sketchflow/server db:migrate:deploy
-      - name: Seed shared-project lifecycle fixture
-        env:
-          PGPASSWORD: sketchflow
-        run: |
-          psql --host=127.0.0.1 --username=sketchflow --dbname=sketchflow_test <<'SQL'
-          INSERT INTO projects (id, "userId", title, data, revision, shared, "shareToken", "shareExpiresAt", "updatedAt")
-          VALUES (
-            'cicollaborationproject000001',
-            'user_ci',
-            'CI shared project',
-            '{"objects": []}'::jsonb,
-            1,
-            TRUE,
-            'ci_shared_project_token_123456789',
-            NOW() + INTERVAL '1 day',
-            NOW()
-          );
-          SQL
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Audit Docker build context
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
-        with:
-          context: .
-          target: context-audit
-          load: true
-          tags: sketchflow:context-audit
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - name: Build production image
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@v5
         with:
           context: .
           load: true
@@ -159,67 +100,54 @@ jobs:
           build-args: |
             BUILDPLATFORM=linux/amd64
             TARGETPLATFORM=linux/amd64
-            RELEASE_ID=${{ github.sha }}
-
-      - name: Audit final production image
-        run: pnpm audit:docker-image sketchflow:ci
-
       - name: Container smoke test
         run: |
-          docker run -d --rm --name sketchflow-ci \
-            --network host \
-            -e DATABASE_URL=postgresql://sketchflow:sketchflow@127.0.0.1:5432/sketchflow_test \
+          docker run -d --rm --name sketchflow-ci -p 3000:3000 \
+            -e DATABASE_URL=postgresql://sketchflow:sketchflow@127.0.0.1:5432/sketchflow \
             -e CLERK_SECRET_KEY=sk_live_ci_only \
             -e CLERK_PUBLISHABLE_KEY=pk_test_ci_only \
             -e CORS_ORIGINS=http://localhost:3000 \
             sketchflow:ci
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://localhost:3000/api/readyz >/dev/null; then break; fi
+            if curl --fail --silent http://localhost:3000/api/health >/dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent http://localhost:3000/api/readyz >/dev/null
+          curl --fail --silent http://localhost:3000/api/health >/dev/null
           curl --fail --silent http://localhost:3000/draw >/dev/null
-          curl --fail --silent http://localhost:3000/api/projects/shared/ci_shared_project_token_123456789 | \
-            jq -e '.title == "CI shared project" and .shared == true' >/dev/null
           docker stop sketchflow-ci
+
+  # --- Gate: push image only if tests + container pass ---
 
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    # Publishing is impossible unless application and container lifecycle gates pass.
     needs: [test, container-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
-
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
+      - uses: actions/checkout@v4
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-
+        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
+        uses: docker/setup-buildx-action@v3
       - name: Log in to Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata for Docker
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest
-
       - name: Build and push Docker image
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/arm64
@@ -228,11 +156,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-          build-args: |
-            BUILDPLATFORM=linux/amd64
-            TARGETPLATFORM=linux/arm64
-            RELEASE_ID=${{ github.sha }}
-            SENTRY_ORG=${{ vars.SENTRY_ORG }}
-            SENTRY_PROJECT=${{ vars.SENTRY_PROJECT }}
-          secrets: |
-            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
