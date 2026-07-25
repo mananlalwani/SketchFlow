@@ -38,4 +38,23 @@ describe('canvas selection geometry', () => {
     expect(findCanvasObjectIdAt(objects, 10, 10)).toBe('rectangle');
     expect(findCanvasObjectIdAt(objects, 10, 10, { includeImages: true })).toBe('image');
   });
+
+  it('hit-tests a rotated object in its local coordinates', () => {
+    const objects = [
+      {
+        id: 'rotated',
+        type: 'rectangle' as const,
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 20,
+        rotation: 90,
+        color: '#fff',
+        size: 1,
+      },
+    ];
+
+    expect(findCanvasObjectIdAt(objects, 20, 25)).toBe('rotated');
+    expect(findCanvasObjectIdAt(objects, 40, 10)).toBeNull();
+  });
 });

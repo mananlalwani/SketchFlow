@@ -22,6 +22,26 @@ export function distancePointToSegment(
   return Math.hypot(pointX - (startX + progress * deltaX), pointY - (startY + progress * deltaY));
 }
 
+function inverseRotatePoint(x: number, y: number, object: DrawingObject): { x: number; y: number } {
+  if (
+    !object.rotation ||
+    object.x === undefined ||
+    object.y === undefined ||
+    object.width === undefined ||
+    object.height === undefined
+  )
+    return { x, y };
+  const centerX = object.x + object.width / 2;
+  const centerY = object.y + object.height / 2;
+  const radians = (-object.rotation * Math.PI) / 180;
+  const deltaX = x - centerX;
+  const deltaY = y - centerY;
+  return {
+    x: centerX + deltaX * Math.cos(radians) - deltaY * Math.sin(radians),
+    y: centerY + deltaX * Math.sin(radians) + deltaY * Math.cos(radians),
+  };
+}
+
 export function findCanvasObjectIdAt(
   objects: DrawingObject[],
   x: number,
@@ -32,6 +52,7 @@ export function findCanvasObjectIdAt(
   for (let index = objects.length - 1; index >= 0; index--) {
     const object = objects[index];
     const tolerance = Math.max(6, object.size);
+    const point = inverseRotatePoint(x, y, object);
     if (
       object.type === 'image' &&
       object.x !== undefined &&
@@ -41,10 +62,10 @@ export function findCanvasObjectIdAt(
     ) {
       if (!includeImages) continue;
       if (
-        x >= object.x - tolerance &&
-        x <= object.x + object.width + tolerance &&
-        y >= object.y - tolerance &&
-        y <= object.y + object.height + tolerance
+        point.x >= object.x - tolerance &&
+        point.x <= object.x + object.width + tolerance &&
+        point.y >= object.y - tolerance &&
+        point.y <= object.y + object.height + tolerance
       )
         return object.id;
       continue;
@@ -55,7 +76,7 @@ export function findCanvasObjectIdAt(
       for (let pointIndex = 0; pointIndex < object.points.length - 1; pointIndex++) {
         const start = object.points[pointIndex];
         const end = object.points[pointIndex + 1];
-        if (distancePointToSegment(x, y, start.x, start.y, end.x, end.y) <= tolerance)
+        if (distancePointToSegment(point.x, point.y, start.x, start.y, end.x, end.y) <= tolerance)
           return object.id;
       }
     } else if (
@@ -67,8 +88,8 @@ export function findCanvasObjectIdAt(
     ) {
       if (
         distancePointToSegment(
-          x,
-          y,
+          point.x,
+          point.y,
           object.x,
           object.y,
           object.x + object.width,
@@ -84,10 +105,10 @@ export function findCanvasObjectIdAt(
       object.height !== undefined
     ) {
       if (
-        x >= Math.min(object.x, object.x + object.width) - tolerance &&
-        x <= Math.max(object.x, object.x + object.width) + tolerance &&
-        y >= Math.min(object.y, object.y + object.height) - tolerance &&
-        y <= Math.max(object.y, object.y + object.height) + tolerance
+        point.x >= Math.min(object.x, object.x + object.width) - tolerance &&
+        point.x <= Math.max(object.x, object.x + object.width) + tolerance &&
+        point.y >= Math.min(object.y, object.y + object.height) - tolerance &&
+        point.y <= Math.max(object.y, object.y + object.height) + tolerance
       )
         return object.id;
     } else if (
@@ -98,10 +119,10 @@ export function findCanvasObjectIdAt(
       object.height !== undefined
     ) {
       if (
-        x >= object.x - tolerance &&
-        x <= object.x + object.width + tolerance &&
-        y >= object.y - object.height / 2 - tolerance &&
-        y <= object.y + object.height / 2 + tolerance
+        point.x >= object.x - tolerance &&
+        point.x <= object.x + object.width + tolerance &&
+        point.y >= object.y - object.height / 2 - tolerance &&
+        point.y <= object.y + object.height / 2 + tolerance
       )
         return object.id;
     }
