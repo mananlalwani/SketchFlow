@@ -22,6 +22,6 @@ jobs:
         with:
           fetch-depth: 0
       # v2.3.9. Full history is available for scheduled and manually dispatched scans.
-      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
