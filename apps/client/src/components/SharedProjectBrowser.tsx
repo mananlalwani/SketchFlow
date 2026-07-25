@@ -308,7 +308,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
                   <div
                     key={project.id}
                     onClick={() => handleViewProject(project)}
-                    className="group relative bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 hover:border-emerald-400 dark:hover:border-emerald-500/50 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl p-4 cursor-pointer transition-all duration-200 flex flex-col gap-3 shadow-sm hover:shadow-md"
+                    className="surface-raised group relative flex cursor-pointer flex-col gap-3 rounded-xl bg-white p-4 transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-slate-50 dark:bg-slate-800/50 dark:hover:bg-slate-800"
                   >
                     {loadingProject === project.id && (
                       <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 rounded-xl flex items-center justify-center z-10">
@@ -354,7 +354,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
                   <div
                     key={project.id}
                     onClick={() => handleViewProject(project)}
-                    className="group flex items-center gap-4 bg-white dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 hover:border-emerald-400 dark:hover:border-emerald-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg p-3 cursor-pointer transition-all duration-200 shadow-sm"
+                    className="surface-raised group flex cursor-pointer items-center gap-4 rounded-lg bg-white p-3 transition-[background-color,box-shadow] duration-200 hover:bg-slate-50 dark:bg-slate-800/30 dark:hover:bg-slate-800/50"
                   >
                     {loadingProject === project.id && (
                       <Loader2 className="w-5 h-5 animate-spin text-emerald-500 dark:text-emerald-400" />

@@ -1271,7 +1271,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     <div
                       key={project.id}
                       onClick={(e) => handleCardClick(project.id, e)}
-                      className="group relative bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl p-4 cursor-pointer transition-all duration-200 flex flex-col gap-3 shadow-sm hover:shadow-md"
+                      className="surface-raised group relative flex cursor-pointer flex-col gap-3 rounded-xl bg-white p-4 transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-slate-50 dark:bg-slate-800/50 dark:hover:bg-slate-800"
                     >
                       {/* Thumbnail */}
                       <div className="aspect-video bg-slate-100 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-white/5 flex items-center justify-center mb-2 group-hover:border-blue-400/20 dark:group-hover:border-blue-500/20 transition-colors overflow-hidden">
@@ -1279,7 +1279,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                           <img
                             src={project.thumbnail}
                             alt={project.title}
-                            className="w-full h-full object-cover"
+                            className="h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
                           />
                         ) : (
                           <FileEdit className="w-8 h-8 text-slate-400 dark:text-slate-700 group-hover:text-slate-500 dark:group-hover:text-slate-600 transition-colors" />
@@ -1663,7 +1663,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     <div
                       key={project.id}
                       onClick={(e) => handleCardClick(project.id, e)}
-                      className="group relative flex items-center gap-4 bg-white dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 hover:border-blue-400 dark:hover:border-blue-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg p-3 cursor-pointer transition-all duration-200 shadow-sm"
+                      className="surface-raised group relative flex cursor-pointer items-center gap-4 rounded-lg bg-white p-3 transition-[background-color,box-shadow] duration-200 hover:bg-slate-50 dark:bg-slate-800/30 dark:hover:bg-slate-800/50"
                     >
                       <div className="w-16 h-12 bg-slate-100 dark:bg-slate-900/50 rounded border border-slate-200 dark:border-white/5 flex items-center justify-center shrink-0">
                         <FileEdit className="w-5 h-5 text-slate-400 dark:text-slate-700" />

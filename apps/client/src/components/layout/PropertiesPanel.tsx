@@ -53,7 +53,7 @@ export function PropertiesPanel() {
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-slate-700 dark:text-slate-200">Size</span>
-              <span className="text-slate-500 dark:text-slate-400 font-mono">{brushSize}px</span>
+              <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">{brushSize}px</span>
             </div>
             <Slider
               aria-label="Brush size"
@@ -68,7 +68,7 @@ export function PropertiesPanel() {
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-slate-700 dark:text-slate-200">Opacity</span>
-              <span className="text-slate-500 dark:text-slate-400 font-mono">
+              <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
                 {Math.round(brushOpacity * 100)}%
               </span>
             </div>
@@ -178,7 +178,7 @@ export function PropertiesPanel() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-700 dark:text-slate-200">Font Size</span>
-                  <span className="text-slate-500 dark:text-slate-400 font-mono">{fontSize}px</span>
+                  <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">{fontSize}px</span>
                 </div>
                 <Slider
                   value={[brushSize]}

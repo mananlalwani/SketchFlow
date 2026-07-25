@@ -50,7 +50,7 @@ export function Sidebar() {
           variant={currentTool === id ? 'default' : 'ghost'}
           size="icon"
           className={cn(
-            'w-10 h-10 rounded-xl transition-all duration-200',
+            'w-10 h-10 rounded-xl transition-[background-color,color,box-shadow,transform] duration-150',
             currentTool === id
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
               : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10',
