@@ -55,6 +55,8 @@ export interface CanvasSnapshot {
 }
 
 export interface CursorData {
+  /** Per-connection identity; unlike userId this distinguishes a user's devices. */
+  clientId?: string;
   userId: string;
   username: string;
   x: number;

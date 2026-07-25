@@ -756,7 +756,15 @@ export class SketchFlowServer {
       string,
       Map<
         string,
-        { userId: string; username: string; x: number; y: number; color: string; timestamp: number }
+        {
+          clientId: string;
+          userId: string;
+          username: string;
+          x: number;
+          y: number;
+          color: string;
+          timestamp: number;
+        }
       >
     >();
 
@@ -903,8 +911,8 @@ export class SketchFlowServer {
           socket.leave(currentRoom);
           // Remove cursor from previous room
           if (roomCursors.has(currentRoom)) {
-            roomCursors.get(currentRoom)?.delete(currentUserId);
-            this.io.to(currentRoom).emit('cursor:leave', currentUserId);
+            roomCursors.get(currentRoom)?.delete(clientId);
+            this.io.to(currentRoom).emit('cursor:leave', clientId);
           }
         }
 
@@ -956,8 +964,8 @@ export class SketchFlowServer {
           socket.leave(currentRoom);
           // Remove cursor
           if (roomCursors.has(currentRoom)) {
-            roomCursors.get(currentRoom)?.delete(currentUserId);
-            this.io.to(currentRoom).emit('cursor:leave', currentUserId);
+            roomCursors.get(currentRoom)?.delete(clientId);
+            this.io.to(currentRoom).emit('cursor:leave', clientId);
           }
           currentRoom = null;
         }
@@ -986,20 +994,22 @@ export class SketchFlowServer {
         }
 
         // Update cursor in room
+        const normalizedCursor: CursorData = { ...cursor, clientId };
         const roomCursorMap = roomCursors.get(currentRoom);
         if (roomCursorMap) {
-          roomCursorMap.set(cursor.userId, {
-            userId: cursor.userId,
-            username: cursor.username,
-            x: cursor.x,
-            y: cursor.y,
-            color: cursor.color,
+          roomCursorMap.set(clientId, {
+            clientId,
+            userId: normalizedCursor.userId,
+            username: normalizedCursor.username,
+            x: normalizedCursor.x,
+            y: normalizedCursor.y,
+            color: normalizedCursor.color,
             timestamp: Date.now(),
           });
         }
 
         // Broadcast to others in room
-        socket.to(currentRoom).emit('cursor:move', cursor);
+        socket.to(currentRoom).emit('cursor:move', normalizedCursor);
       });
 
       // Handle disconnection
@@ -1010,8 +1020,8 @@ export class SketchFlowServer {
         // Clean up cursor from current room
         if (currentRoom && currentUserId) {
           if (roomCursors.has(currentRoom)) {
-            roomCursors.get(currentRoom)?.delete(currentUserId);
-            this.io.to(currentRoom).emit('cursor:leave', currentUserId);
+            roomCursors.get(currentRoom)?.delete(clientId);
+            this.io.to(currentRoom).emit('cursor:leave', clientId);
           }
         }
 

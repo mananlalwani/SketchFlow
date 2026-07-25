@@ -39,7 +39,7 @@ export function LiveCursors({
 
   useEffect(() => {
     // Clean up old cursors that are no longer active
-    const activeCursorIds = new Set(cursors.map((c) => c.userId));
+    const activeCursorIds = new Set(cursors.map((c) => c.clientId ?? c.userId));
     for (const [userId, element] of cursorRefs.current.entries()) {
       if (!activeCursorIds.has(userId)) {
         element.remove();
@@ -58,10 +58,10 @@ export function LiveCursors({
 
         return (
           <div
-            key={cursor.userId}
+            key={cursor.clientId ?? cursor.userId}
             ref={(el) => {
               if (el) {
-                cursorRefs.current.set(cursor.userId, el);
+                cursorRefs.current.set(cursor.clientId ?? cursor.userId, el);
               }
             }}
             className="absolute transition-transform duration-75 ease-out"
