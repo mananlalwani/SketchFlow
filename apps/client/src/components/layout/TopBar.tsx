@@ -476,6 +476,13 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
           </>
         )}
         <ConnectionStatus />
+        {!isLoading && !isAuthenticated && clerk.loaded && (
+          <SignInButton mode="modal">
+            <Button variant="ghost" size="icon" title="Sign in" aria-label="Sign in">
+              <User className="h-4 w-4" />
+            </Button>
+          </SignInButton>
+        )}
         <SettingsDropdown />
       </div>
     </div>
