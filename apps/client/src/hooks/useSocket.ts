@@ -87,8 +87,11 @@ class SocketManager {
 
     this.socket = io(url, {
       auth: { token },
-      transports: ['websocket'],
-      upgrade: false,
+      // Prefer WebSocket for low-latency collaboration, but retain Socket.IO
+      // polling as a safe fallback when a proxy, browser extension, or network
+      // path interrupts the WebSocket handshake.
+      transports: ['websocket', 'polling'],
+      upgrade: true,
       rememberUpgrade: true,
       timeout: 15000,
       reconnectionAttempts: 8,
