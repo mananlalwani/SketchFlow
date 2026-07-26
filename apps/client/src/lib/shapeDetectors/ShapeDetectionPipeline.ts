@@ -247,6 +247,57 @@ function triangleArea(vertices: Point[]): number {
   );
 }
 
+function distanceToSegment(point: Point, start: Point, end: Point): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (!lengthSquared) return distance(point, start);
+  const ratio = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared);
+  return distance(point, { x: start.x + dx * ratio, y: start.y + dy * ratio });
+}
+
+function dominantTriangleVertices(vertices: Point[]): Point[] | null {
+  if (vertices.length < 3 || vertices.length > 8) return null;
+  let best: Point[] | null = null;
+  let largestArea = 0;
+  for (let first = 0; first < vertices.length - 2; first++) {
+    for (let second = first + 1; second < vertices.length - 1; second++) {
+      for (let third = second + 1; third < vertices.length; third++) {
+        const candidate = [vertices[first], vertices[second], vertices[third]];
+        const area = triangleArea(candidate);
+        if (area > largestArea) {
+          largestArea = area;
+          best = candidate;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function triangleEdgeFit(
+  points: Point[],
+  vertices: Point[],
+  diagonal: number,
+): { score: number; error: number; vertices: Point[] } | null {
+  const triangle = dominantTriangleVertices(vertices);
+  if (!triangle || triangleArea(triangle) < diagonal * diagonal * 0.02) return null;
+
+  const edgeVisits = [0, 0, 0];
+  const distances = points.map((point) => {
+    const edgeDistances = triangle.map((vertex, index) =>
+      distanceToSegment(point, vertex, triangle[(index + 1) % triangle.length]),
+    );
+    const nearest = edgeDistances.indexOf(Math.min(...edgeDistances));
+    edgeVisits[nearest] += 1;
+    return edgeDistances[nearest] / Math.max(diagonal, 1);
+  });
+  const error = distances.reduce((sum, value) => sum + value, 0) / distances.length;
+  const minimumEdgeVisits = Math.max(2, Math.floor(points.length * 0.1));
+  if (error > 0.075 || edgeVisits.some((visits) => visits < minimumEdgeVisits)) return null;
+  return { score: clamp(1 - error / 0.075), error, vertices: triangle };
+}
+
 function isEllipse(
   points: Point[],
   box: BoundingBox,
@@ -426,8 +477,8 @@ export class ShapeDetectionPipeline {
       );
       const vertices = simplifyClosedPath(processedPoints, tolerance);
 
+      const rectangle = isRectangle(vertices) ?? rectangleEdgeFit(processedPoints, box);
       if (enabled.has('rectangle')) {
-        const rectangle = isRectangle(vertices) ?? rectangleEdgeFit(processedPoints, box);
         if (rectangle && rectangle.error <= thresholds.rectangleMaxError) {
           candidates.push({
             confidence: rectangle.score,
@@ -446,14 +497,17 @@ export class ShapeDetectionPipeline {
           });
         }
       }
-      if (enabled.has('triangle') && vertices.length === 3) {
-        const area = triangleArea(vertices);
-        const error = area > diagonal * diagonal * 0.02 ? 0.05 : 1;
-        if (error <= thresholds.triangleMaxError) {
+      const confidentRectangle =
+        rectangle !== null &&
+        rectangle.error <= thresholds.rectangleMaxError &&
+        rectangle.score >= thresholds.minConfidence;
+      if (enabled.has('triangle') && !confidentRectangle) {
+        const triangle = triangleEdgeFit(processedPoints, vertices, diagonal);
+        if (triangle && triangle.error <= thresholds.triangleMaxError) {
           candidates.push({
-            confidence: 1 - error,
-            error,
-            shape: createDetectedShape('triangle', box, { points: vertices }),
+            confidence: triangle.score,
+            error: triangle.error,
+            shape: createDetectedShape('triangle', box, { points: triangle.vertices }),
           });
         }
       }

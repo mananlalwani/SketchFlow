@@ -147,6 +147,30 @@ describe('shape detection pipeline', () => {
     expect(result.detectedShape?.shape.points).toHaveLength(3);
   });
 
+  it('fits a rough triangle with rounded corners under the default detector set', () => {
+    const roughTriangle: Point[] = [
+      { x: 42, y: 144 },
+      { x: 58, y: 116 },
+      { x: 82, y: 66 },
+      { x: 96, y: 29 },
+      { x: 104, y: 24 },
+      { x: 116, y: 49 },
+      { x: 142, y: 100 },
+      { x: 159, y: 136 },
+      { x: 151, y: 144 },
+      { x: 102, y: 141 },
+      { x: 61, y: 146 },
+      { x: 42, y: 144 },
+    ];
+
+    const result = detectShapes(roughTriangle, {
+      strokeProcessingOptions: { minSize: 15, resampleStep: 2, simplificationTolerance: 0.5 },
+    });
+
+    expect(result.detectedShape?.shape.type).toBe('triangle');
+    expect(result.detectedShape?.shape.points).toHaveLength(3);
+  });
+
   it('classifies a closed radial stroke as an ellipse', () => {
     const result = detectShapes(ellipseStroke, { enabledDetectors: ['ellipse', 'circle'] });
 
