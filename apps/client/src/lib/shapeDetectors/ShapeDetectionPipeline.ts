@@ -39,6 +39,15 @@ const SUPPORTED_SHAPES: ShapeKind[] = [
   'parabola',
 ];
 
+const CLOSED_SHAPE_PRIORITY: Record<ShapeKind, number> = {
+  rectangle: 4,
+  triangle: 3,
+  circle: 2,
+  ellipse: 1,
+  line: 0,
+  parabola: 0,
+};
+
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 
 function distance(a: Point, b: Point): number {
@@ -453,7 +462,14 @@ export class ShapeDetectionPipeline {
     const eligible = candidates.filter(
       (candidate) => candidate.confidence >= thresholds.minConfidence,
     );
-    eligible.sort((left, right) => right.confidence - left.confidence || left.error - right.error);
+    eligible.sort((left, right) => {
+      // A rounded rectangle can also score well as an ellipse. Once the loop
+      // has passed the stricter four-edge fit, retain that stronger intent.
+      const priorityDifference =
+        CLOSED_SHAPE_PRIORITY[right.shape.type as ShapeKind] -
+        CLOSED_SHAPE_PRIORITY[left.shape.type as ShapeKind];
+      return priorityDifference || right.confidence - left.confidence || left.error - right.error;
+    });
     return {
       detectedShape: eligible[0] ?? null,
       allCandidates: options.returnAllCandidates ? eligible : [],
