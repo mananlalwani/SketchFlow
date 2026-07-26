@@ -51,6 +51,13 @@ describe('useCanvasCollaborationAdapter', () => {
     );
   }
 
+  it('joins and hydrates a connected project even when the session is view-only', () => {
+    renderAdapter();
+
+    expect(requestCanonicalHydration).toHaveBeenCalledOnce();
+    expect(requestCanonicalHydration).toHaveBeenCalledWith('project-1');
+  });
+
   it('hydrates canonical state without using a dirty local update', () => {
     renderAdapter();
 

@@ -59,6 +59,14 @@ export function useCanvasCollaborationAdapter({
   replaceHistory,
   requestFullRedraw,
 }: CanvasCollaborationAdapterOptions) {
+  // Viewing is collaborative too. Join and hydrate whenever a project socket
+  // becomes available, including after reconnects; this must not depend on
+  // edit permission because viewers need the same live applied events.
+  useEffect(() => {
+    if (!isConnected || !currentProjectId) return;
+    requestCanonicalHydration(currentProjectId);
+  }, [currentProjectId, isConnected, requestCanonicalHydration]);
+
   useEffect(() => {
     if (!isConnected) return;
 
