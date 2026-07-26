@@ -225,6 +225,19 @@ function simplifyClosedPath(points: Point[], tolerance: number): Point[] {
   );
 }
 
+function hasPolygonIntent(vertices: Point[]): boolean {
+  if (vertices.length < 3 || vertices.length > 8) return false;
+  const meaningfulTurns = vertices.filter((vertex, index) => {
+    const interiorAngle = angle(
+      vertices[(index + vertices.length - 1) % vertices.length],
+      vertex,
+      vertices[(index + 1) % vertices.length],
+    );
+    return interiorAngle < (5 * Math.PI) / 6;
+  });
+  return meaningfulTurns.length >= 3 && meaningfulTurns.length <= 5;
+}
+
 function triangleArea(vertices: Point[]): number {
   return Math.abs(
     vertices.reduce((sum, point, index) => {
@@ -444,7 +457,11 @@ export class ShapeDetectionPipeline {
           });
         }
       }
-      if (enabled.has('ellipse') || enabled.has('circle')) {
+      // A loop with several deliberate turns is polygon intent, even if its
+      // corners are too rough to produce a confident rectangle candidate.
+      // Leave it as a freehand stroke rather than incorrectly turning it into
+      // an ellipse; that is reversible and matches the user's drawing intent.
+      if ((enabled.has('ellipse') || enabled.has('circle')) && !hasPolygonIntent(vertices)) {
         const ellipse = isEllipse(processedPoints, box);
         if (ellipse && ellipse.error <= thresholds.ellipseMaxError && enabled.has(ellipse.type)) {
           candidates.push({

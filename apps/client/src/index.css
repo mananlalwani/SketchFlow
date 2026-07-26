@@ -153,6 +153,13 @@
   * {
     @apply border-border;
   }
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-height: 100%;
+  }
+
   html {
     color-scheme: light;
     -webkit-font-smoothing: antialiased;
@@ -167,6 +174,8 @@
       'rlig' 1,
       'calt' 1;
     font-family: ui-sans-serif, system-ui, sans-serif;
+    margin: 0;
+    overflow: hidden;
     overscroll-behavior: none;
   }
 
