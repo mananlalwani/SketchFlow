@@ -46,11 +46,19 @@ export class UserService {
     }
   }
 
+  private static assertHexIdentifier(value: string, length: number, label: string): void {
+    if (!new RegExp(`^[a-f0-9]{${length}}$`, 'i').test(value)) {
+      throw new Error(`Invalid ${label}`);
+    }
+  }
+
   private userPath(id: string): string {
+    UserService.assertHexIdentifier(id, 32, 'user id');
     return path.join(this.usersDir, `${id}.json`);
   }
 
   private sessionPath(token: string): string {
+    UserService.assertHexIdentifier(token, 64, 'session token');
     return path.join(this.sessionsDir, `${token}.json`);
   }
 

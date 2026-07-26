@@ -96,9 +96,12 @@ export class SketchFlowServer {
 
   constructor() {
     // Configure CORS origins for Socket.IO
-    // In development, allow all origins with credentials (reflective origin)
+    // Production requires configured origins. Local development uses an explicit
+    // Vite allow-list instead of reflecting arbitrary credentialed origins.
     const corsOrigins =
-      isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : true;
+      env.CORS_ORIGINS.length > 0
+        ? env.CORS_ORIGINS
+        : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
     this.io = new SocketIOServer<
       ClientToServerEvents,
