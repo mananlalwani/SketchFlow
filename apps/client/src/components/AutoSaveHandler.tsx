@@ -36,8 +36,8 @@ export function AutoSaveHandler() {
   } = useDrawingStore();
   const { getToken, userId } = useAuth();
   const { isGuest } = useAuthStore();
-  const saveTimeoutRef = useRef<number>();
-  const recoveredProjectRef = useRef<string>();
+  const saveTimeoutRef = useRef<number | undefined>(undefined);
+  const recoveredProjectRef = useRef<string | undefined>(undefined);
   const { toast } = useToast();
 
   useEffect(() => {

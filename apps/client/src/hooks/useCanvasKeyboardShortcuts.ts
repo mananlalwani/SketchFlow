@@ -5,7 +5,7 @@ import { postRendererViewport } from '@/lib/canvasRendererViewport';
 import { zoomViewportAtPoint } from '@/lib/canvasViewport';
 
 interface CanvasKeyboardShortcutOptions {
-  canvasRef: RefObject<HTMLCanvasElement>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
   workerRef: MutableRefObject<Worker | null>;
   setIsShiftPressed: (isPressed: boolean) => void;
   onSpacePanStart: () => void;

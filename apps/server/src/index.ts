@@ -724,10 +724,10 @@ export class SketchFlowServer {
     // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
 
-    // Serve React app for all other routes (SPA fallback)
-    this.app.get('/{*splat}', rateLimitMiddleware({ windowMs: 60 * 1000, maxRequests: 120 }), (_req, res) => {
-      res.sendFile(path.join(this.clientDistPath, 'index.html'));
-    });
+    // The production frontend is Cloudflare Pages. Keep this narrow static
+    // endpoint solely for the container smoke check; do not add a wildcard
+    // fallback that could bypass API routing and its rate limits.
+    this.app.use('/draw', express.static(this.clientDistPath, { index: 'index.html' }));
   }
 
   private setupSocketHandlers(): void {
