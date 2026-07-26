@@ -21,6 +21,7 @@ describe('drawingStore', () => {
       showToolbar: true,
       viewMode: 'draw',
       shapeFilled: false,
+      autoShape: true,
       history: [[]],
       historyIndex: 0,
       zoom: 1,
@@ -38,6 +39,16 @@ describe('drawingStore', () => {
 
       setTool('rectangle');
       expect(useDrawingStore.getState().currentTool).toBe('rectangle');
+    });
+  });
+
+  describe('auto shape', () => {
+    it('starts enabled and remains user-toggleable', () => {
+      const { setAutoShape } = useDrawingStore.getState();
+
+      expect(useDrawingStore.getState().autoShape).toBe(true);
+      setAutoShape(false);
+      expect(useDrawingStore.getState().autoShape).toBe(false);
     });
   });
 

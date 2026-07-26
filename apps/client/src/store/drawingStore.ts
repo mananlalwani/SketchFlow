@@ -248,7 +248,7 @@ export const useDrawingStore = create<DrawingState>()(
         shapeFilled: false,
         triangleMode: 'custom',
         starPoints: 5,
-        autoShape: false,
+        autoShape: true,
         autoShapeThresholds: {
           closureFactor: 0.15,
           rectCornerMin: 2,
