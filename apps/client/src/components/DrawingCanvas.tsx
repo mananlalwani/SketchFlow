@@ -740,8 +740,6 @@ export function DrawingCanvas() {
           const shape = result.detectedShape.shape;
           const bbox = shape.boundingBox;
 
-          console.log(`Shape conversion: ${shape.type}, bbox:`, bbox);
-
           if (shape.type === 'parabola' && shape.properties?.orientation) {
             return {
               kind: 'parabola' as const,
@@ -759,7 +757,6 @@ export function DrawingCanvas() {
               width: bbox.width,
               height: bbox.height,
             };
-            console.log(`Created shape object:`, shapeObj);
             return shapeObj;
           }
         }
@@ -767,45 +764,10 @@ export function DrawingCanvas() {
         console.warn('Shape detection failed, falling back to simple detection:', error);
       }
 
-      let minX = Infinity,
-        minY = Infinity,
-        maxX = -Infinity,
-        maxY = -Infinity;
-      for (const p of points) {
-        if (p.x < minX) minX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y > maxY) maxY = p.y;
-      }
-
-      const w = Math.max(1, maxX - minX);
-      const h = Math.max(1, maxY - minY);
-
-      if (Math.min(w, h) < oldThresholds.minSizePx) return null;
-
-      const first = points[0];
-      const last = points[points.length - 1];
-      const closureDist = Math.sqrt((last.x - first.x) ** 2 + (last.y - first.y) ** 2);
-      const diag = Math.sqrt(w * w + h * h);
-      const isClosed = closureDist <= Math.max(10, diag * oldThresholds.closureFactor);
-
-      if (isClosed) {
-        return {
-          kind: 'rectangle' as const,
-          x: minX,
-          y: minY,
-          width: w,
-          height: h,
-        };
-      } else {
-        return {
-          kind: 'line' as const,
-          x: first.x,
-          y: first.y,
-          width: last.x - first.x,
-          height: last.y - first.y,
-        };
-      }
+      // An ambiguous mark should stay a freehand stroke. The former fallback
+      // turned every closed path into a rectangle and every open path into a
+      // line, which made triangles and rough sketches conflict with shapes.
+      return null;
     },
     [],
   );

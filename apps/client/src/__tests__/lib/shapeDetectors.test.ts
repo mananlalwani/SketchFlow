@@ -140,7 +140,7 @@ describe('shape detection pipeline', () => {
         { x: 100, y: 20 },
         { x: 160, y: 140 },
       ]),
-      { enabledDetectors: ['triangle'] },
+      undefined,
     );
 
     expect(result.detectedShape?.shape.type).toBe('triangle');
