@@ -1934,7 +1934,12 @@ export function DrawingCanvas() {
         // Mock properties if missing or just pass what we can
         // We might need to manually call startDrawing / draw / stopDrawing logic here
 
-        if (!isDrawing && active) {
+        // Move deliberately does not set `isDrawing`: it is an object transform,
+        // not a new canvas mark. Prefer the ref here so every subsequent pointer
+        // update advances the existing drag instead of selecting the object again.
+        if (active && activeDragRef.current) {
+          draw(nativeEvent);
+        } else if (!isDrawing && active) {
           // START DRAWING
           if (!canDraw && currentTool !== 'move') {
             // Toast logic should be here or in startDrawing

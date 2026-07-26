@@ -45,7 +45,6 @@ export function SelectionInspector() {
     setSelectedObject,
     updateObject,
     addObject,
-    removeObject,
     saveHistory,
     projectRole,
     setObjects,
@@ -232,33 +231,11 @@ export function SelectionInspector() {
     updateObject(object.id, { rotation: ((object.rotation ?? 0) + delta + 360) % 360 });
   };
 
-  const setLayerOrder = (direction: -1 | 1) => {
-    const index = objects.findIndex((candidate) => candidate.id === object.id);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= objects.length) return;
-    saveHistory();
-    const next = [...objects];
-    [next[index], next[target]] = [next[target], next[index]];
-    setObjects(next);
-    requestFullRedraw();
-  };
-
-  const toggleVisibility = () => {
-    saveHistory();
-    updateObject(object.id, { hidden: !object.hidden });
-  };
-
   const duplicate = () => {
     saveHistory();
     const copy = duplicateObject(object);
     addObject(copy);
     setSelectedObject(copy.id);
-  };
-
-  const remove = () => {
-    saveHistory();
-    removeObject(object.id);
-    setSelectedObject(undefined);
   };
 
   return (
@@ -306,34 +283,6 @@ export function SelectionInspector() {
           }}
           className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
         />
-      </div>
-
-      <div className="space-y-2 border-t border-blue-200 pt-3 dark:border-blue-500/20">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Layer</p>
-        <div className="grid grid-cols-2 gap-1.5">
-          <Button size="sm" variant="secondary" disabled={!isEditable} onClick={toggleVisibility}>
-            {object.hidden ? 'Show' : 'Hide'}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!isEditable}
-            onClick={() => setLayerOrder(1)}
-          >
-            Bring forward
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!isEditable}
-            onClick={() => setLayerOrder(-1)}
-          >
-            Send backward
-          </Button>
-          <Button size="sm" variant="secondary" disabled={!isEditable} onClick={remove}>
-            Delete
-          </Button>
-        </div>
       </div>
 
       <div className="grid grid-cols-[1fr_auto] items-center gap-3">
