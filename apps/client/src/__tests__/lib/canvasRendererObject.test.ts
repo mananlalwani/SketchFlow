@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { drawingObjectsToRendererScene } from '@/lib/canvasRendererObject';
 
 describe('drawingObjectsToRendererScene', () => {
-  it('creates one shape and contiguous stroke segments without losing shape fields', () => {
+  it('keeps strokes and shapes in object order without losing shape fields', () => {
     const scene = drawingObjectsToRendererScene([
       {
         id: 'stroke-1',
@@ -32,16 +32,17 @@ describe('drawingObjectsToRendererScene', () => {
       },
     ]);
 
-    expect(scene.strokes).toHaveLength(2);
-    expect(scene.strokes[0]).toMatchObject({
-      x0: 1,
-      y0: 2,
-      x1: 3,
-      y1: 4,
-      size: 1,
-      groupId: 'stroke-1',
-    });
+    expect(scene.strokes).toHaveLength(0);
     expect(scene.shapes).toEqual([
+      expect.objectContaining({
+        id: 'stroke-1',
+        type: 'stroke',
+        points: [
+          { x: 1, y: 2 },
+          { x: 3, y: 4, pressure: 0.2, width: 1 },
+          { x: 5, y: 6 },
+        ],
+      }),
       expect.objectContaining({
         id: 'triangle-1',
         points: [{ x: 10, y: 20 }],

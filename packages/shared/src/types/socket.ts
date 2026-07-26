@@ -26,6 +26,7 @@ export interface StrokePoint {
 export interface ShapeData {
   id: string;
   type:
+    | 'stroke'
     | 'line'
     | 'rectangle'
     | 'ellipse'
