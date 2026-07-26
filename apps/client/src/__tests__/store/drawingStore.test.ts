@@ -21,6 +21,7 @@ describe('drawingStore', () => {
       showToolbar: true,
       viewMode: 'draw',
       shapeFilled: false,
+      triangleMode: 'right',
       autoShape: true,
       history: [[]],
       historyIndex: 0,
@@ -49,6 +50,16 @@ describe('drawingStore', () => {
       expect(useDrawingStore.getState().autoShape).toBe(true);
       setAutoShape(false);
       expect(useDrawingStore.getState().autoShape).toBe(false);
+    });
+  });
+
+  describe('triangle mode', () => {
+    it('starts in drag-to-draw mode and still supports explicit triangle choices', () => {
+      const { setTriangleMode } = useDrawingStore.getState();
+
+      expect(useDrawingStore.getState().triangleMode).toBe('right');
+      setTriangleMode('custom');
+      expect(useDrawingStore.getState().triangleMode).toBe('custom');
     });
   });
 
