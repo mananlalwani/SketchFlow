@@ -847,12 +847,7 @@ export function DrawingCanvas() {
 
   const startDrawing = useCallback(
     (e: React.PointerEvent) => {
-      if (
-        !canDraw &&
-        currentTool !== 'hand' &&
-        currentTool !== 'select' &&
-        currentTool !== 'move'
-      ) {
+      if (!canDraw && currentTool !== 'hand' && currentTool !== 'select') {
         toast({
           title: 'View Only',
           description: "You don't have permission to edit this project.",
@@ -892,6 +887,12 @@ export function DrawingCanvas() {
               : [hitId];
             if (!selectedObjectIds.includes(hitId)) setSelectedObjects(groupIds);
             if (e.pointerType === 'touch' && 'vibrate' in navigator) navigator.vibrate(12);
+            // Selection is intentionally non-destructive. It can activate
+            // resize/rotate handles, but only the Move tool starts a drag.
+            if (currentTool === 'select') {
+              setIsDrawing(true);
+              return;
+            }
             if (obj.locked) return;
             const offset = getObjectDragOffset(obj, worldPos);
             const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds;
@@ -910,6 +911,7 @@ export function DrawingCanvas() {
           endX: worldPos.x,
           endY: worldPos.y,
         });
+        setIsDrawing(true);
         return;
       }
 
@@ -1552,6 +1554,7 @@ export function DrawingCanvas() {
         .map((object) => object.id);
       setSelectedObjects(ids);
       setSelectionRect(null);
+      setIsDrawing(false);
       return;
     }
 
@@ -1960,7 +1963,7 @@ export function DrawingCanvas() {
           draw(nativeEvent);
         } else if (!isDrawing && active) {
           // START DRAWING
-          if (!canDraw && currentTool !== 'select' && currentTool !== 'move') {
+          if (!canDraw && currentTool !== 'select') {
             // Toast logic should be here or in startDrawing
             return;
           }
