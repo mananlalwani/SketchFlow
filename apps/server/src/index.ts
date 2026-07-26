@@ -268,7 +268,7 @@ export class SketchFlowServer {
         res.status(503).json({ status: 'shutting_down' });
         return;
       }
-      res.json({ status: 'ok' });
+      res.json({ status: 'ok', release: env.RELEASE_ID ?? 'unknown' });
     });
 
     // Readiness probe - can we serve traffic?
