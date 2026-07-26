@@ -320,12 +320,17 @@ export function DrawingToolbar() {
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => setOpen((prev) => !prev)}
+          className={cn(
+            'border border-transparent transition-[background-color,border-color,box-shadow] hover:border-slate-200 hover:bg-slate-100/80 dark:hover:border-white/10 dark:hover:bg-white/[0.08]',
+            open &&
+              'border-slate-200 bg-slate-100 text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.1] dark:text-white',
+          )}
         >
           Project
         </Button>
         {open && (
           <div
-            className="absolute right-0 mt-2 bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-md shadow-lg z-50 min-w-[220px] p-1"
+            className="absolute right-0 mt-2 min-w-[220px] rounded-lg border border-slate-200/90 bg-slate-50/95 p-1.5 text-slate-900 shadow-xl shadow-slate-950/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/95 dark:text-slate-100 dark:shadow-black/30 z-50"
             role="menu"
             aria-label="Project"
           >
@@ -334,7 +339,7 @@ export function DrawingToolbar() {
                 onSave();
                 setOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-50 text-slate-900 dark:text-slate-100"
+              className="w-full rounded-md px-3 py-2 text-left text-slate-700 transition-colors hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-45 dark:text-slate-200 dark:hover:bg-white/[0.08] dark:hover:text-white"
               role="menuitem"
               disabled={!unsaved}
               title={unsaved ? 'Save project (Ctrl/Cmd+S)' : 'No changes to save'}
@@ -346,7 +351,7 @@ export function DrawingToolbar() {
                 setProjectsModal(true);
                 setOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-slate-100"
+              className="w-full rounded-md px-3 py-2 text-left text-slate-700 transition-colors hover:bg-white hover:text-slate-950 dark:text-slate-200 dark:hover:bg-white/[0.08] dark:hover:text-white"
               role="menuitem"
               title="Browse and load projects"
             >
@@ -357,19 +362,19 @@ export function DrawingToolbar() {
                 onNew();
                 setOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-900 dark:text-slate-100"
+              className="w-full rounded-md px-3 py-2 text-left text-slate-700 transition-colors hover:bg-white hover:text-slate-950 dark:text-slate-200 dark:hover:bg-white/[0.08] dark:hover:text-white"
               role="menuitem"
               title="New project (Ctrl/Cmd+N)"
             >
               New
             </button>
-            <div className="h-px bg-slate-200 dark:bg-white/10 my-1" />
+            <div className="mx-1 my-1.5 h-px bg-slate-200/80 dark:bg-white/10" />
             <button
               onClick={() => {
                 onClear();
                 setOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded hover:bg-red-100 dark:hover:bg-red-500/10 text-red-600 dark:text-red-300"
+              className="w-full rounded-md px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-100/80 hover:text-red-700 dark:text-red-300 dark:hover:bg-red-500/[0.14] dark:hover:text-red-200"
               role="menuitem"
               title="Clear canvas"
             >
