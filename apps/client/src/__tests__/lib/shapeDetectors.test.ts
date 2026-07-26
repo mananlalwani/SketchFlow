@@ -108,6 +108,32 @@ describe('shape detection pipeline', () => {
     expect(result.detectedShape?.shape.type).toBe('rectangle');
   });
 
+  it('fits a rectangle with rounded, uneven hand-drawn corners', () => {
+    const roughRectangle: Point[] = [
+      { x: 26, y: 22 },
+      { x: 55, y: 18 },
+      { x: 124, y: 22 },
+      { x: 153, y: 28 },
+      { x: 161, y: 48 },
+      { x: 158, y: 96 },
+      { x: 150, y: 108 },
+      { x: 112, y: 111 },
+      { x: 48, y: 107 },
+      { x: 25, y: 100 },
+      { x: 18, y: 81 },
+      { x: 21, y: 43 },
+      { x: 26, y: 22 },
+    ];
+
+    const result = detectShapes(roughRectangle, {
+      enabledDetectors: ['rectangle'],
+      strokeProcessingOptions: { minSize: 15, resampleStep: 2, simplificationTolerance: 0.5 },
+    });
+
+    expect(result.detectedShape?.shape.type).toBe('rectangle');
+    expect(result.detectedShape?.shape.points).toHaveLength(4);
+  });
+
   it('distinguishes triangles from rectangles', () => {
     const result = detectShapes(
       closedPolygon([

@@ -165,6 +165,57 @@ function isRectangle(vertices: Point[]): { score: number; error: number } | null
   return error <= 0.28 ? { error, score: 1 - error } : null;
 }
 
+function rectangleEdgeFit(
+  points: Point[],
+  box: BoundingBox,
+): { score: number; error: number } | null {
+  const shortestSide = Math.min(box.width, box.height);
+  if (shortestSide < 2 || points.length < 8) return null;
+
+  const edgeVisits = [0, 0, 0, 0];
+  const normalizedDistances = points.map((point) => {
+    const distances = [
+      Math.abs(point.y - box.minY),
+      Math.abs(point.x - box.maxX),
+      Math.abs(point.y - box.maxY),
+      Math.abs(point.x - box.minX),
+    ];
+    const nearestEdge = distances.indexOf(Math.min(...distances));
+    edgeVisits[nearestEdge] += 1;
+    return distances[nearestEdge] / shortestSide;
+  });
+  const error = normalizedDistances.reduce((sum, value) => sum + value, 0) / points.length;
+  const minimumEdgeVisits = Math.max(2, Math.floor(points.length * 0.08));
+
+  // A rough rectangle still spends meaningful time near all four bounding-box
+  // edges. Curves and scribbles do not, even if their bounding boxes are square.
+  if (error > 0.12 || edgeVisits.some((visits) => visits < minimumEdgeVisits)) return null;
+  return { error, score: clamp(1 - error / 0.12) };
+}
+
+function simplifyClosedPath(points: Point[], tolerance: number): Point[] {
+  if (points.length < 4) return points;
+  const anchor = points[0];
+  let oppositeIndex = 1;
+  for (let index = 2; index < points.length; index++) {
+    if (distance(anchor, points[index]) > distance(anchor, points[oppositeIndex])) {
+      oppositeIndex = index;
+    }
+  }
+
+  // Simplifying a closed path directly makes RDP compare every point against a
+  // zero-length start/end segment. Splitting at the farthest point preserves
+  // real corners even when a hand-drawn loop starts in the middle of an edge.
+  const firstHalf = simplify(points.slice(0, oppositeIndex + 1), tolerance);
+  const secondHalf = simplify([...points.slice(oppositeIndex), anchor], tolerance);
+  const vertices = [...firstHalf.slice(0, -1), ...secondHalf.slice(0, -1)];
+
+  return vertices.filter(
+    (vertex, index) =>
+      distance(vertex, vertices[(index + vertices.length - 1) % vertices.length]) >= tolerance / 2,
+  );
+}
+
 function triangleArea(vertices: Point[]): number {
   return Math.abs(
     vertices.reduce((sum, point, index) => {
@@ -351,17 +402,25 @@ export class ShapeDetectionPipeline {
         2,
         options.strokeProcessingOptions?.simplificationTolerance ?? diagonal * 0.025,
       );
-      let vertices = simplify([...processedPoints, processedPoints[0]], tolerance).slice(0, -1);
-      if (vertices.length > 1 && distance(vertices[0], vertices[vertices.length - 1]) < tolerance)
-        vertices = vertices.slice(0, -1);
+      const vertices = simplifyClosedPath(processedPoints, tolerance);
 
       if (enabled.has('rectangle')) {
-        const rectangle = isRectangle(vertices);
+        const rectangle = isRectangle(vertices) ?? rectangleEdgeFit(processedPoints, box);
         if (rectangle && rectangle.error <= thresholds.rectangleMaxError) {
           candidates.push({
             confidence: rectangle.score,
             error: rectangle.error,
-            shape: createDetectedShape('rectangle', box, { points: vertices }),
+            shape: createDetectedShape('rectangle', box, {
+              points:
+                vertices.length === 4
+                  ? vertices
+                  : [
+                      { x: box.minX, y: box.minY },
+                      { x: box.maxX, y: box.minY },
+                      { x: box.maxX, y: box.maxY },
+                      { x: box.minX, y: box.maxY },
+                    ],
+            }),
           });
         }
       }
