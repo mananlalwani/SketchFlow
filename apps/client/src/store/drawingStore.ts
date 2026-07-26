@@ -15,6 +15,8 @@ export type Tool =
   | 'text'
   | 'eyedropper'
   | 'hand'
+  | 'select'
+  // Kept to read older persisted sessions; new UI and shortcuts use `select`.
   | 'move'
   | 'image';
 
