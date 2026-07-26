@@ -140,6 +140,7 @@ describe('shape detection pipeline', () => {
         { x: 100, y: 20 },
         { x: 160, y: 140 },
       ]),
+      undefined,
     );
 
     expect(result.detectedShape?.shape.type).toBe('triangle');
@@ -168,6 +169,21 @@ describe('shape detection pipeline', () => {
 
     expect(result.detectedShape?.shape.type).toBe('triangle');
     expect(result.detectedShape?.shape.points).toHaveLength(3);
+  });
+
+  it('recognizes a triangle when the final pen point lands near its start', () => {
+    const nearClosedTriangle: Point[] = [
+      { x: 40, y: 140 },
+      { x: 70, y: 80 },
+      { x: 100, y: 20 },
+      { x: 130, y: 80 },
+      { x: 160, y: 140 },
+      // A realistic pen lift: close enough to visually close the base, but
+      // not exactly on the opening point.
+      { x: 72, y: 143 },
+    ];
+
+    expect(detectShapes(nearClosedTriangle).detectedShape?.shape.type).toBe('triangle');
   });
 
   it('classifies a closed radial stroke as an ellipse', () => {

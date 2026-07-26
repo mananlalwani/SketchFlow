@@ -437,9 +437,14 @@ export class ShapeDetectionPipeline {
     const processedPoints = resample(source, options.strokeProcessingOptions?.resampleStep ?? 3);
     const closureDistance =
       source.length > 1 ? distance(source[0], source[source.length - 1]) : Infinity;
-    const isClosed =
-      closureDistance <=
-      Math.max(6, diagonal * (options.strokeProcessingOptions?.closureTolerance ?? 0.15));
+    // Hand-drawn polygons commonly finish close to, rather than exactly on,
+    // their first point. Keep the user-configured tolerance as a floor but
+    // allow a practical near-close window for automatic shape recognition.
+    const closureTolerance = Math.max(
+      options.strokeProcessingOptions?.closureTolerance ?? 0.15,
+      0.24,
+    );
+    const isClosed = closureDistance <= Math.max(8, diagonal * closureTolerance);
     const processedStroke: ProcessedStroke = {
       originalPoints: points,
       processedPoints,
