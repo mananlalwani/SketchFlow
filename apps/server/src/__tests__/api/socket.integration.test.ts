@@ -465,6 +465,43 @@ describe('Socket.IO boundary', () => {
     });
   });
 
+  it('broadcasts per-device selection presence without persisting a project edit', async () => {
+    mocks.checkPermission.mockResolvedValue(true);
+    const first = await connect('valid-token');
+    const second = await connect('valid-token');
+    const projectId = 'ckz1h2abc0018qwerty123456';
+    first.emit('room:join', projectId);
+    second.emit('room:join', projectId);
+    await vi.waitFor(() =>
+      expect(
+        sketchServer.getSocketServer().sockets.sockets.get(second.id)?.rooms.has(projectId),
+      ).toBe(true),
+    );
+
+    const received = new Promise<unknown>((resolve) => second.once('selection:change', resolve));
+    first.emit('selection:change', {
+      userId: 'user-1',
+      username: 'Same account, second device',
+      objectIds: ['shape-1', 'stroke-1'],
+      color: '#000000',
+    });
+    await expect(received).resolves.toMatchObject({
+      clientId: first.id,
+      userId: 'user-1',
+      objectIds: ['shape-1', 'stroke-1'],
+    });
+    expect(mocks.commitCollaborationOperation).not.toHaveBeenCalled();
+
+    const left = new Promise<string>((resolve) => second.once('selection:leave', resolve));
+    first.emit('selection:change', {
+      userId: 'user-1',
+      username: 'Same account, second device',
+      objectIds: [],
+      color: '#000000',
+    });
+    await expect(left).resolves.toBe(first.id);
+  });
+
   it('broadcasts consecutive accepted operations in assigned revision order', async () => {
     mocks.checkPermission.mockResolvedValue(true);
     mocks.commitCollaborationOperation

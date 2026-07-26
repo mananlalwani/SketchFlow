@@ -76,6 +76,16 @@ export interface CursorData {
   timestamp?: number;
 }
 
+/** Ephemeral, per-device selection presence. Never persisted with project data. */
+export interface SelectionPresence {
+  clientId?: string;
+  userId: string;
+  username: string;
+  objectIds: string[];
+  color: string;
+  timestamp?: number;
+}
+
 // Project file format
 export type ProjectVersion = '1.0.0';
 
@@ -257,6 +267,9 @@ export interface ServerToClientEvents {
   'cursor:join': (cursor: CursorData) => void;
   'cursor:leave': (userId: string) => void;
   'cursors:all': (cursors: CursorData[]) => void;
+  'selection:change': (selection: SelectionPresence) => void;
+  'selection:leave': (clientId: string) => void;
+  'selections:all': (selections: SelectionPresence[]) => void;
   'collaboration:hydrated': (state: CollaborationHydration) => void;
   'collaboration:applied': (event: CollaborationAppliedEvent) => void;
   error: (error: { status: 429; error: string }) => void;
@@ -264,6 +277,7 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
   'cursor:move': (cursor: CursorData) => void;
+  'selection:change': (selection: SelectionPresence) => void;
   'room:join': (projectId: string) => void;
   'room:leave': () => void;
   'collaboration:commit': (
