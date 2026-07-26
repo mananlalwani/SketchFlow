@@ -1977,6 +1977,18 @@ export function DrawingCanvas() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // The gesture library receives wheel events too, but a native non-passive
+    // listener is required in Firefox/Safari to reliably suppress document
+    // scrolling and browser zoom while the pointer is over the canvas.
+    const preventDocumentScroll = (event: WheelEvent) => event.preventDefault();
+    canvas.addEventListener('wheel', preventDocumentScroll, { passive: false });
+    return () => canvas.removeEventListener('wheel', preventDocumentScroll);
+  }, []);
+
   useGesture(
     {
       onDrag: ({ active, xy: [clientX, clientY], event, touches, tap }) => {
@@ -2168,7 +2180,7 @@ export function DrawingCanvas() {
 
   return (
     <div
-      className={`w-full h-full relative overflow-hidden ${
+      className={`w-full h-full relative touch-none overscroll-none overflow-hidden ${
         theme === 'dark' ? 'bg-[#0a0a0a]' : 'bg-[#e0e0e0]'
       }`}
     >
