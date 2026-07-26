@@ -185,9 +185,12 @@ export function DrawingCanvas() {
     projectRole,
   } = useDrawingStore();
 
+  const [dragPreviewObject, setDragPreviewObject] = useState<DrawingObject | null>(null);
   const selectedObject = objects.find((object) => object.id === selectedObjectId);
-  const selectedBounds = selectedObject ? getObjectBounds(selectedObject) : null;
-  const selectedRotation = selectedObject?.rotation ?? 0;
+  const selectedDisplayObject =
+    dragPreviewObject?.id === selectedObject?.id ? dragPreviewObject : selectedObject;
+  const selectedBounds = selectedDisplayObject ? getObjectBounds(selectedDisplayObject) : null;
+  const selectedRotation = selectedDisplayObject?.rotation ?? 0;
   const canDirectTransform = Boolean(
     selectedObject &&
       selectedObjectIds.length === 1 &&
@@ -894,6 +897,7 @@ export function DrawingCanvas() {
             const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds;
             const drag = { id: hitId, ids, offsetX: offset.x, offsetY: offset.y };
             activeDragRef.current = drag;
+            setDragPreviewObject(obj);
             setDraggedObject(drag);
             saveHistory();
             return;
@@ -1322,6 +1326,7 @@ export function DrawingCanvas() {
               if (draggedObjectsRef.current) {
                 const updatedObj = draggedObjectsRef.current.find((o) => o.id === activeDrag.id);
                 if (updatedObj) {
+                  setDragPreviewObject(updatedObj);
                   if (
                     updatedObj.type === 'stroke' &&
                     updatedObj.points &&
@@ -1549,6 +1554,7 @@ export function DrawingCanvas() {
         draggedObjectsRef.current = null;
       }
       activeDragRef.current = null;
+      setDragPreviewObject(null);
       setDraggedObject(null);
 
       requestAnimationFrame(() => {

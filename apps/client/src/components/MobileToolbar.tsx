@@ -12,7 +12,7 @@ import {
   Star,
   Type,
   Hand,
-  Move,
+  MousePointer2,
   ImageIcon,
   ChevronDown,
   SlidersHorizontal,
@@ -31,7 +31,7 @@ import {
 
 const tools = [
   { id: 'hand', icon: Hand, label: 'Pan' },
-  { id: 'move', icon: Move, label: 'Move' },
+  { id: 'select', icon: MousePointer2, label: 'Select' },
   { id: 'pen', icon: Pen, label: 'Pen' },
   { id: 'eraser', icon: Eraser, label: 'Eraser' },
   { id: 'line', icon: Minus, label: 'Line' },
