@@ -204,6 +204,10 @@ describe('shape detection pipeline', () => {
 
     expect(result.detectedShape?.shape.type).toBe('parabola');
     expect(result.detectedShape?.shape.properties?.orientation).toBe('down');
+    expect(result.detectedShape?.shape.points).toHaveLength(33);
+    expect(result.detectedShape?.shape.points?.[16]?.y).toBeLessThan(
+      result.detectedShape?.shape.points?.[0]?.y ?? Infinity,
+    );
     expect(result.detectedShape?.error).toBeLessThan(0.05);
   });
 

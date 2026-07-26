@@ -432,10 +432,24 @@ function parabolaCandidate(
     return null;
 
   const orientation = horizontal ? (a > 0 ? 'down' : 'up') : a > 0 ? 'right' : 'left';
+  const inputs = samples.map((sample) => sample.input);
+  const minInput = Math.min(...inputs);
+  const maxInput = Math.max(...inputs);
+  // Store the fitted curve itself rather than only its bounding box. This lets
+  // the renderer retain an asymmetric or shallow hand-drawn parabola exactly
+  // like custom triangle vertices retain their fitted outline.
+  const fittedPoints = Array.from({ length: 33 }, (_, index) => {
+    const input = minInput + ((maxInput - minInput) * index) / 32;
+    const output = a * input ** 2 + b * input + c;
+    return horizontal ? { x: input, y: output } : { x: output, y: input };
+  });
   return {
     confidence: clamp(1 - error / thresholds.parabolaMaxError),
     error,
-    shape: createDetectedShape('parabola', box, { properties: { orientation, curvature } }),
+    shape: createDetectedShape('parabola', boundingBox(fittedPoints), {
+      points: fittedPoints,
+      properties: { orientation, curvature },
+    }),
     metadata: { curvature },
   };
 }

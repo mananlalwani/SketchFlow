@@ -74,7 +74,7 @@ class SocketManager {
   private listeners: Map<string, Set<ListenerCallback>> = new Map();
   private isConnected = false;
 
-  connect(token: string) {
+  connect(token?: string, shareToken?: string) {
     if (this.socket?.connected) return this.socket;
 
     if (this.socket) {
@@ -86,7 +86,9 @@ class SocketManager {
     const url = resolveSocketBaseUrl();
 
     this.socket = io(url, {
-      auth: { token },
+      // A share token is only accepted for a read-only public board. Authenticated
+      // users always use their Clerk token instead.
+      auth: token ? { token } : shareToken ? { shareToken } : {},
       // Prefer WebSocket for low-latency collaboration, but retain Socket.IO
       // polling as a safe fallback when a proxy, browser extension, or network
       // path interrupts the WebSocket handshake.
@@ -182,13 +184,13 @@ class SocketManager {
     return this.isConnected;
   }
 
-  reconnect(token: string) {
+  reconnect(token?: string, shareToken?: string) {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
     }
-    return this.connect(token);
+    return this.connect(token, shareToken);
   }
 }
 
@@ -200,10 +202,12 @@ export const useSocket = () => {
   const [connectionCount, setConnectionCount] = useState(1);
   const wasConnectedRef = React.useRef(false);
   const { isGuest, isAuthenticated, getToken } = useAuthStore();
+  const shareToken =
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('share');
 
   useEffect(() => {
     let disposed = false;
-    if (isGuest || !isAuthenticated) {
+    if ((isGuest || !isAuthenticated) && !shareToken) {
       setIsConnected(false);
       return;
     }
@@ -225,12 +229,18 @@ export const useSocket = () => {
       setConnectionError(error);
     });
 
-    void getToken().then((token) => {
-      if (disposed || !token) return;
-      socket = socketManager.connect(token);
+    if (shareToken && (isGuest || !isAuthenticated)) {
+      socket = socketManager.connect(undefined, shareToken);
       socket.on('connection:count', (count: number) => setConnectionCount(count));
       setIsConnected(socketManager.getConnectionStatus());
-    });
+    } else {
+      void getToken().then((token) => {
+        if (disposed || !token) return;
+        socket = socketManager.connect(token);
+        socket.on('connection:count', (count: number) => setConnectionCount(count));
+        setIsConnected(socketManager.getConnectionStatus());
+      });
+    }
 
     return () => {
       unsubscribeConnect();
@@ -240,36 +250,32 @@ export const useSocket = () => {
         socket.off('connection:count');
       }
     };
-  }, [isGuest, isAuthenticated, getToken]);
+  }, [isGuest, isAuthenticated, getToken, shareToken]);
 
   const emit = useCallback(
     <T extends keyof ClientToServerEvents>(
       event: T,
       ...args: Parameters<ClientToServerEvents[T]>
     ) => {
-      if (!isAuthenticated) return;
       socketManager.emit(event, ...args);
     },
-    [isAuthenticated],
+    [],
   );
 
   const on = useCallback(
     <T extends keyof ServerToClientEvents>(event: T, callback: ServerToClientEvents[T]) => {
-      if (!isAuthenticated) {
-        return () => {}; // Return no-op cleanup
-      }
       socketManager.on(event, callback);
       return () => socketManager.off(event, callback);
     },
-    [isAuthenticated],
+    [],
   );
 
   const reconnect = useCallback(() => {
-    if (!isAuthenticated) return;
     void getToken().then((token) => {
       if (token) socketManager.reconnect(token);
+      else if (shareToken) socketManager.reconnect(undefined, shareToken);
     });
-  }, [isAuthenticated, getToken]);
+  }, [getToken, shareToken]);
 
   return {
     isConnected,

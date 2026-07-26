@@ -62,6 +62,45 @@ type Shape = {
   properties?: Record<string, unknown>; // Shape-specific properties (e.g., star point count)
 };
 
+type PathContext = Pick<OffscreenCanvasRenderingContext2D, 'moveTo' | 'lineTo'>;
+type ParabolaShape = Pick<Shape, 'x' | 'y' | 'width' | 'height' | 'orientation' | 'points'>;
+
+/** Trace an authored parabola path when present, otherwise the legacy preset curve. */
+function traceParabolaPath(context: PathContext, shape: ParabolaShape) {
+  if (shape.points && shape.points.length > 1) {
+    context.moveTo(shape.points[0].x, shape.points[0].y);
+    for (const point of shape.points.slice(1)) context.lineTo(point.x, point.y);
+    return;
+  }
+
+  const steps = 64;
+  const x0 = shape.x,
+    y0 = shape.y,
+    w = shape.width,
+    h = shape.height;
+  if (shape.orientation === 'left' || shape.orientation === 'right') {
+    const dir = shape.orientation === 'right' ? 1 : -1;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const yy = y0 + t * h;
+      const ny = (t - 0.5) * 2;
+      const xx = x0 + (dir > 0 ? 0 : w) + dir * w * (ny * ny);
+      if (i === 0) context.moveTo(xx, yy);
+      else context.lineTo(xx, yy);
+    }
+  } else {
+    const dir = shape.orientation === 'down' ? 1 : -1;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const xx = x0 + t * w;
+      const nx = (t - 0.5) * 2;
+      const yy = y0 + (dir > 0 ? 0 : h) + dir * h * (nx * nx);
+      if (i === 0) context.moveTo(xx, yy);
+      else context.lineTo(xx, yy);
+    }
+  }
+}
+
 // Cache for loaded image bitmaps
 const imageBitmapCache = new Map<string, ImageBitmap>();
 
@@ -745,35 +784,7 @@ function blit() {
         if (sh.filled) vectorSSCtx.fill();
         vectorSSCtx.stroke();
       } else if (sh.type === 'parabola') {
-        // Draw parabola inside bbox; orientation selects axis
-        const steps = 64;
-        const x0 = sh.x,
-          y0 = sh.y,
-          w = sh.width,
-          h = sh.height;
-        if (sh.orientation === 'left' || sh.orientation === 'right') {
-          // x as function of y: x = a*(y^2)
-          const dir = sh.orientation === 'right' ? 1 : -1;
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps; // y normalized [0,1]
-            const yy = y0 + t * h;
-            const ny = (t - 0.5) * 2; // [-1,1]
-            const xx = x0 + (dir > 0 ? 0 : w) + dir * w * (ny * ny);
-            if (i === 0) vectorSSCtx.moveTo(xx, yy);
-            else vectorSSCtx.lineTo(xx, yy);
-          }
-        } else {
-          // y as function of x: y = a*(x^2)
-          const dir = sh.orientation === 'down' ? 1 : -1; // down opens positive y
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps; // x normalized [0,1]
-            const xx = x0 + t * w;
-            const nx = (t - 0.5) * 2; // [-1,1]
-            const yy = y0 + (dir > 0 ? 0 : h) + dir * h * (nx * nx);
-            if (i === 0) vectorSSCtx.moveTo(xx, yy);
-            else vectorSSCtx.lineTo(xx, yy);
-          }
-        }
+        traceParabolaPath(vectorSSCtx, sh);
         vectorSSCtx.stroke();
       } else if (sh.type === 'text' && sh.text) {
         vectorSSCtx.fillStyle = adjustedShColor;
@@ -1096,32 +1107,7 @@ function blit() {
       if (sh.filled) screenCtx.fill();
       screenCtx.stroke();
     } else if (sh.type === 'parabola') {
-      const steps = 64;
-      const x0 = sh.x,
-        y0 = sh.y,
-        w = sh.width,
-        h = sh.height;
-      if (sh.orientation === 'left' || sh.orientation === 'right') {
-        const dir = sh.orientation === 'right' ? 1 : -1;
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps;
-          const yy = y0 + t * h;
-          const ny = (t - 0.5) * 2;
-          const xx = x0 + (dir > 0 ? 0 : w) + dir * w * (ny * ny);
-          if (i === 0) screenCtx.moveTo(xx, yy);
-          else screenCtx.lineTo(xx, yy);
-        }
-      } else {
-        const dir = sh.orientation === 'down' ? 1 : -1;
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps;
-          const xx = x0 + t * w;
-          const nx = (t - 0.5) * 2;
-          const yy = y0 + (dir > 0 ? 0 : h) + dir * h * (nx * nx);
-          if (i === 0) screenCtx.moveTo(xx, yy);
-          else screenCtx.lineTo(xx, yy);
-        }
-      }
+      traceParabolaPath(screenCtx, sh);
       screenCtx.stroke();
     } else if (sh.type === 'text' && sh.text) {
       screenCtx.fillStyle = adjustedColor;
@@ -1436,37 +1422,12 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         worldCtx.lineTo(sh.x + sh.width, sh.y + sh.height);
         worldCtx.stroke();
       } else if (sh.type === 'parabola') {
-        const steps = 64;
-        const x0 = sh.x,
-          y0 = sh.y,
-          w = sh.width,
-          h = sh.height;
         worldCtx.strokeStyle = bg;
         worldCtx.lineWidth = sh.size;
         worldCtx.lineCap = 'round';
         worldCtx.lineJoin = 'round';
         worldCtx.beginPath();
-        if (sh.orientation === 'left' || sh.orientation === 'right') {
-          const dir = sh.orientation === 'right' ? 1 : -1;
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps;
-            const yy = y0 + t * h;
-            const ny = (t - 0.5) * 2;
-            const xx = x0 + (dir > 0 ? 0 : w) + dir * w * (ny * ny);
-            if (i === 0) worldCtx.moveTo(xx, yy);
-            else worldCtx.lineTo(xx, yy);
-          }
-        } else {
-          const dir = sh.orientation === 'down' ? 1 : -1;
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps;
-            const xx = x0 + t * w;
-            const nx = (t - 0.5) * 2;
-            const yy = y0 + (dir > 0 ? 0 : h) + dir * h * (nx * nx);
-            if (i === 0) worldCtx.moveTo(xx, yy);
-            else worldCtx.lineTo(xx, yy);
-          }
-        }
+        traceParabolaPath(worldCtx, sh);
         worldCtx.stroke();
       }
       worldCtx.restore();

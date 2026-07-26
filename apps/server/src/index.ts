@@ -736,8 +736,24 @@ export class SketchFlowServer {
         return next(new Error('Server connection limit reached'));
       }
       const token = socket.handshake.auth.token;
-      if (typeof token !== 'string' || token.length === 0)
-        return next(new Error('Authentication required'));
+      const shareToken = socket.handshake.auth.shareToken;
+
+      if (typeof token !== 'string' || token.length === 0) {
+        if (typeof shareToken !== 'string' || !shareTokenSchema.safeParse(shareToken).success) {
+          return next(new Error('Authentication required'));
+        }
+        try {
+          // Public links are a deliberately narrow credential: they can only
+          // watch the single live board that the token currently exposes.
+          const project = await this.projectService.getByShareToken(shareToken);
+          if (!project) return next(new Error('Invalid share token'));
+          socket.data.sharedProjectId = project.id;
+          socket.data.shareToken = shareToken;
+          return next();
+        } catch {
+          return next(new Error('Invalid share token'));
+        }
+      }
 
       try {
         const request = new Request('http://localhost/socket.io', {
@@ -903,11 +919,19 @@ export class SketchFlowServer {
       // Handle room join
       socket.on('room:join', async (projectId: string) => {
         const joinGeneration = ++roomGeneration;
+        if (typeof projectId !== 'string' || !resourceIdSchema.safeParse(projectId).success) {
+          logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
+          return;
+        }
+        const sharedViewer =
+          socket.data.sharedProjectId === projectId && typeof socket.data.shareToken === 'string';
+        const canView = currentUserId
+          ? await this.projectService.checkPermission(projectId, currentUserId, 'view')
+          : sharedViewer
+            ? (await this.projectService.getByShareToken(socket.data.shareToken!))?.id === projectId
+            : false;
         if (
-          typeof projectId !== 'string' ||
-          !resourceIdSchema.safeParse(projectId).success ||
-          !currentUserId ||
-          !(await this.projectService.checkPermission(projectId, currentUserId, 'view')) ||
+          !canView ||
           joinGeneration !== roomGeneration
         ) {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
@@ -934,7 +958,9 @@ export class SketchFlowServer {
         // New clients hydrate from the one canonical database authority. Legacy
         // snapshot replay below remains only for clients that have not migrated
         // to the versioned collaboration protocol.
-        const canonicalProject = await this.projectService.get(projectId, currentUserId);
+        const canonicalProject = currentUserId
+          ? await this.projectService.get(projectId, currentUserId)
+          : await this.projectService.getByShareToken(socket.data.shareToken!);
         if (
           !canonicalProject ||
           joinGeneration !== roomGeneration ||
