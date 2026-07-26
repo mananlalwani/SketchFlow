@@ -115,6 +115,13 @@ interface ActiveTransform {
   preserveAspectRatio: boolean;
 }
 
+interface ActiveDrag {
+  id: string;
+  ids: string[];
+  offsetX: number;
+  offsetY: number;
+}
+
 function pointInObjectSpace(point: { x: number; y: number }, object: DrawingObject) {
   const x = object.x ?? 0;
   const y = object.y ?? 0;
@@ -237,12 +244,7 @@ export function DrawingCanvas() {
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [textInputValue, setTextInputValue] = useState('');
-  const [draggedObject, setDraggedObject] = useState<{
-    id: string;
-    ids: string[];
-    offsetX: number;
-    offsetY: number;
-  } | null>(null);
+  const [draggedObject, setDraggedObject] = useState<ActiveDrag | null>(null);
   const [selectionRect, setSelectionRect] = useState<{
     startX: number;
     startY: number;
@@ -252,6 +254,7 @@ export function DrawingCanvas() {
   const [activeTransform, setActiveTransform] = useState<ActiveTransform | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const draggedObjectsRef = useRef<DrawingObject[] | null>(null);
+  const activeDragRef = useRef<ActiveDrag | null>(null);
   const dragRedrawScheduledRef = useRef(false);
   const panViewportScheduledRef = useRef(false);
   const currentPanViewRef = useRef<{ x: number; y: number } | null>(null);
@@ -884,7 +887,9 @@ export function DrawingCanvas() {
             if (obj.locked) return;
             const offset = getObjectDragOffset(obj, worldPos);
             const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds;
-            setDraggedObject({ id: hitId, ids, offsetX: offset.x, offsetY: offset.y });
+            const drag = { id: hitId, ids, offsetX: offset.x, offsetY: offset.y };
+            activeDragRef.current = drag;
+            setDraggedObject(drag);
             saveHistory();
             return;
           }
@@ -1282,23 +1287,24 @@ export function DrawingCanvas() {
         return;
       }
 
-      if (draggedObject) {
+      const activeDrag = activeDragRef.current ?? draggedObject;
+      if (activeDrag) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
         const currentObjects = draggedObjectsRef.current || objects;
-        const obj = currentObjects.find((o) => o.id === draggedObject.id);
+        const obj = currentObjects.find((o) => o.id === activeDrag.id);
 
         if (obj) {
           const updatedObjects =
-            draggedObject.ids.length > 1
+            activeDrag.ids.length > 1
               ? translateObjectsBy(
                   currentObjects,
-                  draggedObject.ids,
-                  worldPos.x - draggedObject.offsetX - (obj.x ?? obj.points?.[0]?.x ?? 0),
-                  worldPos.y - draggedObject.offsetY - (obj.y ?? obj.points?.[0]?.y ?? 0),
+                  activeDrag.ids,
+                  worldPos.x - activeDrag.offsetX - (obj.x ?? obj.points?.[0]?.x ?? 0),
+                  worldPos.y - activeDrag.offsetY - (obj.y ?? obj.points?.[0]?.y ?? 0),
                 )
-              : translateObjectInCollection(currentObjects, draggedObject.id, worldPos, {
-                  x: draggedObject.offsetX,
-                  y: draggedObject.offsetY,
+              : translateObjectInCollection(currentObjects, activeDrag.id, worldPos, {
+                  x: activeDrag.offsetX,
+                  y: activeDrag.offsetY,
                 });
 
           draggedObjectsRef.current = updatedObjects;
@@ -1309,7 +1315,7 @@ export function DrawingCanvas() {
               dragRedrawScheduledRef.current = false;
 
               if (draggedObjectsRef.current) {
-                const updatedObj = draggedObjectsRef.current.find((o) => o.id === draggedObject.id);
+                const updatedObj = draggedObjectsRef.current.find((o) => o.id === activeDrag.id);
                 if (updatedObj) {
                   if (
                     updatedObj.type === 'stroke' &&
@@ -1531,12 +1537,13 @@ export function DrawingCanvas() {
       return;
     }
 
-    if (draggedObject) {
+    if (activeDragRef.current ?? draggedObject) {
       if (draggedObjectsRef.current) {
         const updatedObjects = draggedObjectsRef.current;
         setObjects(updatedObjects);
         draggedObjectsRef.current = null;
       }
+      activeDragRef.current = null;
       setDraggedObject(null);
 
       requestAnimationFrame(() => {
