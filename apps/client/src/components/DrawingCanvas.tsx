@@ -688,6 +688,8 @@ export function DrawingCanvas() {
           y: number;
           width: number;
           height: number;
+          /** Preserve fitted triangle vertices instead of redrawing a preset triangle. */
+          points?: { x: number; y: number }[];
         }
       | {
           kind: 'parabola';
@@ -756,12 +758,17 @@ export function DrawingCanvas() {
               y: bbox.minY,
               width: bbox.width,
               height: bbox.height,
+              // The renderer uses these three vertices for a custom triangle. Without
+              // them every recognized triangle becomes the generic centered preset.
+              ...(shape.type === 'triangle' && shape.points?.length === 3
+                ? { points: shape.points.map(({ x, y }) => ({ x, y })) }
+                : {}),
             };
             return shapeObj;
           }
         }
       } catch (error) {
-        console.warn('Shape detection failed, falling back to simple detection:', error);
+        console.warn('Shape detection failed; leaving stroke unchanged:', error);
       }
 
       // An ambiguous mark should stay a freehand stroke. The former fallback
@@ -1692,6 +1699,7 @@ export function DrawingCanvas() {
               alpha: number;
               filled?: boolean;
               orientation?: 'up' | 'down' | 'left' | 'right';
+              points?: { x: number; y: number }[];
             };
             if (shape.kind === 'parabola') {
               shapeObject = {
@@ -1706,6 +1714,9 @@ export function DrawingCanvas() {
                 ...common,
                 type: shape.kind as 'rectangle' | 'ellipse' | 'circle' | 'triangle',
                 filled: useDrawingStore.getState().shapeFilled,
+                ...(shape.kind === 'triangle' && shape.points?.length === 3
+                  ? { points: shape.points }
+                  : {}),
               };
             }
 
