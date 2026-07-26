@@ -258,6 +258,7 @@ export class SketchFlowServer {
         status: 'ok',
         timestamp: new Date().toISOString(),
         connections: this.connectionRegistry.count(),
+        release: env.RELEASE_ID ?? 'unknown',
       });
     });
 
