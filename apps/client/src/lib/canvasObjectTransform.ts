@@ -91,3 +91,29 @@ export function translateObjectsBy(
     };
   });
 }
+
+/**
+ * A group is intentionally flat: selecting or transforming any member also
+ * includes every object with the same group id. Keeping this in the transform
+ * layer makes canvas and sidebar actions agree about what a group means.
+ */
+export function expandObjectIdsWithGroups(
+  objects: readonly DrawingObject[],
+  ids: readonly string[],
+): string[] {
+  const selectedIds = new Set(ids);
+  const groupIds = new Set(
+    objects
+      .filter((object) => selectedIds.has(object.id) && object.groupId)
+      .map((object) => object.groupId as string),
+  );
+
+  if (!groupIds.size) return [...selectedIds];
+
+  return objects
+    .filter(
+      (object) =>
+        selectedIds.has(object.id) || Boolean(object.groupId && groupIds.has(object.groupId)),
+    )
+    .map((object) => object.id);
+}

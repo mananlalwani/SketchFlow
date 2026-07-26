@@ -1,12 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  expandObjectIdsWithGroups,
   getObjectDragOffset,
   translateDrawingObject,
   translateObjectInCollection,
 } from '@/lib/canvasObjectTransform';
 
 describe('canvas object transforms', () => {
+  it('expands selected group members before a multi-object transform', () => {
+    const objects = [
+      { id: 'first', type: 'rectangle' as const, color: '#000', size: 1, groupId: 'group-a' },
+      { id: 'second', type: 'ellipse' as const, color: '#000', size: 1, groupId: 'group-a' },
+      { id: 'third', type: 'rectangle' as const, color: '#000', size: 1 },
+    ];
+
+    expect(expandObjectIdsWithGroups(objects, ['first', 'third'])).toEqual([
+      'first',
+      'second',
+      'third',
+    ]);
+  });
+
   it('moves a shape while retaining its pointer offset', () => {
     const rectangle = {
       id: 'rectangle',
