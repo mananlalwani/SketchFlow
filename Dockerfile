@@ -87,8 +87,13 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 sketchflow
 
-# Copy the deployed application from builder
-COPY --from=builder --chown=sketchflow:nodejs /app/deploy .
+# Keep production dependencies independent from application code. A normal
+# server edit now replaces only `dist`; Docker reuses the much larger
+# node_modules layer already present on the VPS.
+COPY --from=builder --chown=sketchflow:nodejs /app/deploy/node_modules /app/node_modules
+COPY --from=builder --chown=sketchflow:nodejs /app/deploy/package.json /app/package.json
+COPY --from=builder --chown=sketchflow:nodejs /app/deploy/dist /app/dist
+COPY --from=builder --chown=sketchflow:nodejs /app/deploy/prisma /app/prisma
 # Keep client output in separately cached layers. New app code does not force a
 # VPS to re-download unchanged vendors or optional PDF/canvas workers.
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/index.html /app/client/dist/
