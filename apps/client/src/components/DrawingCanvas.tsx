@@ -15,6 +15,7 @@ import { detectShapes } from '@/lib/shapeDetectors';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { LiveCursors } from './LiveCursors';
 import { useLiveCursors } from '@/hooks/useLiveCursors';
+import { useLiveSelections } from '@/hooks/useLiveSelections';
 import { useProjectPermissions } from '@/hooks/useProjectPermissions';
 import { useCanvasRendererWorker } from '@/hooks/useCanvasRendererWorker';
 import { useCanvasRendererFallback } from '@/hooks/useCanvasRendererFallback';
@@ -225,6 +226,7 @@ export function DrawingCanvas() {
 
   const { requestCanonicalHydration, commitCollaboration, isConnected, on } = useDrawingSocket();
   const { cursors, emitCursor } = useLiveCursors(currentProjectId ?? null);
+  const { remoteSelections } = useLiveSelections(currentProjectId ?? null, selectedObjectIds);
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
   const { updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
@@ -2163,6 +2165,60 @@ export function DrawingCanvas() {
           strokeWidth={2}
         />
       </svg>
+      {remoteSelections.map((selection) => {
+        const bounds = selection.objectIds
+          .map((id) => objects.find((object) => object.id === id))
+          .filter((object): object is DrawingObject => Boolean(object))
+          .map(getObjectBounds)
+          .filter(
+            (objectBounds): objectBounds is NonNullable<typeof objectBounds> =>
+              objectBounds !== null,
+          )
+          .reduce<NonNullable<ReturnType<typeof getObjectBounds>> | null>(
+            (combined, objectBounds) => {
+              if (!combined) return objectBounds;
+              const x = Math.min(combined.x, objectBounds.x);
+              const y = Math.min(combined.y, objectBounds.y);
+              return {
+                x,
+                y,
+                width:
+                  Math.max(combined.x + combined.width, objectBounds.x + objectBounds.width) - x,
+                height:
+                  Math.max(combined.y + combined.height, objectBounds.y + objectBounds.height) - y,
+              };
+            },
+            null,
+          );
+        if (!bounds) return null;
+        const color = selection.color || '#8b5cf6';
+        return (
+          <svg
+            key={selection.clientId ?? selection.userId}
+            className="pointer-events-none absolute inset-0 z-[19] h-full w-full overflow-visible"
+          >
+            <rect
+              x={(bounds.x - viewX) * zoom - 4}
+              y={(bounds.y - viewY) * zoom - 4}
+              width={Math.max(10, bounds.width * zoom + 8)}
+              height={Math.max(10, bounds.height * zoom + 8)}
+              rx="3"
+              fill="none"
+              stroke={color}
+              strokeWidth="2"
+              strokeDasharray="5 3"
+            />
+            <g
+              transform={`translate(${(bounds.x - viewX) * zoom - 4} ${(bounds.y - viewY) * zoom - 24})`}
+            >
+              <rect width="112" height="17" rx="4" fill={color} />
+              <text x="7" y="12" fill="white" fontSize="10" fontWeight="600">
+                {selection.username} selecting
+              </text>
+            </g>
+          </svg>
+        );
+      })}
       {multiSelectionBounds && (
         <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible">
           <rect

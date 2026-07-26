@@ -58,6 +58,7 @@ import {
 } from './middleware/index.js';
 import type {
   CursorData,
+  SelectionPresence,
   CollaborationCommit,
   CollaborationCommitResult,
   ClientToServerEvents,
@@ -767,6 +768,7 @@ export class SketchFlowServer {
         }
       >
     >();
+    const roomSelections = new Map<string, Map<string, SelectionPresence>>();
 
     // Generate color for user
     const getUserColor = (userId: string): string => {
@@ -914,6 +916,10 @@ export class SketchFlowServer {
             roomCursors.get(currentRoom)?.delete(clientId);
             this.io.to(currentRoom).emit('cursor:leave', clientId);
           }
+          if (roomSelections.has(currentRoom)) {
+            roomSelections.get(currentRoom)?.delete(clientId);
+            this.io.to(currentRoom).emit('selection:leave', clientId);
+          }
         }
 
         // Join new room
@@ -946,12 +952,19 @@ export class SketchFlowServer {
         if (!roomCursors.has(projectId)) {
           roomCursors.set(projectId, new Map());
         }
+        if (!roomSelections.has(projectId)) {
+          roomSelections.set(projectId, new Map());
+        }
 
         // Send all existing cursors in room to new joiner
         const cursorsInRoom = roomCursors.get(projectId);
         if (cursorsInRoom) {
           const allCursors = Array.from(cursorsInRoom.values());
           socket.emit('cursors:all', allCursors);
+        }
+        const selectionsInRoom = roomSelections.get(projectId);
+        if (selectionsInRoom) {
+          socket.emit('selections:all', Array.from(selectionsInRoom.values()));
         }
 
         logger.info(`Client ${clientId} joined room: ${projectId}`);
@@ -966,6 +979,10 @@ export class SketchFlowServer {
           if (roomCursors.has(currentRoom)) {
             roomCursors.get(currentRoom)?.delete(clientId);
             this.io.to(currentRoom).emit('cursor:leave', clientId);
+          }
+          if (roomSelections.has(currentRoom)) {
+            roomSelections.get(currentRoom)?.delete(clientId);
+            this.io.to(currentRoom).emit('selection:leave', clientId);
           }
           currentRoom = null;
         }
@@ -1012,6 +1029,40 @@ export class SketchFlowServer {
         socket.to(currentRoom).emit('cursor:move', normalizedCursor);
       });
 
+      // Selection presence is intentionally ephemeral. It lets collaborators
+      // see what another device is working on without changing project data.
+      socket.on('selection:change', (selection: SelectionPresence) => {
+        if (!currentRoom || !currentUserId || !selection || selection.userId !== currentUserId)
+          return;
+        if (
+          !Array.isArray(selection.objectIds) ||
+          selection.objectIds.length > 100 ||
+          selection.objectIds.some(
+            (id) => typeof id !== 'string' || id.length === 0 || id.length > 200,
+          )
+        ) {
+          return;
+        }
+        const selections = roomSelections.get(currentRoom);
+        if (!selections) return;
+        if (selection.objectIds.length === 0) {
+          selections.delete(clientId);
+          socket.to(currentRoom).emit('selection:leave', clientId);
+          return;
+        }
+        const normalizedSelection: SelectionPresence = {
+          clientId,
+          userId: currentUserId,
+          username:
+            typeof selection.username === 'string' ? selection.username.slice(0, 100) : 'Guest',
+          objectIds: [...new Set(selection.objectIds)],
+          color: getUserColor(currentUserId),
+          timestamp: Date.now(),
+        };
+        selections.set(clientId, normalizedSelection);
+        socket.to(currentRoom).emit('selection:change', normalizedSelection);
+      });
+
       // Handle disconnection
       socket.on('disconnect', (reason) => {
         if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
@@ -1022,6 +1073,10 @@ export class SketchFlowServer {
           if (roomCursors.has(currentRoom)) {
             roomCursors.get(currentRoom)?.delete(clientId);
             this.io.to(currentRoom).emit('cursor:leave', clientId);
+          }
+          if (roomSelections.has(currentRoom)) {
+            roomSelections.get(currentRoom)?.delete(clientId);
+            this.io.to(currentRoom).emit('selection:leave', clientId);
           }
         }
 
