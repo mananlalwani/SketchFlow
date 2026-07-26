@@ -275,6 +275,35 @@ function dominantTriangleVertices(vertices: Point[]): Point[] | null {
   return best;
 }
 
+function triangleVerticesFromTurns(points: Point[], diagonal: number): Point[] | null {
+  if (points.length < 4) return null;
+  const tolerance = Math.max(3, diagonal * 0.025);
+  const simplified = simplify(points, tolerance);
+  const loop =
+    distance(simplified[0], simplified[simplified.length - 1]) <= diagonal * 0.3
+      ? simplified.slice(0, -1)
+      : simplified;
+  if (loop.length === 3) return loop;
+  if (loop.length < 3) return null;
+
+  // A pen triangle drawn from a corner has two large turns (at the remaining
+  // vertices); the closing segment supplies the third. Keep those turns even
+  // when rounding or jitter leaves extra intermediate samples behind.
+  const turns = loop
+    .slice(1)
+    .map((vertex, offset) => ({
+      index: offset + 1,
+      vertex,
+      strength: Math.PI - angle(loop[offset], vertex, loop[(offset + 2) % loop.length]),
+    }))
+    .filter((turn) => turn.strength >= Math.PI / 4)
+    .sort((left, right) => right.strength - left.strength)
+    .slice(0, 2)
+    .sort((left, right) => left.index - right.index);
+
+  return turns.length === 2 ? [loop[0], ...turns.map((turn) => turn.vertex)] : null;
+}
+
 function triangleEdgeFit(
   points: Point[],
   vertices: Point[],
@@ -507,7 +536,8 @@ export class ShapeDetectionPipeline {
         rectangle.error <= thresholds.rectangleMaxError &&
         rectangle.score >= thresholds.minConfidence;
       if (enabled.has('triangle') && !confidentRectangle) {
-        const triangle = triangleEdgeFit(processedPoints, vertices, diagonal);
+        const triangleVertices = triangleVerticesFromTurns(processedPoints, diagonal) ?? vertices;
+        const triangle = triangleEdgeFit(processedPoints, triangleVertices, diagonal);
         if (triangle && triangle.error <= thresholds.triangleMaxError) {
           candidates.push({
             confidence: triangle.score,
