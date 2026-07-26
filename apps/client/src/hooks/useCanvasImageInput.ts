@@ -5,7 +5,7 @@ import { generateId } from '@/lib/utils';
 import { useDrawingStore, type DrawingObject } from '@/store/drawingStore';
 
 interface CanvasImageInputOptions {
-  canvasRef: RefObject<HTMLCanvasElement>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
   viewX: number;
   viewY: number;
   zoom: number;

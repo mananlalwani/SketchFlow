@@ -4,7 +4,7 @@ import type { DrawingObject } from '@/store/drawingStore';
 
 /** Small retained-mode renderer used only when OffscreenCanvas cannot transfer. */
 export function useCanvasRendererFallback(
-  canvasRef: RefObject<HTMLCanvasElement>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
   enabled: boolean,
   objects: readonly DrawingObject[],
   viewport: { zoom: number; viewX: number; viewY: number },
