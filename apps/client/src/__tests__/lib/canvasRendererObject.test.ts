@@ -51,4 +51,33 @@ describe('drawingObjectsToRendererScene', () => {
       }),
     ]);
   });
+
+  it('uses persistent z-indexes when collaboration preserves objects by ID', () => {
+    const scene = drawingObjectsToRendererScene([
+      {
+        id: 'visually-top',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        color: '#111111',
+        size: 1,
+        zIndex: 10,
+      },
+      {
+        id: 'visually-bottom',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        color: '#222222',
+        size: 1,
+        zIndex: 0,
+      },
+    ]);
+
+    expect(scene.shapes.map((shape) => shape.id)).toEqual(['visually-bottom', 'visually-top']);
+  });
 });

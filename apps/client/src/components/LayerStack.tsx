@@ -40,16 +40,22 @@ export function LayerStack({ className }: LayerStackProps) {
       ? objects.find((object) => object.id === selectedObjectIds[0])
       : undefined;
   const isEditable = projectRole !== 'viewer';
+  const orderedObjects = objects
+    .map((object, index) => ({ object, index }))
+    .sort((a, b) => (a.object.zIndex ?? a.index) - (b.object.zIndex ?? b.index))
+    .map(({ object }) => object);
 
   const setLayerOrder = (direction: -1 | 1) => {
     if (!selectedObject) return;
-    const index = objects.findIndex((object) => object.id === selectedObject.id);
+    const index = orderedObjects.findIndex((object) => object.id === selectedObject.id);
     const target = index + direction;
-    if (index < 0 || target < 0 || target >= objects.length) return;
+    if (index < 0 || target < 0 || target >= orderedObjects.length) return;
     saveHistory();
-    const next = [...objects];
+    const next = [...orderedObjects];
     [next[index], next[target]] = [next[target], next[index]];
-    setObjects(next);
+    // Persist the order on every object. Array position alone is local state;
+    // zIndex makes this reorder a batch of collaboration-visible updates.
+    setObjects(next.map((object, zIndex) => ({ ...object, zIndex })));
     requestFullRedraw();
   };
 
@@ -81,7 +87,7 @@ export function LayerStack({ className }: LayerStackProps) {
         </div>
       ) : (
         <div className="space-y-1">
-          {[...objects].reverse().map((object) => {
+          {[...orderedObjects].reverse().map((object) => {
             const isSelected = selectedObjectIds.includes(object.id);
             const label = layerLabel(object);
             return (

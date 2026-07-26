@@ -62,6 +62,8 @@ export interface DrawingObject {
   locked?: boolean;
   name?: string;
   groupId?: string;
+  /** Persistent stacking order. Higher values render above lower values. */
+  zIndex?: number;
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
   imageData?: string; // Base64 data URL for images
