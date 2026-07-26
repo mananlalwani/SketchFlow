@@ -1,5 +1,6 @@
 import { Layers, PenLine, Shapes, Type } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { useDrawingStore } from '@/store/drawingStore';
 import { cn } from '@/lib/utils';
 
@@ -20,9 +21,50 @@ interface LayerStackProps {
   className?: string;
 }
 
-/** A quiet navigation list. Editing happens in the single selected-object panel. */
+/** A quiet layer list with actions surfaced only for the current single selection. */
 export function LayerStack({ className }: LayerStackProps) {
-  const { objects, selectedObjectIds, setSelectedObject, toggleSelectedObject } = useDrawingStore();
+  const {
+    objects,
+    selectedObjectIds,
+    setSelectedObject,
+    toggleSelectedObject,
+    updateObject,
+    removeObject,
+    saveHistory,
+    setObjects,
+    requestFullRedraw,
+    projectRole,
+  } = useDrawingStore();
+  const selectedObject =
+    selectedObjectIds.length === 1
+      ? objects.find((object) => object.id === selectedObjectIds[0])
+      : undefined;
+  const isEditable = projectRole !== 'viewer';
+
+  const setLayerOrder = (direction: -1 | 1) => {
+    if (!selectedObject) return;
+    const index = objects.findIndex((object) => object.id === selectedObject.id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= objects.length) return;
+    saveHistory();
+    const next = [...objects];
+    [next[index], next[target]] = [next[target], next[index]];
+    setObjects(next);
+    requestFullRedraw();
+  };
+
+  const toggleVisibility = () => {
+    if (!selectedObject) return;
+    saveHistory();
+    updateObject(selectedObject.id, { hidden: !selectedObject.hidden });
+  };
+
+  const removeSelected = () => {
+    if (!selectedObject) return;
+    saveHistory();
+    removeObject(selectedObject.id);
+    setSelectedObject(undefined);
+  };
 
   return (
     <div className={cn('min-h-0', className)}>
@@ -76,6 +118,37 @@ export function LayerStack({ className }: LayerStackProps) {
               </button>
             );
           })}
+        </div>
+      )}
+      {selectedObject && (
+        <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/10">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Layer actions
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Button size="sm" variant="secondary" disabled={!isEditable} onClick={toggleVisibility}>
+              {selectedObject.hidden ? 'Show' : 'Hide'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!isEditable}
+              onClick={() => setLayerOrder(1)}
+            >
+              Bring forward
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!isEditable}
+              onClick={() => setLayerOrder(-1)}
+            >
+              Send backward
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!isEditable} onClick={removeSelected}>
+              Delete
+            </Button>
+          </div>
         </div>
       )}
     </div>
