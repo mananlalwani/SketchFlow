@@ -85,7 +85,7 @@ export function useCanvasImageInput({
               ? await compressImage(dataUrl, MAX_IMAGE_SIZE, MAX_IMAGE_SIZE, 0.85)
               : { dataUrl, width: image.width, height: image.height };
           insertImage(finalImage);
-          useDrawingStore.getState().setTool('move');
+          useDrawingStore.getState().setTool('select');
         };
         image.src = dataUrl;
       };

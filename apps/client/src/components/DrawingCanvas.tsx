@@ -844,7 +844,12 @@ export function DrawingCanvas() {
 
   const startDrawing = useCallback(
     (e: React.PointerEvent) => {
-      if (!canDraw && currentTool !== 'hand' && currentTool !== 'move') {
+      if (
+        !canDraw &&
+        currentTool !== 'hand' &&
+        currentTool !== 'select' &&
+        currentTool !== 'move'
+      ) {
         toast({
           title: 'View Only',
           description: "You don't have permission to edit this project.",
@@ -866,7 +871,7 @@ export function DrawingCanvas() {
         // ignore
       }
 
-      if (currentTool === 'move') {
+      if (currentTool === 'select' || currentTool === 'move') {
         const hitId = findCanvasObjectIdAt(objects, worldPos.x, worldPos.y, {
           includeImages: true,
         });
@@ -1941,13 +1946,13 @@ export function DrawingCanvas() {
           draw(nativeEvent);
         } else if (!isDrawing && active) {
           // START DRAWING
-          if (!canDraw && currentTool !== 'move') {
+          if (!canDraw && currentTool !== 'select' && currentTool !== 'move') {
             // Toast logic should be here or in startDrawing
             return;
           }
 
           // Check if we are dragging an object
-          if (currentTool === 'move') {
+          if (currentTool === 'select' || currentTool === 'move') {
             // Reuse startDrawing logic for move... difficult to separate
             // Let's call startDrawing effectively
             // We need to construct a fake event or refactor startDrawing to take x,y

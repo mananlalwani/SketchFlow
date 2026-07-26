@@ -14,7 +14,7 @@ import {
   Type,
   Palette,
   Hand,
-  Move,
+  MousePointer2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -37,7 +37,13 @@ import { FEATURES } from '@/config/features';
 
 const tools = [
   { id: 'hand', icon: Hand, label: 'Hand', shortcut: 'H', ariaLabel: 'Pan tool (H)' },
-  { id: 'move', icon: Move, label: 'Move', shortcut: 'V', ariaLabel: 'Move tool (V)' },
+  {
+    id: 'select',
+    icon: MousePointer2,
+    label: 'Select',
+    shortcut: 'V',
+    ariaLabel: 'Select and move tool (V)',
+  },
   { id: 'pen', icon: Pen, label: 'Pen', shortcut: 'P', ariaLabel: 'Pen tool (P)' },
   { id: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E', ariaLabel: 'Eraser tool (E)' },
   { id: 'line', icon: Minus, label: 'Line', shortcut: 'L', ariaLabel: 'Line tool (L)' },
@@ -251,7 +257,7 @@ export function DrawingToolbar() {
       const key = e.key.toLowerCase();
       const toolMap: Record<string, Tool> = {
         h: 'hand',
-        v: 'move',
+        v: 'select',
         p: 'pen',
         e: 'eraser',
         l: 'line',

@@ -117,7 +117,7 @@ describe('DrawingToolbar (simplified)', () => {
 describe('Toolbar tool list', () => {
   const tools = [
     'hand',
-    'move',
+    'select',
     'pen',
     'eraser',
     'line',
