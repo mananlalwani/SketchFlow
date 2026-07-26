@@ -96,7 +96,9 @@ function getObjectBounds(object: DrawingObject) {
   if (object.type === 'text') {
     return {
       x: object.x,
-      y: object.y - object.height / 2,
+      // Text is rendered with a top baseline, so its selection outline must
+      // start at the same anchor rather than treating `y` as its midpoint.
+      y: object.y,
       width: object.width,
       height: object.height,
     };
@@ -147,6 +149,8 @@ export function DrawingCanvas() {
     currentTool,
     eraserMode,
     brushSize,
+    textFontSize,
+    setTextFontSize,
     brushColor,
     brushOpacity,
     triangleMode,
@@ -232,6 +236,34 @@ export function DrawingCanvas() {
   const { remoteSelections } = useLiveSelections(currentProjectId ?? null, selectedObjectIds);
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
+  const deleteSelectedObjects = useCallback(() => {
+    if (projectRole === 'viewer' || selectedObjectIds.length < 2) return;
+    const selectedIds = new Set(selectedObjectIds);
+    const lockedCount = objects.filter(
+      (object) => selectedIds.has(object.id) && object.locked,
+    ).length;
+    if (lockedCount > 0) {
+      toast({
+        title: 'Unlock selected objects first',
+        description: 'Locked objects cannot be deleted as part of a selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    saveHistory();
+    setObjects(objects.filter((object) => !selectedIds.has(object.id)));
+    setSelectedObject(undefined);
+    requestFullRedraw();
+  }, [
+    objects,
+    projectRole,
+    requestFullRedraw,
+    saveHistory,
+    selectedObjectIds,
+    setObjects,
+    setSelectedObject,
+    toast,
+  ]);
   const { updateMetrics, shouldSkipFrame } = usePerformanceMonitor();
   const fps = useFPSCounter();
   const { theme } = useTheme();
@@ -587,14 +619,14 @@ export function DrawingCanvas() {
     if (!textInputPos || !textInputValue.trim()) return;
 
     const text = textInputValue.trim();
-    const fontSize = Math.max(16, brushSize * 2);
+    const fontSize = textFontSize;
     const ctx = document.createElement('canvas').getContext('2d');
     if (!ctx) return;
     ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
 
     const lines = text.split('\n');
     const maxWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
-    const height = fontSize * lines.length * 1.2;
+    const height = fontSize * lines.length * 1.4;
     const textObject = {
       id: generateId(),
       type: 'text' as const,
@@ -621,6 +653,7 @@ export function DrawingCanvas() {
     brushColor,
     brushOpacity,
     brushSize,
+    textFontSize,
     clearTextInput,
     saveHistory,
     textInputPos,
@@ -1195,8 +1228,8 @@ export function DrawingCanvas() {
         saveHistory();
       } else if (currentTool === 'text') {
         setTextInputPos({
-          x: Math.max(12, Math.min(e.clientX, window.innerWidth - 292)),
-          y: Math.max(12, Math.min(e.clientY, window.innerHeight - 190)),
+          x: Math.max(12, Math.min(e.clientX, window.innerWidth - 532)),
+          y: Math.max(12, Math.min(e.clientY, window.innerHeight - 224)),
           worldX: worldPos.x,
           worldY: worldPos.y,
         });
@@ -2255,10 +2288,35 @@ export function DrawingCanvas() {
           <g
             transform={`translate(${(multiSelectionBounds.x - viewX) * zoom - 5} ${(multiSelectionBounds.y - viewY) * zoom - 28})`}
           >
-            <rect width="94" height="19" rx="4" fill="#2563eb" />
+            <rect width="128" height="19" rx="4" fill="#2563eb" />
             <text x="8" y="13" fill="white" fontSize="11" fontWeight="600">
               {selectedObjects.length} selected
             </text>
+            {projectRole !== 'viewer' && (
+              <g
+                className="pointer-events-auto cursor-pointer"
+                role="button"
+                aria-label="Delete selected objects"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  deleteSelectedObjects();
+                }}
+              >
+                <title>Delete selected objects</title>
+                <rect x="104" width="24" height="19" rx="4" fill="#1d4ed8" />
+                <text
+                  x="116"
+                  y="13"
+                  fill="white"
+                  fontSize="14"
+                  fontWeight="600"
+                  textAnchor="middle"
+                >
+                  ×
+                </text>
+              </g>
+            )}
           </g>
         </svg>
       )}
@@ -2537,51 +2595,225 @@ export function DrawingCanvas() {
           )}
         </Button>
       )}
-      {textInputPos && (
-        <div
-          className="fixed z-[10000] w-[280px] rounded-xl border border-blue-400/70 bg-white p-2 shadow-2xl shadow-slate-900/20 dark:bg-slate-900 dark:shadow-black/40"
-          style={{ left: textInputPos.x, top: textInputPos.y }}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <textarea
-            ref={textInputRef}
-            value={textInputValue}
-            onChange={(e) => setTextInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submitTextInput();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                clearTextInput();
-              }
-            }}
-            autoFocus
-            aria-label="Text to add to the canvas"
-            placeholder="Write a note…"
-            className="min-h-[88px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-[Inter,system-ui,sans-serif] leading-[1.4] text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
-            style={{
-              fontSize: `${Math.min(Math.max(16, brushSize * 2), 32)}px`,
-              color: brushColor,
-            }}
-          />
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-slate-400">
-              Enter to add · Shift+Enter for a new line
-            </span>
-            <div className="flex shrink-0 gap-1.5">
-              <Button size="sm" variant="ghost" onClick={clearTextInput}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={submitTextInput} disabled={!textInputValue.trim()}>
-                Add text
-              </Button>
+      {textInputPos &&
+        (isMobile ? (
+          <div
+            className="fixed inset-x-0 bottom-0 z-[10000] border-t border-stone-200 bg-stone-50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-16px_40px_rgba(28,25,23,0.18)] dark:border-white/[0.1] dark:bg-[#211e1b] dark:shadow-black/45"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-stone-300 dark:bg-white/20" />
+            <div className="mx-auto max-w-lg">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-stone-400">
+                  Add text
+                </span>
+                <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white p-1 dark:border-white/[0.1] dark:bg-white/[0.04]">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-base"
+                    aria-label="Decrease text size"
+                    onClick={() => setTextFontSize(textFontSize - 2)}
+                  >
+                    −
+                  </Button>
+                  <label className="flex h-8 items-center border-x border-stone-200 pl-2 dark:border-white/[0.1]">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="12"
+                      max="240"
+                      value={textFontSize}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value)) setTextFontSize(value);
+                      }}
+                      className="w-9 bg-transparent text-right font-mono text-xs tabular-nums text-stone-700 outline-none dark:text-stone-200"
+                      aria-label="Text font size in pixels"
+                    />
+                    <span className="px-1.5 text-xs text-stone-500">px</span>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-base"
+                    aria-label="Increase text size"
+                    onClick={() => setTextFontSize(textFontSize + 2)}
+                  >
+                    +
+                  </Button>
+                </div>
+              </div>
+              <div className="mb-3 flex gap-2" aria-label="Text size presets">
+                {[16, 24, 32, 48].map((size) => (
+                  <Button
+                    key={size}
+                    type="button"
+                    variant={textFontSize === size ? 'default' : 'secondary'}
+                    size="sm"
+                    className="h-8 min-w-11 px-2 font-mono text-xs"
+                    onClick={() => setTextFontSize(size)}
+                  >
+                    {size}
+                  </Button>
+                ))}
+              </div>
+              <textarea
+                ref={textInputRef}
+                value={textInputValue}
+                onChange={(e) => {
+                  setTextInputValue(e.target.value);
+                  e.currentTarget.style.height = 'auto';
+                  e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 176)}px`;
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    clearTextInput();
+                  }
+                }}
+                autoFocus
+                aria-label="Text to add to the canvas"
+                placeholder="Type your note"
+                className="min-h-[104px] w-full resize-none rounded-xl border border-stone-200 bg-white px-3 py-3 leading-[1.4] text-stone-900 outline-none placeholder:text-stone-400 focus:border-amber-500 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-100 dark:placeholder:text-stone-600 dark:focus:border-amber-300"
+                // The mobile composer is a stable writing surface. Font size affects
+                // the placed object, not the size of text jumping around while typing.
+                style={{ fontSize: '20px', color: brushColor }}
+              />
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button variant="ghost" className="h-11" onClick={clearTextInput}>
+                  Cancel
+                </Button>
+                <Button
+                  className="h-11 bg-stone-900 text-amber-100 hover:bg-stone-800 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
+                  onClick={submitTextInput}
+                  disabled={!textInputValue.trim()}
+                >
+                  Place text
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div
+            className="fixed z-[10000] w-[min(520px,calc(100vw-24px))] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 shadow-xl shadow-stone-950/20 dark:border-white/[0.1] dark:bg-[#211e1b] dark:shadow-black/40"
+            style={{ left: textInputPos.x, top: textInputPos.y }}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-stone-200 bg-stone-100/80 px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.025]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-stone-400">
+                  <span className="h-2 w-2 rounded-full bg-amber-400 dark:bg-amber-300" />
+                  Text
+                </span>
+                <div className="flex items-center rounded-md border border-stone-200 bg-white dark:border-white/[0.1] dark:bg-white/[0.04]">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="Decrease text size"
+                    onClick={() => setTextFontSize(textFontSize - 2)}
+                  >
+                    −
+                  </Button>
+                  <label className="flex h-7 items-center border-x border-stone-200 pl-1.5 dark:border-white/[0.1]">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="12"
+                      max="240"
+                      value={textFontSize}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value)) setTextFontSize(value);
+                      }}
+                      className="w-8 bg-transparent text-right font-mono text-[11px] tabular-nums text-stone-700 outline-none dark:text-stone-200"
+                      aria-label="Text font size in pixels"
+                    />
+                    <span className="px-1 text-[10px] text-stone-500">px</span>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="Increase text size"
+                    onClick={() => setTextFontSize(textFontSize + 2)}
+                  >
+                    +
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-2 flex gap-1.5" aria-label="Text size presets">
+                {[16, 24, 32, 48].map((size) => (
+                  <Button
+                    key={size}
+                    type="button"
+                    variant={textFontSize === size ? 'default' : 'secondary'}
+                    size="sm"
+                    className="h-6 min-w-9 px-1.5 font-mono text-[10px]"
+                    onClick={() => setTextFontSize(size)}
+                  >
+                    {size}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <textarea
+              ref={textInputRef}
+              value={textInputValue}
+              onChange={(e) => {
+                setTextInputValue(e.target.value);
+                e.currentTarget.style.height = 'auto';
+                const availableHeight = Math.max(112, window.innerHeight - textInputPos.y - 92);
+                e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, availableHeight)}px`;
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submitTextInput();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  clearTextInput();
+                }
+              }}
+              autoFocus
+              aria-label="Text to add to the canvas"
+              aria-describedby="text-entry-hint"
+              placeholder="Write a note…"
+              className="min-h-[112px] w-full resize-none overflow-y-auto bg-transparent px-3 py-3 leading-[1.4] text-stone-900 outline-none placeholder:text-stone-400 dark:text-stone-100 dark:placeholder:text-stone-600"
+              style={{
+                fontSize: `${textFontSize}px`,
+                color: brushColor,
+              }}
+            />
+            <div className="flex items-center justify-between gap-2 border-t border-stone-200 bg-stone-100/50 px-3 py-2.5 dark:border-white/[0.08] dark:bg-white/[0.02]">
+              <span id="text-entry-hint" className="text-[11px] text-stone-500 dark:text-stone-400">
+                ⌘/Ctrl+Enter to place
+              </span>
+              <div className="flex shrink-0 gap-1.5">
+                <Button size="sm" variant="ghost" onClick={clearTextInput}>
+                  Discard
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-stone-900 text-amber-100 hover:bg-stone-800 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
+                  onClick={submitTextInput}
+                  disabled={!textInputValue.trim()}
+                >
+                  Place text
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
       <ShortcutsDialog
         mode="draw"
         open={showShortcuts}

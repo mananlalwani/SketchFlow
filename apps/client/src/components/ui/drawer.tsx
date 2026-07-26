@@ -20,10 +20,18 @@ const DrawerClose = DrawerPrimitive.Close;
 const DrawerOverlay = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, onPointerDown, onClick, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
     className={cn('fixed inset-0 z-50 bg-black/60 backdrop-blur-sm', className)}
+    onPointerDown={(event) => {
+      event.stopPropagation();
+      onPointerDown?.(event);
+    }}
+    onClick={(event) => {
+      event.stopPropagation();
+      onClick?.(event);
+    }}
     {...props}
   />
 ));
@@ -38,12 +46,12 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        'surface-raised fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-2xl bg-background',
+        'surface-raised fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[1.35rem] bg-background shadow-2xl shadow-stone-950/20',
         className,
       )}
       {...props}
     >
-      <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
+      <div className="mx-auto mt-4 h-1.5 w-12 rounded-full bg-muted" />
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>

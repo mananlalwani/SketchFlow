@@ -73,6 +73,7 @@ export function DrawingToolbar() {
   const {
     currentTool,
     brushSize,
+    textFontSize,
     brushOpacity,
     shapeFilled,
     triangleMode,
@@ -86,6 +87,7 @@ export function DrawingToolbar() {
     setTool,
     setEraserMode,
     setBrushSize,
+    setTextFontSize,
     setBrushOpacity,
     setShapeFilled,
     setTriangleMode,
@@ -531,7 +533,7 @@ export function DrawingToolbar() {
         onClick={toggleToolbar}
         variant="glass"
         size="icon"
-        className="fixed top-20 left-4 z-40"
+        className="fixed left-4 top-20 z-40 border border-stone-200 bg-stone-50 shadow-lg shadow-stone-950/10 dark:border-white/[0.09] dark:bg-[#211e1b]"
         data-toolbar="true"
       >
         <Palette className="w-4 h-4" />
@@ -541,13 +543,13 @@ export function DrawingToolbar() {
 
   return (
     <div
-      className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/10 p-4 animate-fade-in relative z-40 transition-colors duration-200"
+      className="relative z-40 border-b border-stone-200/90 bg-stone-50/90 px-3 py-3 backdrop-blur-xl transition-colors duration-200 dark:border-white/[0.08] dark:bg-[#211e1b]/90 sm:px-4"
       data-toolbar="true"
     >
-      <div className="flex flex-wrap items-center gap-4 max-w-7xl mx-auto">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
         {/* Tool Selection */}
         <div
-          className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-white/10"
+          className="flex items-center gap-1 rounded-xl border border-stone-200/80 bg-stone-100/80 p-1.5 shadow-sm shadow-stone-950/[0.04] dark:border-white/[0.08] dark:bg-stone-900/70 dark:shadow-none"
           role="toolbar"
           aria-label="Drawing tools"
         >
@@ -561,15 +563,16 @@ export function DrawingToolbar() {
               variant={currentTool === id ? 'default' : 'ghost'}
               size="sm"
               className={cn(
-                'transition-[background-color,color,box-shadow,transform] duration-150 focus-visible-ring',
-                currentTool === id && 'bg-blue-600 hover:bg-blue-700',
+                'h-9 px-2.5 text-stone-600 transition-[background-color,color,box-shadow,transform] duration-150 focus-visible-ring hover:bg-white hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/[0.08] dark:hover:text-stone-50',
+                currentTool === id &&
+                  'bg-amber-300 text-stone-950 shadow-sm hover:bg-amber-200 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200',
               )}
               title={`${label} (${shortcut})`}
               aria-label={ariaLabel}
               aria-pressed={currentTool === id}
             >
               <Icon className="w-4 h-4" />
-              <span className="hidden md:inline ml-2">{label}</span>
+              <span className="ml-2 hidden xl:inline">{label}</span>
               <span className="sr-only">Keyboard shortcut: {shortcut}</span>
             </Button>
           ))}
@@ -577,14 +580,14 @@ export function DrawingToolbar() {
 
         {/* Shape constraint hint */}
         {['rectangle', 'ellipse'].includes(currentTool) && (
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-gray-400">
+          <div className="hidden items-center gap-2 text-xs text-stone-500 dark:text-stone-400 xl:flex">
             <span>
               💡 Hold Shift for perfect {currentTool === 'ellipse' ? 'circles' : 'squares'}
             </span>
           </div>
         )}
         {currentTool === 'triangle' && (
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-gray-400">
+          <div className="hidden items-center gap-2 text-xs text-stone-500 dark:text-stone-400 xl:flex">
             <span>
               💡{' '}
               {triangleMode === 'custom'
@@ -597,10 +600,10 @@ export function DrawingToolbar() {
         {/* Triangle Mode Selector */}
         {currentTool === 'triangle' && (
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[80px]">
+            <label className="min-w-[80px] text-sm font-medium text-stone-700 dark:text-stone-300">
               Triangle Type:
             </label>
-            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded border border-slate-200 dark:border-white/10">
+            <div className="flex items-center gap-1 rounded-lg border border-stone-200/80 bg-stone-100/80 p-1 dark:border-white/[0.08] dark:bg-stone-900/70">
               <Button
                 onClick={() => setTriangleMode('custom')}
                 variant={triangleMode === 'custom' ? 'default' : 'ghost'}
@@ -641,10 +644,10 @@ export function DrawingToolbar() {
         <div className="flex items-center gap-4">
           {currentTool === 'eraser' && (
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[60px]">
+              <label className="min-w-[60px] text-sm font-medium text-stone-700 dark:text-stone-300">
                 Eraser:
               </label>
-              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded border border-slate-200 dark:border-white/10">
+              <div className="flex items-center gap-1 rounded-lg border border-stone-200/80 bg-stone-100/80 p-1 dark:border-white/[0.08] dark:bg-stone-900/70">
                 <Button
                   onClick={() => setEraserMode('partial')}
                   variant={eraserMode === 'partial' ? 'default' : 'ghost'}
@@ -664,24 +667,44 @@ export function DrawingToolbar() {
           )}
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[40px]">
-              Size:
+            <label className="min-w-[40px] text-sm font-medium text-stone-700 dark:text-stone-300">
+              {currentTool === 'text' ? 'Font:' : 'Size:'}
             </label>
             <Slider
-              value={[brushSize]}
-              onValueChange={([value]) => setBrushSize(value)}
-              min={1}
-              max={100}
+              value={[currentTool === 'text' ? textFontSize : brushSize]}
+              onValueChange={([value]) => {
+                if (currentTool === 'text') setTextFontSize(value);
+                else setBrushSize(value);
+              }}
+              min={currentTool === 'text' ? 12 : 1}
+              max={currentTool === 'text' ? 240 : 100}
               step={1}
               className="w-24"
             />
-            <span className="text-sm font-mono text-slate-500 dark:text-gray-400 min-w-[40px]">
-              {brushSize}px
-            </span>
+            <label className="flex h-8 items-center rounded-md border border-stone-300 bg-white pl-2 dark:border-white/[0.1] dark:bg-stone-950/30">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={currentTool === 'text' ? 12 : 1}
+                max={currentTool === 'text' ? 240 : 100}
+                value={currentTool === 'text' ? textFontSize : brushSize}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (!Number.isFinite(value)) return;
+                  if (currentTool === 'text') setTextFontSize(value);
+                  else setBrushSize(value);
+                }}
+                className="w-10 bg-transparent text-right font-mono text-sm text-stone-700 outline-none dark:text-stone-200"
+                aria-label={
+                  currentTool === 'text' ? 'Text font size in pixels' : 'Brush size in pixels'
+                }
+              />
+              <span className="px-2 font-mono text-xs text-stone-500">px</span>
+            </label>
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[60px]">
+            <label className="min-w-[60px] text-sm font-medium text-stone-700 dark:text-stone-300">
               Opacity:
             </label>
             <Slider
@@ -692,7 +715,7 @@ export function DrawingToolbar() {
               step={1}
               className="w-24"
             />
-            <span className="text-sm font-mono text-slate-500 dark:text-gray-400 min-w-[40px]">
+            <span className="min-w-[40px] font-mono text-sm text-stone-500 dark:text-stone-400">
               {Math.round(brushOpacity * 100)}%
             </span>
           </div>
@@ -703,7 +726,7 @@ export function DrawingToolbar() {
 
         {/* Fill toggle for shapes */}
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">
+          <label className="min-w-[36px] text-sm font-medium text-stone-700 dark:text-stone-300">
             Fill:
           </label>
           <Button
@@ -849,12 +872,12 @@ export function DrawingToolbar() {
         )}
 
         {/* Divider */}
-        <div className="h-8 w-px bg-slate-200 dark:bg-white/20" />
+        <div className="h-8 w-px bg-stone-200 dark:bg-white/[0.12]" />
 
         {/* Project Title, Status, and Actions Menu */}
         <div className="flex items-center gap-2 relative">
           <input
-            className="bg-slate-100 dark:bg-transparent border border-slate-300 dark:border-white/10 rounded px-2 py-1 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            className="rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-100 dark:focus:border-amber-300"
             value={projectTitle}
             onChange={(e) => setProjectTitle(e.target.value)}
             placeholder="Untitled"

@@ -14,6 +14,7 @@ describe('drawingStore', () => {
       documentVersion: 0,
       currentProjectId: undefined,
       brushSize: 4,
+      textFontSize: 24,
       brushColor: '#ffffff',
       brushOpacity: 1,
       isConnected: false,
@@ -52,6 +53,21 @@ describe('drawingStore', () => {
 
       setBrushSize(200);
       expect(useDrawingStore.getState().brushSize).toBe(100);
+    });
+
+    it('keeps text font size independent from brush size and within pixel bounds', () => {
+      const { setBrushSize, setTextFontSize } = useDrawingStore.getState();
+
+      setBrushSize(8);
+      setTextFontSize(48);
+      expect(useDrawingStore.getState().brushSize).toBe(8);
+      expect(useDrawingStore.getState().textFontSize).toBe(48);
+
+      setTextFontSize(1);
+      expect(useDrawingStore.getState().textFontSize).toBe(12);
+
+      setTextFontSize(300);
+      expect(useDrawingStore.getState().textFontSize).toBe(240);
     });
 
     it('should set brush color', () => {

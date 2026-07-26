@@ -57,4 +57,25 @@ describe('canvas selection geometry', () => {
     expect(findCanvasObjectIdAt(objects, 20, 25)).toBe('rotated');
     expect(findCanvasObjectIdAt(objects, 40, 10)).toBeNull();
   });
+
+  it('hit-tests text from its rendered top edge through every line', () => {
+    const objects = [
+      {
+        id: 'text',
+        type: 'text' as const,
+        x: 40,
+        y: 100,
+        width: 80,
+        height: 56,
+        text: 'First\nSecond',
+        fontSize: 20,
+        color: '#fff',
+        size: 1,
+      },
+    ];
+
+    expect(findCanvasObjectIdAt(objects, 60, 104)).toBe('text');
+    expect(findCanvasObjectIdAt(objects, 60, 150)).toBe('text');
+    expect(findCanvasObjectIdAt(objects, 60, 90)).toBeNull();
+  });
 });

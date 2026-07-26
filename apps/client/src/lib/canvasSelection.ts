@@ -122,8 +122,8 @@ export function findCanvasObjectIdAt(
       if (
         point.x >= object.x - tolerance &&
         point.x <= object.x + object.width + tolerance &&
-        point.y >= object.y - object.height / 2 - tolerance &&
-        point.y <= object.y + object.height / 2 + tolerance
+        point.y >= object.y - tolerance &&
+        point.y <= object.y + object.height + tolerance
       )
         return object.id;
     }
