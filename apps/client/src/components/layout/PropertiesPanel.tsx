@@ -246,7 +246,12 @@ export function PropertiesPanel() {
 
                 {FEATURES.AUTO_SHAPE && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-stone-700 dark:text-stone-200">Auto Shape</span>
+                    <span className="flex items-center gap-1.5 text-sm text-stone-700 dark:text-stone-200">
+                      Auto Shape
+                      <span className="rounded border border-amber-300/80 bg-amber-100 px-1 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-amber-800 dark:border-amber-300/30 dark:bg-amber-300/10 dark:text-amber-200">
+                        Beta
+                      </span>
+                    </span>
                     <Button
                       variant={autoShape ? 'default' : 'secondary'}
                       size="sm"
