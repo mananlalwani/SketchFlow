@@ -1393,7 +1393,15 @@ export function DrawingCanvas() {
                       fontSize: updatedObj.fontSize,
                       imageData: updatedObj.imageData,
                       points: updatedObj.points,
-                      properties: updatedObj.properties,
+                      // The worker only reads transforms from `properties`.
+                      // Preserve rotation in the incremental drag scene just
+                      // like the full-scene renderer does, otherwise a moved
+                      // rotated object temporarily renders unrotated.
+                      properties: {
+                        ...updatedObj.properties,
+                        rotation: updatedObj.rotation ?? 0,
+                        hidden: updatedObj.hidden ?? false,
+                      },
                       timestamp: Date.now(),
                     };
                     workerRef.current?.postMessage({

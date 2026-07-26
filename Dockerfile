@@ -89,7 +89,24 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy the deployed application from builder
 COPY --from=builder --chown=sketchflow:nodejs /app/deploy .
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist /app/client/dist
+# Keep client output in separately cached layers. New app code does not force a
+# VPS to re-download unchanged vendors or optional PDF/canvas workers.
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/index.html /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/manifest.webmanifest /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/sw.js /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/registerSW.js /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/workbox-*.js /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/favicon.ico /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/apple-touch-icon.png /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/masked-icon.svg /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/pwa-192x192.png /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/pwa-512x512.png /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/vite.svg /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/rendererWorker-*.js /app/client/dist/assets/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/vendor /app/client/dist/assets/vendor
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/styles /app/client/dist/assets/styles
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/workers /app/client/dist/assets/workers
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/app /app/client/dist/assets/app
 
 # Environment variables
 ENV NODE_ENV=production

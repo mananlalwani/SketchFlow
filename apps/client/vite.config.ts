@@ -56,9 +56,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         // PDF tooling is requested explicitly and must not inflate first-install precache.
         globIgnores: [
-          'assets/pdf-*.js',
-          'assets/pdf.worker.*',
-          'assets/DrawingCanvas-*.js',
+          'assets/app/pdf-*.js',
+          'assets/workers/pdf.worker.*',
+          'assets/app/DrawingCanvas-*.js',
           'assets/rendererWorker-*.js',
         ],
         runtimeCaching: [
@@ -113,10 +113,25 @@ export default defineConfig({
     sourcemap: sentryUploadEnabled ? 'hidden' : false,
     rollupOptions: {
       output: {
-        // Content-hash based filenames for cache busting
-        entryFileNames: 'assets/[name]-[hash].js',
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
+        // Keep stable third-party code and optional workers in their own paths.
+        // The production Dockerfile copies each path as a separate image layer,
+        // so an application-only deploy reuses large vendor layers on a VPS.
+        entryFileNames: 'assets/app/[name]-[hash].js',
+        chunkFileNames: (chunk) => {
+          if (['vendor', 'socket', 'ui', 'clerk'].includes(chunk.name)) {
+            return 'assets/vendor/[name]-[hash].js';
+          }
+          if (chunk.name.toLowerCase().includes('worker')) {
+            return 'assets/workers/[name]-[hash].js';
+          }
+          return 'assets/app/[name]-[hash].js';
+        },
+        assetFileNames: (asset) => {
+          const name = asset.names?.[0]?.toLowerCase() ?? '';
+          if (name.endsWith('.css')) return 'assets/styles/[name]-[hash][extname]';
+          if (name.includes('worker')) return 'assets/workers/[name]-[hash][extname]';
+          return 'assets/app/[name]-[hash][extname]';
+        },
         manualChunks: {
           vendor: ['react', 'react-dom'],
           socket: ['socket.io-client'],
