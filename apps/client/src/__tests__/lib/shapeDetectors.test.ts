@@ -26,6 +26,16 @@ const ellipseStroke: Point[] = Array.from({ length: 49 }, (_, index) => {
   return { x: 100 + Math.cos(angle) * 60, y: 100 + Math.sin(angle) * 35 };
 });
 
+const circleStroke: Point[] = Array.from({ length: 49 }, (_, index) => {
+  const angle = (index / 48) * Math.PI * 2;
+  return { x: 100 + Math.cos(angle) * 55, y: 100 + Math.sin(angle) * 55 };
+});
+
+const parabolaStroke: Point[] = Array.from({ length: 25 }, (_, index) => {
+  const x = index * 8;
+  return { x, y: 30 + (x - 96) ** 2 / 150 };
+});
+
 describe('shape detection pipeline', () => {
   it('returns no candidate for an empty stroke', () => {
     const result = detectShapes([]);
@@ -59,6 +69,23 @@ describe('shape detection pipeline', () => {
     expect(result.detectedShape?.shape.points).toHaveLength(4);
   });
 
+  it('accepts a lightly jittered rectangle instead of requiring perfect pointer samples', () => {
+    const points = closedPolygon([
+      { x: 20, y: 20 },
+      { x: 160, y: 20 },
+      { x: 160, y: 90 },
+      { x: 20, y: 90 },
+    ]).map((point, index) => ({
+      x: point.x + (index % 3 === 0 ? 1.5 : -0.8),
+      y: point.y + (index % 4 === 0 ? -1.2 : 0.6),
+    }));
+    points[points.length - 1] = points[0];
+
+    expect(
+      detectShapes(points, { enabledDetectors: ['rectangle'] }).detectedShape?.shape.type,
+    ).toBe('rectangle');
+  });
+
   it('distinguishes triangles from rectangles', () => {
     const result = detectShapes(
       closedPolygon([
@@ -78,6 +105,51 @@ describe('shape detection pipeline', () => {
 
     expect(result.detectedShape?.shape.type).toBe('ellipse');
     expect(result.detectedShape?.error).toBeLessThan(0.1);
+  });
+
+  it('distinguishes circles from ellipses using their axis ratio', () => {
+    const result = detectShapes(circleStroke, { enabledDetectors: ['ellipse', 'circle'] });
+
+    expect(result.detectedShape?.shape.type).toBe('circle');
+  });
+
+  it('fits an open quadratic stroke and exposes its editable orientation', () => {
+    const result = detectShapes(parabolaStroke, { enabledDetectors: ['parabola'] });
+
+    expect(result.detectedShape?.shape.type).toBe('parabola');
+    expect(result.detectedShape?.shape.properties?.orientation).toBe('down');
+    expect(result.detectedShape?.error).toBeLessThan(0.05);
+  });
+
+  it('does not convert a jagged freehand stroke into a supported shape', () => {
+    const scribble: Point[] = [
+      { x: 0, y: 0 },
+      { x: 40, y: 50 },
+      { x: 10, y: 110 },
+      { x: 95, y: 80 },
+      { x: 45, y: 170 },
+      { x: 150, y: 125 },
+    ];
+
+    expect(detectShapes(scribble).detectedShape).toBeNull();
+  });
+
+  it('returns candidates only when requested so normal drawing stays lightweight', () => {
+    const pipeline = createDetectionPipeline({ enabledDetectors: ['line'] });
+
+    expect(pipeline.detectShape(horizontalStroke).allCandidates).toEqual([]);
+    expect(
+      pipeline.detectShape(horizontalStroke, { returnAllCandidates: true }).allCandidates,
+    ).toHaveLength(1);
+  });
+
+  it('honors a caller confidence threshold before converting a stroke', () => {
+    const result = detectShapes(horizontalStroke, {
+      enabledDetectors: ['line'],
+      thresholds: { minConfidence: 1.01 },
+    });
+
+    expect(result.detectedShape).toBeNull();
   });
 
   it('honors enabled-detector filtering and keeps its default pipeline resettable', () => {
