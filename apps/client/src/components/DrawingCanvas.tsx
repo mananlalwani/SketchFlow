@@ -704,7 +704,9 @@ export function DrawingCanvas() {
 
       try {
         const result = detectShapes(points, {
-          debugMode: true,
+          // Shape recognition is intentionally silent during drawing. The pipeline
+          // returns a candidate only when it clears its confidence threshold.
+          debugMode: false,
           thresholds: {
             minConfidence: 0.5,
             maxError: 0.3,

@@ -12,15 +12,6 @@ export type { ShapeDetectionResult, DetectionOptions } from './ShapeDetectionPip
 export type { DetectionResult, DetectedShape, ShapeDetector, DetectionThresholds } from './types';
 export { DEFAULT_THRESHOLDS, createDetectedShape } from './types';
 
-// Individual detectors
-export { LineDetector } from './LineDetector';
-export { RectangleDetector } from './RectangleDetector';
-export { EllipseDetector } from './EllipseDetector';
-export { TriangleDetector } from './TriangleDetector';
-export { ParabolaDetector } from './ParabolaDetector';
-export { ArrowDetector } from './ArrowDetector';
-export { StarDetector } from './StarDetector';
-
 // Convenience function for quick shape detection
 import { ShapeDetectionPipeline } from './ShapeDetectionPipeline';
 import type { Point } from '../geometry';
