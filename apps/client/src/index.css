@@ -4,49 +4,53 @@
 
 @layer base {
   :root {
-    /* Light theme */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    /* Studio desk — warm paper in light, graphite in dark. */
+    --background: 42 33% 97%;
+    --foreground: 24 15% 12%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card: 40 43% 99%;
+    --card-foreground: 24 15% 12%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
+    --popover: 40 43% 99%;
+    --popover-foreground: 24 15% 12%;
 
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 24 15% 12%;
+    --primary-foreground: 43 45% 98%;
 
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
+    --secondary: 36 25% 92%;
+    --secondary-foreground: 24 15% 12%;
 
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    --muted: 36 25% 92%;
+    --muted-foreground: 26 10% 42%;
 
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --accent: 42 46% 89%;
+    --accent-foreground: 24 15% 12%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --border: 32 17% 84%;
+    --input: 32 17% 84%;
+    --ring: 38 82% 46%;
 
     --radius: 0.5rem;
-    --surface-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
-    --surface-shadow-hover: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06);
+    --surface-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06),
+      0 2px 4px rgba(0, 0, 0, 0.04);
+    --surface-shadow-hover:
+      0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08),
+      0 2px 4px rgba(0, 0, 0, 0.06);
 
     /* App-specific light theme colors */
-    --app-bg: 210 20% 98%;
-    --app-surface: 0 0% 100%;
-    --app-surface-hover: 210 20% 96%;
-    --app-border: 214 32% 91%;
-    --app-text: 222 47% 11%;
-    --app-text-muted: 215 16% 47%;
-    --app-canvas-bg: 0 0% 100%;
-    --app-sidebar-bg: 210 20% 96%;
-    --app-topbar-bg: 0 0% 100%;
+    --app-bg: 42 33% 97%;
+    --app-surface: 40 43% 99%;
+    --app-surface-hover: 36 25% 92%;
+    --app-border: 32 17% 84%;
+    --app-text: 24 15% 12%;
+    --app-text-muted: 26 10% 42%;
+    --app-canvas-bg: 42 33% 97%;
+    --app-sidebar-bg: 38 30% 94%;
+    --app-topbar-bg: 40 43% 99%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -55,47 +59,46 @@
   }
 
   .dark {
-    /* Dark theme */
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
+    --background: 24 12% 8%;
+    --foreground: 40 28% 94%;
 
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
+    --card: 24 11% 11%;
+    --card-foreground: 40 28% 94%;
 
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 24 11% 11%;
+    --popover-foreground: 40 28% 94%;
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
+    --primary: 42 86% 66%;
+    --primary-foreground: 24 15% 12%;
 
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 24 9% 17%;
+    --secondary-foreground: 40 28% 94%;
 
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted: 24 9% 17%;
+    --muted-foreground: 32 12% 63%;
 
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 30 12% 21%;
+    --accent-foreground: 40 28% 94%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 26 9% 22%;
+    --input: 26 9% 22%;
+    --ring: 42 86% 66%;
     --surface-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
     --surface-shadow-hover: 0 0 0 1px rgba(255, 255, 255, 0.13);
 
     /* App-specific dark theme colors */
-    --app-bg: 222 47% 4%;
-    --app-surface: 222 47% 8%;
-    --app-surface-hover: 222 47% 12%;
-    --app-border: 217 33% 17%;
-    --app-text: 210 40% 98%;
-    --app-text-muted: 215 20% 65%;
-    --app-canvas-bg: 222 47% 11%;
-    --app-sidebar-bg: 222 47% 6%;
-    --app-topbar-bg: 222 47% 7%;
+    --app-bg: 24 12% 8%;
+    --app-surface: 24 11% 11%;
+    --app-surface-hover: 27 10% 15%;
+    --app-border: 26 9% 22%;
+    --app-text: 40 28% 94%;
+    --app-text-muted: 32 12% 63%;
+    --app-canvas-bg: 24 10% 10%;
+    --app-sidebar-bg: 24 12% 7%;
+    --app-topbar-bg: 24 12% 9%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -104,45 +107,45 @@
   }
 
   .light {
-    /* Explicit light theme (same as :root) */
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    /* Explicit light theme — keep it distinct from dark, never a dark override. */
+    --background: 42 33% 97%;
+    --foreground: 24 15% 12%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card: 40 43% 99%;
+    --card-foreground: 24 15% 12%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover: 40 43% 99%;
+    --popover-foreground: 24 15% 12%;
 
-    --primary: 221 83% 45%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 24 15% 12%;
+    --primary-foreground: 43 45% 98%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 36 25% 92%;
+    --secondary-foreground: 24 15% 12%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 36 25% 92%;
+    --muted-foreground: 26 10% 42%;
 
-    --accent: 221 83% 53%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 42 46% 89%;
+    --accent-foreground: 24 15% 12%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --border: 32 17% 84%;
+    --input: 32 17% 84%;
+    --ring: 38 82% 46%;
 
     /* App-specific light theme colors */
-    --app-bg: 210 20% 98%;
-    --app-surface: 0 0% 100%;
-    --app-surface-hover: 210 20% 96%;
-    --app-border: 214 32% 91%;
-    --app-text: 222 47% 11%;
-    --app-text-muted: 215 16% 47%;
-    --app-canvas-bg: 0 0% 100%;
-    --app-sidebar-bg: 210 20% 96%;
-    --app-topbar-bg: 0 0% 100%;
+    --app-bg: 42 33% 97%;
+    --app-surface: 40 43% 99%;
+    --app-surface-hover: 36 25% 92%;
+    --app-border: 32 17% 84%;
+    --app-text: 24 15% 12%;
+    --app-text-muted: 26 10% 42%;
+    --app-canvas-bg: 42 33% 97%;
+    --app-sidebar-bg: 38 30% 94%;
+    --app-topbar-bg: 40 43% 99%;
   }
 }
 
@@ -160,16 +163,21 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+    font-family: ui-sans-serif, system-ui, sans-serif;
     overscroll-behavior: none;
   }
 
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     text-wrap: balance;
   }
 
-  p, figcaption {
+  p,
+  figcaption {
     text-wrap: pretty;
   }
 }
@@ -177,17 +185,17 @@
 @layer components {
   /* Glass morphism effects */
   .glass {
-    @apply bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-xl border border-white/20 shadow-2xl;
+    @apply bg-white/70 backdrop-blur-xl border border-black/[0.07] shadow-lg shadow-stone-950/[0.06];
   }
-  .light .glass {
-    @apply from-black/5 via-black/5 to-transparent border-black/10;
+  .dark .glass {
+    @apply bg-stone-950/70 border-white/[0.08] shadow-black/30;
   }
-  
+
   .glass-button {
-    @apply glass hover:from-white/15 hover:via-white/10 hover:to-transparent active:scale-[0.96] transition-[background-image,box-shadow,transform] duration-200 ease-out;
+    @apply glass hover:bg-white active:scale-[0.96] transition-[background-color,box-shadow,transform] duration-200 ease-out;
   }
-  .light .glass-button {
-    @apply hover:from-black/10 hover:via-black/5;
+  .dark .glass-button {
+    @apply hover:bg-stone-900;
   }
 
   .glass-card {
@@ -198,7 +206,7 @@
   .app-bg {
     background-color: hsl(var(--app-bg));
   }
-  
+
   .app-surface {
     background-color: hsl(var(--app-surface));
   }
@@ -221,10 +229,10 @@
 
   /* Theme-aware gradient backgrounds */
   .gradient-bg {
-    @apply bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50;
+    @apply bg-gradient-to-br from-amber-50 via-stone-50 to-orange-50;
   }
   .dark .gradient-bg {
-    @apply bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950;
+    @apply bg-gradient-to-br from-stone-950 via-stone-900 to-amber-950/30;
   }
 
   .gradient-text {
@@ -233,40 +241,40 @@
 
   /* Theme-aware borders */
   .theme-border {
-    @apply border-slate-200;
+    @apply border-stone-200;
   }
   .dark .theme-border {
-    @apply border-white/10;
+    @apply border-white/[0.08];
   }
 
   /* Theme-aware surfaces */
   .theme-surface {
-    @apply bg-white;
+    @apply bg-stone-50;
   }
   .dark .theme-surface {
-    @apply bg-slate-900;
+    @apply bg-stone-950;
   }
 
   .theme-surface-elevated {
-    @apply bg-white shadow-sm;
+    @apply bg-stone-50 shadow-sm shadow-stone-950/[0.06];
   }
   .dark .theme-surface-elevated {
-    @apply bg-slate-800/50 shadow-none;
+    @apply bg-stone-900/70 shadow-none;
   }
 
   /* Theme-aware text */
   .theme-text {
-    @apply text-slate-900;
+    @apply text-stone-900;
   }
   .dark .theme-text {
-    @apply text-slate-100;
+    @apply text-stone-100;
   }
 
   .theme-text-muted {
-    @apply text-slate-500;
+    @apply text-stone-500;
   }
   .dark .theme-text-muted {
-    @apply text-slate-400;
+    @apply text-stone-400;
   }
 
   /* Color picker styles */
@@ -276,7 +284,7 @@
   .light .color-preview {
     @apply ring-black/10;
   }
-  
+
   .color-swatch {
     @apply transition-[transform,box-shadow] duration-200 hover:scale-110 hover:shadow-lg active:scale-[0.96];
   }
@@ -343,17 +351,17 @@ canvas {
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(28, 25, 23, 0.7);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.5), rgba(6, 182, 212, 0.5));
+  background: linear-gradient(to bottom, rgba(217, 119, 6, 0.58), rgba(180, 83, 9, 0.58));
   border-radius: 9999px;
-  border: 2px solid rgba(15, 23, 42, 0.5);
+  border: 2px solid rgba(28, 25, 23, 0.7);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.7), rgba(6, 182, 212, 0.7));
+  background: linear-gradient(to bottom, rgba(245, 158, 11, 0.72), rgba(217, 119, 6, 0.72));
 }
 
 /* Custom scrollbar - Light theme */
@@ -362,17 +370,17 @@ canvas {
 }
 
 .light ::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 1);
+  background: rgba(245, 245, 244, 1);
 }
 
 .light ::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.4), rgba(6, 182, 212, 0.4));
+  background: linear-gradient(to bottom, rgba(217, 119, 6, 0.42), rgba(180, 83, 9, 0.42));
   border-radius: 9999px;
-  border: 2px solid rgba(241, 245, 249, 1);
+  border: 2px solid rgba(245, 245, 244, 1);
 }
 
 .light ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.6), rgba(6, 182, 212, 0.6));
+  background: linear-gradient(to bottom, rgba(245, 158, 11, 0.62), rgba(217, 119, 6, 0.62));
 }
 
 /* Smooth animations */
@@ -447,11 +455,11 @@ canvas {
   .theme-border {
     @apply border-2;
   }
-  
+
   .tool-button {
     @apply border-2;
   }
-  
+
   button:focus-visible {
     @apply outline-4 outline-offset-2;
   }

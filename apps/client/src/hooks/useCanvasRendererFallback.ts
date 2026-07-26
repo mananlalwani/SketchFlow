@@ -82,7 +82,13 @@ export function useCanvasRendererFallback(
           }
         } else if (object.type === 'text' && object.text) {
           context.font = `${object.fontSize ?? 16}px sans-serif`;
-          context.fillText(object.text, object.x, object.y);
+          context.textBaseline = 'top';
+          const lineHeight = (object.fontSize ?? 16) * 1.4;
+          const textX = object.x ?? 0;
+          const textY = object.y ?? 0;
+          object.text.split('\n').forEach((line, index) => {
+            context.fillText(line, textX, textY + index * lineHeight);
+          });
         } else {
           context.beginPath();
           context.moveTo(object.x, object.y);

@@ -7,6 +7,7 @@ import {
 } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AppStatePage } from '@/components/AppStatePage';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useSocket } from '@/hooks/useSocket';
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -155,7 +156,7 @@ function EditorRoute() {
   return (
     <Layout hideDrawingTools={projectRole === 'viewer'}>
       <AutoSaveHandler />
-      <Suspense fallback={null}>
+      <Suspense fallback={<AppStatePage kind="loading" />}>
         <DrawingCanvas />
       </Suspense>
       {!showTutorial && <EmptyStateHint />}
@@ -184,7 +185,7 @@ function App() {
           {/* Editor Route wrapped in Layout with logic */}
           <Route path="/draw" element={<EditorRoute />} />
 
-          <Route path="*" element={<Navigate to="/draw" replace />} />
+          <Route path="*" element={<AppStatePage kind="not-found" />} />
         </Routes>
         <Toaster />
       </Router>

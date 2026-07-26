@@ -6,6 +6,7 @@ import {
   Copy,
   Lock,
   RotateCcw,
+  Trash2,
   Unlock,
 } from 'lucide-react';
 
@@ -28,12 +29,12 @@ function duplicateObject(object: DrawingObject): DrawingObject {
 
 function textDimensions(text: string, fontSize: number) {
   const context = document.createElement('canvas').getContext('2d');
-  if (!context) return { width: fontSize, height: fontSize * 1.2 };
+  if (!context) return { width: fontSize, height: fontSize * 1.4 };
   context.font = `${fontSize}px Inter, system-ui, sans-serif`;
   const lines = text.split('\n');
   return {
     width: Math.max(...lines.map((line) => context.measureText(line).width), fontSize),
-    height: Math.max(1, lines.length) * fontSize * 1.2,
+    height: Math.max(1, lines.length) * fontSize * 1.4,
   };
 }
 
@@ -219,9 +220,18 @@ export function SelectionInspector() {
     requestFullRedraw();
   };
 
+  const deleteSelected = () => {
+    if (!isEditable || hasLockedSelection || selectedObjectIds.length === 0) return;
+    const ids = new Set(selectedObjectIds);
+    saveHistory();
+    setObjects(objects.filter((candidate) => !ids.has(candidate.id)));
+    setSelectedObject(undefined);
+    requestFullRedraw();
+  };
+
   if (isMultiSelection) {
     return (
-      <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-500/30 dark:bg-blue-500/[0.08]">
+      <section className="space-y-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700 dark:text-blue-300">
             {selectedObjects.length} objects selected
@@ -310,6 +320,16 @@ export function SelectionInspector() {
         </Button>
         <Button
           className="w-full"
+          size="sm"
+          variant="destructive"
+          disabled={!isEditable || hasLockedSelection}
+          onClick={deleteSelected}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete selected objects
+        </Button>
+        <Button
+          className="w-full"
           variant="ghost"
           size="sm"
           onClick={() => setSelectedObject(undefined)}
@@ -337,9 +357,10 @@ export function SelectionInspector() {
   };
 
   const updateFontSize = (fontSize: number) => {
+    const nextFontSize = Math.max(12, Math.min(240, Math.round(fontSize)));
     saveHistory();
-    const dimensions = textDimensions(object.text || ' ', fontSize);
-    updateObject(object.id, { fontSize, ...dimensions });
+    const dimensions = textDimensions(object.text || ' ', nextFontSize);
+    updateObject(object.id, { fontSize: nextFontSize, ...dimensions });
   };
 
   const resize = (dimension: 'width' | 'height', rawValue: string) => {
@@ -376,7 +397,7 @@ export function SelectionInspector() {
   };
 
   return (
-    <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-500/30 dark:bg-blue-500/[0.08]">
+    <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700 dark:text-blue-300">
@@ -418,7 +439,7 @@ export function SelectionInspector() {
             const name = event.target.value.trim();
             if (name !== (object.name ?? '')) updateObject(object.id, { name: name || undefined });
           }}
-          className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+          className="h-9 w-full rounded-md border border-stone-300 bg-white px-2 text-sm text-stone-900 outline-none focus:border-amber-500 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-100 dark:focus:border-amber-300"
         />
       </div>
 
@@ -441,7 +462,7 @@ export function SelectionInspector() {
       </div>
 
       {object.x !== undefined && object.y !== undefined && (
-        <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-stone-200 pt-3 dark:border-white/[0.08]">
           <div>
             <p className="text-sm text-slate-600 dark:text-slate-300">Position</p>
             <p className="text-xs text-slate-400">
@@ -530,7 +551,7 @@ export function SelectionInspector() {
       )}
 
       {object.type === 'text' && (
-        <div className="space-y-3 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+        <div className="space-y-3 border-t border-stone-200 pt-3 dark:border-white/[0.08]">
           <label
             className="block text-sm text-slate-600 dark:text-slate-300"
             htmlFor="selected-text"
@@ -543,17 +564,33 @@ export function SelectionInspector() {
             defaultValue={object.text}
             disabled={isReadOnly}
             onBlur={(event) => updateText(event.target.value)}
-            className="min-h-20 w-full rounded-md border border-slate-200 bg-white p-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+            className="min-h-20 w-full rounded-md border border-stone-300 bg-white p-2 text-sm text-stone-900 outline-none focus:border-amber-500 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-100 dark:focus:border-amber-300"
           />
           <div className="space-y-2">
-            <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
-              <span>Font size</span>
-              <span>{object.fontSize ?? 24}px</span>
+            <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
+              <label htmlFor="selected-text-font-size">Font size</label>
+              <label className="flex h-9 items-center rounded-md border border-stone-300 bg-white pl-2 dark:border-white/[0.1] dark:bg-stone-950/30">
+                <input
+                  id="selected-text-font-size"
+                  type="number"
+                  inputMode="numeric"
+                  min="12"
+                  max="240"
+                  value={object.fontSize ?? 24}
+                  disabled={isReadOnly}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isFinite(value)) updateFontSize(value);
+                  }}
+                  className="w-12 bg-transparent text-right font-mono text-sm text-stone-700 outline-none dark:text-stone-200"
+                />
+                <span className="px-2 font-mono text-xs text-stone-500">px</span>
+              </label>
             </div>
             <Slider
               value={[object.fontSize ?? 24]}
               min={12}
-              max={120}
+              max={240}
               step={1}
               disabled={isReadOnly}
               onPointerDown={saveHistory}
@@ -564,7 +601,7 @@ export function SelectionInspector() {
       )}
 
       {canResize && (
-        <div className="grid grid-cols-2 gap-2 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+        <div className="grid grid-cols-2 gap-2 border-t border-stone-200 pt-3 dark:border-white/[0.08]">
           <label className="space-y-1 text-xs text-slate-500" htmlFor="selected-object-width">
             Width
             <input
@@ -575,7 +612,7 @@ export function SelectionInspector() {
               disabled={isReadOnly}
               onFocus={saveHistory}
               onBlur={(event) => resize('width', event.target.value)}
-              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+              className="h-9 w-full rounded-md border border-stone-300 bg-white px-2 text-sm text-stone-900 outline-none focus:border-amber-500 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-100 dark:focus:border-amber-300"
             />
           </label>
           <label className="space-y-1 text-xs text-slate-500" htmlFor="selected-object-height">
@@ -588,14 +625,14 @@ export function SelectionInspector() {
               disabled={isReadOnly}
               onFocus={saveHistory}
               onBlur={(event) => resize('height', event.target.value)}
-              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+              className="h-9 w-full rounded-md border border-stone-300 bg-white px-2 text-sm text-stone-900 outline-none focus:border-amber-500 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-100 dark:focus:border-amber-300"
             />
           </label>
         </div>
       )}
 
       {object.type !== 'stroke' && (
-        <div className="space-y-2 border-t border-blue-200 pt-3 dark:border-blue-500/20">
+        <div className="space-y-2 border-t border-stone-200 pt-3 dark:border-white/[0.08]">
           <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
             <span>Rotation</span>
             <span>{Math.round(rotation)}°</span>
@@ -641,7 +678,7 @@ export function SelectionInspector() {
         </div>
       )}
 
-      <div className="border-t border-blue-200 pt-3 dark:border-blue-500/20">
+      <div className="border-t border-stone-200 pt-3 dark:border-white/[0.08]">
         <Button variant="secondary" size="sm" disabled={isReadOnly} onClick={duplicate}>
           <Copy className="mr-2 h-4 w-4" /> Duplicate
         </Button>

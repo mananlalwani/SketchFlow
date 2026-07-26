@@ -11,15 +11,15 @@ interface LayoutProps {
 
 export function Layout({ children, hideDrawingTools }: LayoutProps) {
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden selection:bg-blue-500/30 transition-colors duration-200">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-stone-50 text-stone-900 selection:bg-amber-300/50 transition-colors duration-200 dark:bg-stone-950 dark:text-stone-100">
       <TopBar hideProjectControls={hideDrawingTools} />
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="relative flex flex-1 overflow-hidden">
         {!hideDrawingTools && (
           <div className="hidden sm:block">
             <Sidebar />
           </div>
         )}
-        <main className="flex-1 relative overflow-hidden bg-slate-100/50 dark:bg-slate-900/50 shadow-inner transition-colors duration-200">
+        <main className="relative flex-1 overflow-hidden bg-stone-100/50 shadow-inner shadow-stone-950/[0.03] transition-colors duration-200 dark:bg-stone-900/30 dark:shadow-none">
           {children}
         </main>
         {!hideDrawingTools && (

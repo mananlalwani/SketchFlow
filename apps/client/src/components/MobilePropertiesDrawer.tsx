@@ -51,6 +51,8 @@ export function MobilePropertiesDrawer({
     setBrushColor,
     brushSize,
     setBrushSize,
+    textFontSize,
+    setTextFontSize,
     brushOpacity,
     setBrushOpacity,
     currentTool,
@@ -105,7 +107,7 @@ export function MobilePropertiesDrawer({
                       className={cn(
                         'w-8 h-8 rounded-full border-2 transition-transform',
                         brushColor === color
-                          ? 'border-blue-500 scale-110'
+                          ? 'border-amber-400 scale-110 shadow-sm shadow-amber-500/30'
                           : 'border-transparent hover:scale-105',
                       )}
                       style={{ backgroundColor: color }}
@@ -129,41 +131,38 @@ export function MobilePropertiesDrawer({
                   <label className="text-sm font-medium text-slate-500 dark:text-slate-400">
                     {currentTool === 'text' ? 'Font size' : 'Size'}
                   </label>
-                  <span className="text-xs text-slate-400">
-                    {currentTool === 'text' ? Math.max(16, brushSize * 2) : brushSize}px
-                  </span>
+                  <label className="flex h-9 items-center rounded-md border border-stone-300 bg-white pl-2 text-sm dark:border-white/[0.1] dark:bg-stone-950/30">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={currentTool === 'text' ? 12 : 1}
+                      max={currentTool === 'text' ? 240 : 100}
+                      value={currentTool === 'text' ? textFontSize : brushSize}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (!Number.isFinite(value)) return;
+                        if (currentTool === 'text') setTextFontSize(value);
+                        else setBrushSize(value);
+                      }}
+                      className="w-12 bg-transparent text-right font-mono tabular-nums text-stone-700 outline-none dark:text-stone-200"
+                      aria-label={
+                        currentTool === 'text' ? 'Text font size in pixels' : 'Brush size in pixels'
+                      }
+                    />
+                    <span className="px-2 font-mono text-xs text-stone-500">px</span>
+                  </label>
                 </div>
                 <Slider
-                  value={[brushSize]}
-                  min={1}
-                  max={currentTool === 'text' ? 50 : 100}
+                  value={[currentTool === 'text' ? textFontSize : brushSize]}
+                  min={currentTool === 'text' ? 12 : 1}
+                  max={currentTool === 'text' ? 240 : 100}
                   step={1}
-                  onValueChange={([val]) => setBrushSize(val)}
+                  onValueChange={([value]) => {
+                    if (currentTool === 'text') setTextFontSize(value);
+                    else setBrushSize(value);
+                  }}
                 />
               </div>
-
-              {currentTool === 'text' && (
-                <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                    Text note
-                  </p>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center dark:border-white/10 dark:bg-white/[0.03]">
-                    <span
-                      className="block truncate"
-                      style={{
-                        color: brushColor,
-                        fontSize: `${Math.min(32, Math.max(16, brushSize * 2))}px`,
-                      }}
-                    >
-                      Preview
-                    </span>
-                  </div>
-                  <p className="text-xs leading-5 text-slate-500">
-                    Tap the canvas, write your note, then tap Add text. Use Shift+Enter for a new
-                    line.
-                  </p>
-                </div>
-              )}
 
               {/* Opacity Slider */}
               <div className="space-y-3">
@@ -285,7 +284,7 @@ export function MobilePropertiesDrawer({
                   value={projectTitle}
                   onChange={(event) => setProjectTitle(event.target.value)}
                   placeholder="Untitled project"
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+                  className="h-10 w-full rounded-md border border-stone-200 bg-stone-50 px-3 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-400/20 dark:border-white/[0.08] dark:bg-stone-950 dark:text-stone-100"
                 />
                 <p className="text-xs text-slate-400">
                   {saveStatus === 'failed'
