@@ -344,9 +344,12 @@ export class ShapeDetectionPipeline {
     }
 
     if (isClosed) {
+      // `simplificationTolerance` is a world-pixel distance, matching the
+      // canvas setting. Treating 0.5 as a fraction of the board diagonal
+      // collapsed ordinary rectangles into a two-point path.
       const tolerance = Math.max(
         2,
-        diagonal * (options.strokeProcessingOptions?.simplificationTolerance ?? 0.025),
+        options.strokeProcessingOptions?.simplificationTolerance ?? diagonal * 0.025,
       );
       let vertices = simplify([...processedPoints, processedPoints[0]], tolerance).slice(0, -1);
       if (vertices.length > 1 && distance(vertices[0], vertices[vertices.length - 1]) < tolerance)
