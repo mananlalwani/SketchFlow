@@ -83,6 +83,9 @@ export function LayerStack({ className }: LayerStackProps) {
     saveHistory();
     removeObject(selectedObject.id);
     setSelectedObject(undefined);
+    // The canvas is retained-mode, so an object removal needs an explicit
+    // scene refresh just like reorder and visibility changes do.
+    requestFullRedraw();
   };
 
   return (
