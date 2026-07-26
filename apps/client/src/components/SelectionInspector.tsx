@@ -84,6 +84,10 @@ export function SelectionInspector() {
   const selectedObjects = objects.filter((candidate) => selectedObjectIds.includes(candidate.id));
   const isMultiSelection = selectedObjects.length > 1;
   const object = objects.find((candidate) => candidate.id === selectedObjectId);
+  const isEditable = projectRole !== 'viewer';
+  const hasLockedSelection = selectedObjects.some((candidate) => candidate.locked);
+  const allSelectedLocked =
+    selectedObjects.length > 0 && selectedObjects.every((candidate) => candidate.locked);
   const alignSelected = (axis: 'x' | 'y', edge: 'min' | 'max') => {
     const positioned = selectedObjects
       .map((object) => ({ object, bounds: objectBounds(object) }))
@@ -95,7 +99,7 @@ export function SelectionInspector() {
           bounds: NonNullable<ReturnType<typeof objectBounds>>;
         } => candidate.bounds !== null,
       );
-    if (positioned.length < 2) return;
+    if (!isEditable || hasLockedSelection || positioned.length < 2) return;
     const target =
       edge === 'min'
         ? Math.min(...positioned.map((candidate) => candidate.bounds[axis]))
@@ -134,7 +138,7 @@ export function SelectionInspector() {
         } => candidate.bounds !== null,
       )
       .sort((a, b) => a.bounds[axis] - b.bounds[axis]);
-    if (positioned.length < 3) return;
+    if (!isEditable || hasLockedSelection || positioned.length < 3) return;
     const first = positioned[0];
     const last = positioned[positioned.length - 1];
     const firstEdge = first.bounds[axis];
@@ -166,6 +170,7 @@ export function SelectionInspector() {
   };
 
   const groupSelected = () => {
+    if (!isEditable) return;
     const ids = expandObjectIdsWithGroups(objects, selectedObjectIds);
     if (ids.length < 2) return;
     saveHistory();
@@ -180,6 +185,7 @@ export function SelectionInspector() {
   };
 
   const ungroupSelected = () => {
+    if (!isEditable) return;
     const groupIds = new Set(
       selectedObjects
         .map((candidate) => candidate.groupId)
@@ -201,6 +207,18 @@ export function SelectionInspector() {
     requestFullRedraw();
   };
 
+  const toggleSelectedLocks = () => {
+    if (!isEditable || selectedObjects.length === 0) return;
+    saveHistory();
+    const ids = new Set(selectedObjectIds);
+    setObjects(
+      objects.map((candidate) =>
+        ids.has(candidate.id) ? { ...candidate, locked: !allSelectedLocked } : candidate,
+      ),
+    );
+    requestFullRedraw();
+  };
+
   if (isMultiSelection) {
     return (
       <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-500/30 dark:bg-blue-500/[0.08]">
@@ -209,38 +227,87 @@ export function SelectionInspector() {
             {selectedObjects.length} objects selected
           </p>
           <p className="text-xs text-slate-500">Drag any selected object to move the set.</p>
+          {hasLockedSelection && (
+            <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+              Unlock every selected object to align, space, or move the set.
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <Button size="sm" variant="secondary" onClick={() => alignSelected('x', 'min')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable || hasLockedSelection}
+            onClick={() => alignSelected('x', 'min')}
+          >
             Align left
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => alignSelected('x', 'max')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable || hasLockedSelection}
+            onClick={() => alignSelected('x', 'max')}
+          >
             Align right
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => alignSelected('y', 'min')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable || hasLockedSelection}
+            onClick={() => alignSelected('y', 'min')}
+          >
             Align top
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => alignSelected('y', 'max')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable || hasLockedSelection}
+            onClick={() => alignSelected('y', 'max')}
+          >
             Align bottom
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => distributeSelected('x')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable || hasLockedSelection}
+            onClick={() => distributeSelected('x')}
+          >
             Space across
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => distributeSelected('y')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable || hasLockedSelection}
+            onClick={() => distributeSelected('y')}
+          >
             Space down
           </Button>
-          <Button size="sm" variant="secondary" onClick={groupSelected}>
+          <Button size="sm" variant="secondary" disabled={!isEditable} onClick={groupSelected}>
             Group
           </Button>
           <Button
             size="sm"
             variant="secondary"
             onClick={ungroupSelected}
-            disabled={!selectedObjects.some((candidate) => candidate.groupId)}
+            disabled={!isEditable || !selectedObjects.some((candidate) => candidate.groupId)}
           >
             Ungroup
           </Button>
         </div>
+        <Button
+          className="w-full"
+          size="sm"
+          variant="secondary"
+          disabled={!isEditable}
+          onClick={toggleSelectedLocks}
+        >
+          {allSelectedLocked ? (
+            <Unlock className="mr-2 h-4 w-4" />
+          ) : (
+            <Lock className="mr-2 h-4 w-4" />
+          )}
+          {allSelectedLocked ? 'Unlock selected objects' : 'Lock selected objects'}
+        </Button>
         <Button
           className="w-full"
           variant="ghost"
@@ -254,7 +321,6 @@ export function SelectionInspector() {
   }
   if (!object) return null;
 
-  const isEditable = projectRole !== 'viewer';
   const isReadOnly = !isEditable || object.locked;
   const canFill = ['rectangle', 'ellipse', 'circle', 'triangle', 'star'].includes(object.type);
   const canResize =

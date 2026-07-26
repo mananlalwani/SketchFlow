@@ -1,6 +1,7 @@
 import { Layers, PenLine, Shapes, Type } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { expandObjectIdsWithGroups } from '@/lib/canvasObjectTransform';
 import { useDrawingStore } from '@/store/drawingStore';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +28,7 @@ export function LayerStack({ className }: LayerStackProps) {
     objects,
     selectedObjectIds,
     setSelectedObject,
-    toggleSelectedObject,
+    setSelectedObjects,
     updateObject,
     removeObject,
     saveHistory,
@@ -57,6 +58,18 @@ export function LayerStack({ className }: LayerStackProps) {
     // zIndex makes this reorder a batch of collaboration-visible updates.
     setObjects(next.map((object, zIndex) => ({ ...object, zIndex })));
     requestFullRedraw();
+  };
+
+  const selectLayer = (id: string, append: boolean) => {
+    const groupIds = expandObjectIdsWithGroups(objects, [id]);
+    if (!append) {
+      setSelectedObjects(groupIds);
+      return;
+    }
+    const nextIds = selectedObjectIds.includes(id)
+      ? selectedObjectIds.filter((selectedId) => !groupIds.includes(selectedId))
+      : [...selectedObjectIds, ...groupIds];
+    setSelectedObjects(nextIds);
   };
 
   const toggleVisibility = () => {
@@ -101,8 +114,7 @@ export function LayerStack({ className }: LayerStackProps) {
                     : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06]',
                 )}
                 onClick={(event) => {
-                  if (event.shiftKey) toggleSelectedObject(object.id);
-                  else setSelectedObject(object.id);
+                  selectLayer(object.id, event.shiftKey);
                 }}
                 aria-pressed={isSelected}
               >
@@ -116,9 +128,9 @@ export function LayerStack({ className }: LayerStackProps) {
                   <LayerGlyph type={object.type} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
-                {(object.hidden || object.locked) && (
+                {(object.hidden || object.locked || object.groupId) && (
                   <span className="text-[11px] text-slate-400">
-                    {object.hidden ? 'hidden' : 'locked'}
+                    {object.hidden ? 'hidden' : object.locked ? 'locked' : 'grouped'}
                   </span>
                 )}
               </button>
