@@ -69,7 +69,7 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface AuthenticatedRequest extends express.Request {
+export interface AuthenticatedRequest extends express.Request<Record<string, string>> {
   auth?: {
     userId: string | null;
     sessionId: string | null;
@@ -722,7 +722,7 @@ export class SketchFlowServer {
     this.app.use(errorHandlerMiddleware);
 
     // Serve React app for all other routes (SPA fallback)
-    this.app.get('*', (_req, res) => {
+    this.app.get('/{*splat}', (_req, res) => {
       res.sendFile(path.join(this.clientDistPath, 'index.html'));
     });
   }
