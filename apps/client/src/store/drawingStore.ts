@@ -246,7 +246,7 @@ export const useDrawingStore = create<DrawingState>()(
         showToolbar: true,
         viewMode: 'draw',
         shapeFilled: false,
-        triangleMode: 'custom',
+        triangleMode: 'right',
         starPoints: 5,
         autoShape: true,
         autoShapeThresholds: {
