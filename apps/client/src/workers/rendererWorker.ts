@@ -35,6 +35,7 @@ type StrokeMessage = {
 type Shape = {
   id: string;
   type:
+    | 'stroke'
     | 'line'
     | 'rectangle'
     | 'ellipse'
@@ -54,7 +55,7 @@ type Shape = {
   alpha: number;
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
-  points?: { x: number; y: number }[]; // For custom triangle vertices, arrows
+  points?: { x: number; y: number; width?: number }[]; // Strokes, custom triangle vertices, arrows
   text?: string;
   fontSize?: number;
   imageData?: string; // Base64 data URL for images
@@ -554,6 +555,7 @@ function blit() {
     for (let i = 0; i < retainedShapes.length; i++) {
       const sh = retainedShapes[i] as unknown as {
         type:
+          | 'stroke'
           | 'line'
           | 'rectangle'
           | 'ellipse'
@@ -573,7 +575,7 @@ function blit() {
         alpha?: number;
         filled?: boolean;
         orientation?: 'up' | 'down' | 'left' | 'right';
-        points?: { x: number; y: number }[];
+        points?: { x: number; y: number; width?: number }[];
         text?: string;
         fontSize?: number;
         imageData?: string;
@@ -640,6 +642,7 @@ function blit() {
     for (let i = 0; i < retainedShapes.length; i++) {
       const sh = retainedShapes[i] as unknown as {
         type:
+          | 'stroke'
           | 'line'
           | 'rectangle'
           | 'ellipse'
@@ -659,7 +662,7 @@ function blit() {
         alpha?: number;
         filled?: boolean;
         orientation?: 'up' | 'down' | 'left' | 'right';
-        points?: { x: number; y: number }[];
+        points?: { x: number; y: number; width?: number }[];
         text?: string;
         fontSize?: number;
         imageData?: string;
@@ -669,7 +672,10 @@ function blit() {
       // Skip images - already rendered above
       if (sh.type === 'image') continue;
       // For text, check position directly (text might have 0 width/height from old projects)
-      if (sh.type === 'text') {
+      if (sh.type === 'stroke') {
+        // Point-based strokes do not have a meaningful x/y bounding box.
+        // Keep them in the ordered scene and let their segment renderer clip.
+      } else if (sh.type === 'text') {
         if (sh.x < vx1 || sh.x > vx2 || sh.y < vy1 || sh.y > vy2) continue;
       } else {
         if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
@@ -684,7 +690,17 @@ function blit() {
       vectorSSCtx.fillStyle = adjustedShColor;
       applyObjectRotation(vectorSSCtx, sh);
       vectorSSCtx.beginPath();
-      if (sh.type === 'line') {
+      if (sh.type === 'stroke' && sh.points && sh.points.length > 1) {
+        for (let pointIndex = 1; pointIndex < sh.points.length; pointIndex++) {
+          const previous = sh.points[pointIndex - 1];
+          const point = sh.points[pointIndex];
+          vectorSSCtx.beginPath();
+          vectorSSCtx.moveTo(previous.x, previous.y);
+          vectorSSCtx.lineTo(point.x, point.y);
+          vectorSSCtx.lineWidth = point.width ?? sh.size;
+          vectorSSCtx.stroke();
+        }
+      } else if (sh.type === 'line') {
         vectorSSCtx.moveTo(sh.x, sh.y);
         vectorSSCtx.lineTo(sh.x + sh.width, sh.y + sh.height);
         vectorSSCtx.stroke();
@@ -871,6 +887,7 @@ function blit() {
   for (let i = 0; i < retainedShapes.length; i++) {
     const sh = retainedShapes[i] as unknown as {
       type:
+        | 'stroke'
         | 'line'
         | 'rectangle'
         | 'ellipse'
@@ -890,7 +907,7 @@ function blit() {
       alpha?: number;
       filled?: boolean;
       orientation?: 'up' | 'down' | 'left' | 'right';
-      points?: { x: number; y: number }[];
+      points?: { x: number; y: number; width?: number }[];
       text?: string;
       fontSize?: number;
       imageData?: string;
@@ -963,6 +980,7 @@ function blit() {
   for (let i = 0; i < retainedShapes.length; i++) {
     const sh = retainedShapes[i] as unknown as {
       type:
+        | 'stroke'
         | 'line'
         | 'rectangle'
         | 'ellipse'
@@ -982,7 +1000,7 @@ function blit() {
       alpha?: number;
       filled?: boolean;
       orientation?: 'up' | 'down' | 'left' | 'right';
-      points?: { x: number; y: number }[];
+      points?: { x: number; y: number; width?: number }[];
       text?: string;
       fontSize?: number;
       imageData?: string;
@@ -992,7 +1010,10 @@ function blit() {
     // Skip images - already rendered above
     if (sh.type === 'image') continue;
     // For text, check position directly (text might have 0 width/height from old projects)
-    if (sh.type === 'text') {
+    if (sh.type === 'stroke') {
+      // Point-based strokes do not have a meaningful x/y bounding box.
+      // Keep them in the ordered scene and let their segment renderer clip.
+    } else if (sh.type === 'text') {
       if (sh.x < vx1 || sh.x > vx2 || sh.y < vy1 || sh.y > vy2) continue;
     } else {
       if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
@@ -1011,7 +1032,17 @@ function blit() {
       screenCtx.translate(snap.offset, snap.offset);
     }
     screenCtx.beginPath();
-    if (sh.type === 'line') {
+    if (sh.type === 'stroke' && sh.points && sh.points.length > 1) {
+      for (let pointIndex = 1; pointIndex < sh.points.length; pointIndex++) {
+        const previous = sh.points[pointIndex - 1];
+        const point = sh.points[pointIndex];
+        screenCtx.beginPath();
+        screenCtx.moveTo(previous.x, previous.y);
+        screenCtx.lineTo(point.x, point.y);
+        screenCtx.lineWidth = point.width ?? sh.size;
+        screenCtx.stroke();
+      }
+    } else if (sh.type === 'line') {
       screenCtx.moveTo(sh.x, sh.y);
       screenCtx.lineTo(sh.x + sh.width, sh.y + sh.height);
       screenCtx.stroke();
@@ -1331,7 +1362,12 @@ function handleMessage(evt: MessageEvent<Inbound>) {
           minY = 0,
           maxX = 0,
           maxY = 0;
-        if (sh.type === 'line') {
+        if (sh.type === 'stroke' && sh.points && sh.points.length > 0) {
+          minX = Math.min(...sh.points.map((point) => point.x)) - sh.size;
+          minY = Math.min(...sh.points.map((point) => point.y)) - sh.size;
+          maxX = Math.max(...sh.points.map((point) => point.x)) + sh.size;
+          maxY = Math.max(...sh.points.map((point) => point.y)) + sh.size;
+        } else if (sh.type === 'line') {
           const bb = lineBBox(sh.x, sh.y, sh.x + sh.width, sh.y + sh.height);
           minX = bb.minX;
           minY = bb.minY;
@@ -1573,7 +1609,17 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         ctx.fillStyle = sh.color;
         applyObjectRotation(ctx, sh);
         ctx.beginPath();
-        if (sh.type === 'line') {
+        if (sh.type === 'stroke' && sh.points && sh.points.length > 1) {
+          for (let pointIndex = 1; pointIndex < sh.points.length; pointIndex++) {
+            const previous = sh.points[pointIndex - 1];
+            const point = sh.points[pointIndex];
+            ctx.beginPath();
+            ctx.moveTo(previous.x, previous.y);
+            ctx.lineTo(point.x, point.y);
+            ctx.lineWidth = point.width ?? sh.size;
+            ctx.stroke();
+          }
+        } else if (sh.type === 'line') {
           ctx.moveTo(sh.x, sh.y);
           ctx.lineTo(sh.x + sh.width, sh.y + sh.height);
           ctx.stroke();

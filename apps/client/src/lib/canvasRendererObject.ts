@@ -14,21 +14,23 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
   for (const object of objects) {
     if (object.type === 'stroke') {
       if (!object.points || object.points.length < 2) continue;
-      for (let index = 0; index < object.points.length - 1; index++) {
-        const start = object.points[index];
-        const end = object.points[index + 1];
-        strokes.push({
-          x0: start.x,
-          y0: start.y,
-          x1: end.x,
-          y1: end.y,
-          color: object.color,
-          size: end.width ?? object.size,
-          alpha: object.alpha ?? 1,
-          groupId: object.id,
-          timestamp: object.createdAt ?? 0,
-        });
-      }
+      // Keep a stroke in the same retained scene sequence as shapes. The
+      // worker's old separate stroke pass made every shape visually topmost,
+      // even when the Layers panel placed a stroke above it.
+      shapes.push({
+        id: object.id,
+        type: 'stroke',
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        color: object.color,
+        size: object.size,
+        alpha: object.alpha ?? 1,
+        points: object.points,
+        properties: { hidden: object.hidden ?? false },
+        timestamp: object.createdAt ?? 0,
+      });
       continue;
     }
 
