@@ -28,13 +28,14 @@ export default defineConfig({
       : []),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'SketchFlow',
         short_name: 'SketchFlow',
-        description: 'Real-time collaborative whiteboard',
-        theme_color: '#1f2937',
-        background_color: '#0f172a',
+        description:
+          'A fast real-time collaborative canvas for drawing, planning, and sharing ideas.',
+        theme_color: '#1c1917',
+        background_color: '#151210',
         display: 'standalone',
         orientation: 'any',
         icons: [

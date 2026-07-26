@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Compass, PenLine, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Compass, PenLine, PenTool, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
@@ -42,7 +42,7 @@ export function AppStatePage({ kind, onRetry }: AppStatePageProps) {
       <section className="relative w-full max-w-xl border-y border-stone-300/90 py-7 dark:border-white/[0.12] sm:py-10">
         <div className="mb-7 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-stone-950 text-amber-300 shadow-lg shadow-stone-950/15 dark:bg-amber-300 dark:text-stone-950">
-            <Icon className="h-5 w-5" aria-hidden="true" />
+            <PenTool className="h-5 w-5" strokeWidth={2.4} aria-hidden="true" />
           </div>
           <div>
             <p className="text-sm font-semibold tracking-tight">SketchFlow</p>
@@ -51,9 +51,10 @@ export function AppStatePage({ kind, onRetry }: AppStatePageProps) {
             </p>
           </div>
         </div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.17em] text-amber-700 dark:text-amber-300">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.17em] text-amber-700 dark:text-amber-300">
+          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
           {eyebrow}
-        </p>
+        </div>
         <h1 className="max-w-lg text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">{title}</h1>
         <p className="mt-4 max-w-md text-sm leading-6 text-stone-600 dark:text-stone-400">
           {description}
