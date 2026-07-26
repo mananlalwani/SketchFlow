@@ -83,7 +83,7 @@ type RateLimitRedisClient = {
   on(event: 'error', listener: (error: Error) => void): unknown;
   connect(): Promise<unknown>;
   incr(key: string): Promise<number>;
-  pExpire(key: string, milliseconds: number): Promise<boolean>;
+  pExpire(key: string, milliseconds: number): Promise<number>;
   pTTL(key: string): Promise<number>;
 };
 

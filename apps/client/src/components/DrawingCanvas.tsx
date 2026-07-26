@@ -140,7 +140,7 @@ function pointInObjectSpace(point: { x: number; y: number }, object: DrawingObje
 }
 
 export function DrawingCanvas() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const {
     currentTool,
@@ -302,7 +302,7 @@ export function DrawingCanvas() {
   const collaborationCommitInFlightRef = useRef(false);
   const collaborationReplayInFlightRef = useRef(false);
   const collaborationObjectsRef = useRef<DrawingObject[]>([]);
-  const collaborationProjectRef = useRef<string | undefined>();
+  const collaborationProjectRef = useRef<string | undefined>(undefined);
 
   // Canvas mutations are sent as object operations. Distinct objects can be
   // committed from two devices (including two sessions of the same account)

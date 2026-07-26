@@ -46,6 +46,8 @@ jobs:
   test:
     name: Test & Lint & Type Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -81,6 +83,8 @@ jobs:
   container-build:
     name: Container build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: changes
     if: needs.changes.outputs.container == 'true'
     steps:

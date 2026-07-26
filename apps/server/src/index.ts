@@ -69,7 +69,7 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface AuthenticatedRequest extends express.Request {
+export interface AuthenticatedRequest extends express.Request<Record<string, string>> {
   auth?: {
     userId: string | null;
     sessionId: string | null;
@@ -96,9 +96,12 @@ export class SketchFlowServer {
 
   constructor() {
     // Configure CORS origins for Socket.IO
-    // In development, allow all origins with credentials (reflective origin)
+    // Production requires configured origins. Local development uses an explicit
+    // Vite allow-list instead of reflecting arbitrary credentialed origins.
     const corsOrigins =
-      isProd && env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : true;
+      env.CORS_ORIGINS.length > 0
+        ? env.CORS_ORIGINS
+        : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
     this.io = new SocketIOServer<
       ClientToServerEvents,
@@ -721,10 +724,10 @@ export class SketchFlowServer {
     // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
 
-    // Serve React app for all other routes (SPA fallback)
-    this.app.get('*', (_req, res) => {
-      res.sendFile(path.join(this.clientDistPath, 'index.html'));
-    });
+    // The production frontend is Cloudflare Pages. Keep this narrow static
+    // endpoint solely for the container smoke check; do not add a wildcard
+    // fallback that could bypass API routing and its rate limits.
+    this.app.use('/draw', express.static(this.clientDistPath, { index: 'index.html' }));
   }
 
   private setupSocketHandlers(): void {
