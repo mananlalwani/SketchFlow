@@ -126,7 +126,6 @@ describe('shape detection pipeline', () => {
     ];
 
     const result = detectShapes(roughRectangle, {
-      enabledDetectors: ['rectangle'],
       strokeProcessingOptions: { minSize: 15, resampleStep: 2, simplificationTolerance: 0.5 },
     });
 
