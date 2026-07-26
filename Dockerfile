@@ -65,6 +65,11 @@ RUN pnpm --filter @sketchflow/server build
 # This installs prod dependencies into /app/deploy
 RUN pnpm --filter @sketchflow/server --prod deploy --legacy /app/deploy
 
+# pnpm records the wall-clock time of its production prune in this otherwise
+# identical metadata file. It is not read at runtime, but would make the entire
+# node_modules image layer receive a new digest on every code-only build.
+RUN sed -i '/^prunedAt: /d' /app/deploy/node_modules/.modules.yaml
+
 # pnpm deploy can include dependency source maps and package env templates. Neither is
 # needed at runtime and retaining either expands the public image surface.
 RUN find /app/deploy -type f \( -name '*.map' -o -name '.env' -o -name '.env.*' \) -delete
