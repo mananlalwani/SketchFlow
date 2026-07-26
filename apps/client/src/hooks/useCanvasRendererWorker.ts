@@ -16,7 +16,7 @@ export type RendererWorkerStatus = 'fallback' | 'starting' | 'ready' | 'failed';
  * main-thread retained-mode fallback instead of being blocked from editing.
  */
 export function useCanvasRendererWorker(
-  canvasRef: RefObject<HTMLCanvasElement>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
   workerRef: MutableRefObject<Worker | null>,
   viewport: RendererViewport,
   theme: string,
