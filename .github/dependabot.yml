@@ -1,15 +1,7 @@
 version: 2
 updates:
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      production-dependencies:
-        dependency-type: production
-      development-dependencies:
-        dependency-type: development
+  # Routine npm updates are intentionally handled in reviewed maintenance
+  # batches. Dependabot security updates remain available independently.
   - package-ecosystem: github-actions
     directory: /
     schedule:
