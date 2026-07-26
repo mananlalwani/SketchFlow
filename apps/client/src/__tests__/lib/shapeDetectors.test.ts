@@ -86,6 +86,28 @@ describe('shape detection pipeline', () => {
     ).toBe('rectangle');
   });
 
+  it('recognizes rectangles with the same processing settings used by the canvas', () => {
+    const result = detectShapes(
+      closedPolygon([
+        { x: 20, y: 20 },
+        { x: 160, y: 20 },
+        { x: 160, y: 90 },
+        { x: 20, y: 90 },
+      ]),
+      {
+        strokeProcessingOptions: {
+          minSize: 15,
+          resampleStep: 2,
+          closureTolerance: 0.15,
+          simplificationTolerance: 0.5,
+          smoothingWindow: 3,
+        },
+      },
+    );
+
+    expect(result.detectedShape?.shape.type).toBe('rectangle');
+  });
+
   it('distinguishes triangles from rectangles', () => {
     const result = detectShapes(
       closedPolygon([
