@@ -119,6 +119,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const [sortBy, setSortBy] = useState<SortOption>('updated');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const isMobile = useMobile();
+  // Folders are useful for a broad desktop library, but add too much
+  // navigation overhead on a phone.
+  const showFolderNavigation = !isMobile;
   const [viewMode, setViewMode] = useState<ViewMode>(isMobile ? 'list' : 'grid');
 
   useEffect(() => {
@@ -137,6 +140,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [mobileRenameProject, setMobileRenameProject] = useState<ProjectListItem | null>(null);
+  const [mobileRenameValue, setMobileRenameValue] = useState('');
+  const [isRenamingMobileProject, setIsRenamingMobileProject] = useState(false);
 
   // Track when menu was last closed to ignore clicks right after
   const menuClosedAtRef = useRef<number>(0);
@@ -256,21 +262,28 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   }, [isAuthenticated]);
 
   const filteredProjects = useMemo(
-    () => filterAndSortProjects(projects, searchQuery, selectedFolderId, sortBy, sortDirection),
-    [projects, searchQuery, sortBy, sortDirection, selectedFolderId],
+    () =>
+      filterAndSortProjects(
+        projects,
+        searchQuery,
+        showFolderNavigation ? selectedFolderId : null,
+        sortBy,
+        sortDirection,
+      ),
+    [projects, searchQuery, showFolderNavigation, sortBy, sortDirection, selectedFolderId],
   );
 
   const currentFolderName = useMemo(() => {
-    if (selectedFolderId === null) return 'All Projects';
-    const folder = folders.find((f) => f.id === selectedFolderId);
-    return folder?.name || 'Unknown Folder';
-  }, [selectedFolderId, folders]);
+    if (!showFolderNavigation || selectedFolderId === null) return 'Projects';
+    const folder = folders.find((folder) => folder.id === selectedFolderId);
+    return folder?.name || 'Projects';
+  }, [folders, selectedFolderId, showFolderNavigation]);
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
     try {
       const token = await getToken();
-      await createFolder(newFolderName.trim(), '#3b82f6', null, token);
+      await createFolder(newFolderName.trim(), '#f59e0b', null, token);
       setNewFolderName('');
       setCreatingFolder(false);
       await loadData();
@@ -378,8 +391,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       const emptyProjectData = serializeProject([], 4096, 4096);
       const newProj = await createProject(projectName, emptyProjectData, token);
 
-      // If a folder is selected, move the project to that folder
-      if (selectedFolderId) {
+      if (showFolderNavigation && selectedFolderId) {
         await moveProjectToFolder(newProj.id, selectedFolderId, token);
       }
 
@@ -448,6 +460,41 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       toast({ title: 'Project renamed' });
     } catch {
       toast({ title: 'Failed to rename', variant: 'destructive' });
+    }
+  };
+
+  const handleMobileRename = async () => {
+    if (!mobileRenameProject || !mobileRenameValue.trim()) return;
+
+    setIsRenamingMobileProject(true);
+    try {
+      const token = await getToken();
+      const record = await getProject<ReturnType<typeof serializeProject>>(
+        mobileRenameProject.id,
+        token,
+      );
+      const updated = await updateProject(
+        mobileRenameProject.id,
+        mobileRenameValue.trim(),
+        record.data,
+        token,
+        undefined,
+        record.revision,
+      );
+      setProjects((prev) =>
+        prev.map((project) =>
+          project.id === mobileRenameProject.id
+            ? { ...project, title: updated.title, revision: updated.revision }
+            : project,
+        ),
+      );
+      if (currentProjectId === mobileRenameProject.id) setProjectRevision(updated.revision);
+      setMobileRenameProject(null);
+      toast({ title: 'Project renamed' });
+    } catch {
+      toast({ title: 'Failed to rename', variant: 'destructive' });
+    } finally {
+      setIsRenamingMobileProject(false);
     }
   };
 
@@ -830,20 +877,20 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
   return (
     <>
-      <div className="flex h-full w-full animate-fade-in bg-white dark:bg-slate-950 transition-colors duration-200 flex-col">
+      <div className="flex h-full w-full flex-col bg-[#fbfaf7] text-stone-900 transition-colors duration-200 dark:bg-[#171513] dark:text-stone-100">
         {/* Guest Mode Banner - Dismissable */}
         {isGuest && !guestBannerDismissed && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b border-blue-200 dark:border-blue-800/50 px-6 py-3">
+          <div className="border-b border-amber-200/80 bg-amber-50 px-6 py-3 dark:border-amber-400/15 dark:bg-amber-300/[0.07]">
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-                  <Info className="w-5 h-5 text-white" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-300 text-stone-950 shadow-sm shadow-amber-950/10">
+                  <Info className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                  <p className="text-sm font-semibold text-stone-900 dark:text-amber-100">
                     You're in Guest Mode
                   </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                  <p className="text-xs text-stone-600 dark:text-stone-400">
                     Projects are saved locally. Sign in to sync and collaborate.
                   </p>
                 </div>
@@ -853,9 +900,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 size="sm"
                 aria-label="Dismiss guest mode notice"
                 onClick={handleDismissBanner}
-                className="h-8 w-8 p-0 hover:bg-blue-200 dark:hover:bg-blue-900/50"
+                className="h-8 w-8 p-0 hover:bg-amber-200/70 dark:hover:bg-amber-300/10"
               >
-                <X className="w-4 h-4 text-blue-700 dark:text-blue-300" />
+                <X className="h-4 w-4 text-stone-700 dark:text-amber-200" />
               </Button>
             </div>
           </div>
@@ -863,60 +910,46 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
         <div className="flex flex-1 overflow-hidden">
           {/* Folder Sidebar */}
-          <div className="w-56 border-r border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900/30 flex flex-col shrink-0 transition-colors duration-200">
-            <div className="p-3 border-b border-slate-200 dark:border-white/10">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  {isGuest ? 'Local Projects' : 'Folders'}
-                </span>
+          <div
+            className={`${showFolderNavigation ? 'hidden md:flex' : 'hidden'} w-64 shrink-0 flex-col border-r border-stone-200/90 bg-stone-100/55 transition-colors duration-200 dark:border-white/[0.08] dark:bg-stone-950/50`}
+          >
+            <div className="border-b border-stone-200/90 px-4 py-4 dark:border-white/[0.08]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">
+                    Library
+                  </p>
+                  <p className="mt-1 text-sm font-semibold tracking-[-0.02em] text-stone-900 dark:text-stone-100">
+                    {isGuest ? 'Local projects' : 'Folders'}
+                  </p>
+                </div>
                 {!isGuest && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="icon"
                     aria-label="New folder"
-                    className="h-6 w-6 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                    className="h-8 w-8 border-stone-300 bg-stone-50 text-stone-600 hover:bg-white hover:text-stone-950 dark:border-white/[0.1] dark:bg-white/[0.035] dark:text-stone-300 dark:hover:bg-white/[0.08] dark:hover:text-stone-50"
                     onClick={() => setCreatingFolder(true)}
                     title="New Folder"
                   >
-                    <FolderPlus className="w-3.5 h-3.5" />
+                    <FolderPlus className="h-4 w-4" />
                   </Button>
                 )}
               </div>
-              {creatingFolder && (
-                <div className="flex gap-1">
-                  <Input
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    placeholder="Folder name"
-                    className="h-7 text-xs"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreateFolder();
-                      if (e.key === 'Escape') {
-                        setCreatingFolder(false);
-                        setNewFolderName('');
-                      }
-                    }}
-                  />
-                  <Button size="sm" className="h-7 px-2" onClick={handleCreateFolder}>
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                </div>
-              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            <div className="flex-1 space-y-1 overflow-y-auto p-2.5">
               <button
                 onClick={() => setSelectedFolderId(null)}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
                   selectedFolderId === null && !searchQuery
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-stone-900 text-amber-100 shadow-sm dark:bg-amber-300 dark:text-stone-950'
+                    : 'text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 hover:text-stone-950 dark:hover:bg-white/[0.06] dark:hover:text-stone-100'
                 }`}
               >
                 <Home className="w-4 h-4" />
                 <span className="truncate flex-1">Unsorted</span>
-                <span className="text-xs opacity-60">
+                <span className="text-xs font-medium opacity-60">
                   {projects.filter((p) => !p.folderId).length}
                 </span>
                 {/* Spacer to align with folder dropdown buttons */}
@@ -938,17 +971,24 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                       autoFocus
                     />
                   ) : (
-                    <button
-                      onClick={() => setSelectedFolderId(folder.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                    <div
+                      className={`group flex items-center gap-1 rounded-lg transition-colors ${
                         selectedFolderId === folder.id
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
+                          ? 'bg-stone-900 text-amber-100 shadow-sm dark:bg-amber-300 dark:text-stone-950'
+                          : 'text-stone-600 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-400 dark:hover:bg-white/[0.06] dark:hover:text-stone-100'
                       }`}
                     >
-                      <Folder className="w-4 h-4" style={{ color: folder.color }} />
-                      <span className="truncate flex-1">{folder.name}</span>
-                      <span className="text-xs opacity-60">{folder.projectCount || 0}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFolderId(folder.id)}
+                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left text-sm"
+                      >
+                        <Folder className="h-4 w-4 shrink-0" style={{ color: folder.color }} />
+                        <span className="flex-1 truncate">{folder.name}</span>
+                        <span className="text-xs font-medium opacity-60">
+                          {folder.projectCount || 0}
+                        </span>
+                      </button>
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           asChild
@@ -957,7 +997,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                            aria-label={`Actions for ${folder.name}`}
+                            className="mr-1 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                           >
                             <MoreHorizontal className="w-3 h-3" />
                           </Button>
@@ -1015,7 +1056,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -1023,19 +1064,16 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {/* Header */}
-            <div className="px-6 pt-6 pb-4 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/50 transition-colors duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                    {selectedFolderId ? (
-                      <Folder
-                        className="w-6 h-6"
-                        style={{ color: folders.find((f) => f.id === selectedFolderId)?.color }}
-                      />
+            <div className="border-b border-stone-200/90 bg-stone-50/70 px-4 pb-4 pt-5 transition-colors duration-200 dark:border-white/[0.08] dark:bg-stone-950/35 sm:px-7 sm:pb-5 sm:pt-7">
+              <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4 sm:items-center">
+                <div className="min-w-0">
+                  <h2 className="flex items-center gap-2 text-xl font-semibold tracking-[-0.035em] text-stone-900 dark:text-stone-100 sm:text-2xl">
+                    {showFolderNavigation && selectedFolderId ? (
+                      <Folder className="h-6 w-6 text-amber-600 dark:text-amber-300" />
                     ) : (
-                      <FolderOpen className="w-6 h-6 text-blue-500 dark:text-blue-400" />
+                      <FolderOpen className="h-6 w-6 text-amber-600 dark:text-amber-300" />
                     )}
                     {currentFolderName}
                   </h2>
@@ -1044,16 +1082,18 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     {searchQuery && ` matching "${searchQuery}"`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="border-slate-300 dark:border-white/10"
+                        className="border-stone-300 dark:border-white/10"
+                        title="Import project"
+                        aria-label="Import project"
                       >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Import
+                        <Upload className="mr-0 h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Import</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -1070,41 +1110,116 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   <Button
                     onClick={openNewProjectDialog}
                     disabled={creating}
-                    className="bg-blue-600 hover:bg-blue-500"
+                    className="bg-stone-900 text-stone-50 hover:bg-stone-700 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
                   >
                     {creating ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
-                      <Plus className="w-4 h-4 mr-2" />
+                      <Plus className="mr-2 h-4 w-4" />
                     )}
-                    New Project
+                    <span className="sm:hidden">New</span>
+                    <span className="hidden sm:inline">New Project</span>
                   </Button>
                 </div>
               </div>
 
+              {showFolderNavigation && isMobile && (
+                <div className="mb-3">
+                  <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFolderId(null)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selectedFolderId === null && !searchQuery
+                          ? 'bg-amber-300 text-stone-950'
+                          : 'bg-stone-100 text-stone-600 dark:bg-stone-900 dark:text-stone-300'
+                      }`}
+                    >
+                      All projects
+                    </button>
+                    {folders.map((folder) => (
+                      <button
+                        key={folder.id}
+                        type="button"
+                        onClick={() => setSelectedFolderId(folder.id)}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          selectedFolderId === folder.id
+                            ? 'bg-amber-300 text-stone-950'
+                            : 'bg-stone-100 text-stone-600 dark:bg-stone-900 dark:text-stone-300'
+                        }`}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: folder.color }}
+                        />
+                        {folder.name}
+                      </button>
+                    ))}
+                    {!isGuest && (
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 rounded-full"
+                        aria-label="New folder"
+                        onClick={() => setCreatingFolder(true)}
+                      >
+                        <FolderPlus className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* New Project Dialog */}
               <Dialog open={showNewProjectDialog} onOpenChange={setShowNewProjectDialog}>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Create New Project</DialogTitle>
+                <DialogContent className="gap-0 overflow-hidden border-stone-200 bg-stone-50 p-0 sm:max-w-md dark:border-white/[0.09] dark:bg-[#211e1b]">
+                  <DialogHeader className="border-b border-stone-200 bg-stone-100/80 px-6 pb-5 pt-6 text-left dark:border-white/[0.08] dark:bg-white/[0.025]">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-900 text-amber-200 shadow-sm shadow-stone-950/15 dark:bg-amber-300 dark:text-stone-950">
+                        <Plus className="h-5 w-5" strokeWidth={2.25} />
+                      </span>
+                      <div>
+                        <DialogTitle className="text-xl font-semibold tracking-[-0.04em] text-stone-950 dark:text-stone-50">
+                          New project
+                        </DialogTitle>
+                        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+                          Start with a clean canvas.
+                        </p>
+                      </div>
+                    </div>
                   </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <Input
-                      placeholder="Project name"
-                      value={newProjectName}
-                      onChange={(e) => setNewProjectName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleCreate();
-                        if (e.key === 'Escape') setShowNewProjectDialog(false);
-                      }}
-                      autoFocus
-                    />
+                  <div className="px-6 py-5">
+                    <label className="grid gap-2 text-sm font-medium text-stone-700 dark:text-stone-200">
+                      Project name
+                      <Input
+                        placeholder="Untitled project"
+                        value={newProjectName}
+                        onChange={(e) => setNewProjectName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCreate();
+                          if (e.key === 'Escape') setShowNewProjectDialog(false);
+                        }}
+                        className="border-stone-300 bg-white dark:border-white/[0.1] dark:bg-stone-950/30"
+                        autoFocus
+                      />
+                    </label>
+                    <p className="mt-3 text-xs leading-5 text-stone-500 dark:text-stone-400">
+                      You can rename this anytime from the project menu.
+                    </p>
                   </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowNewProjectDialog(false)}>
+                  <DialogFooter className="border-t border-stone-200 bg-stone-100/50 px-6 py-4 dark:border-white/[0.08] dark:bg-white/[0.02]">
+                    <Button
+                      variant="outline"
+                      className="border-stone-300 dark:border-white/[0.1]"
+                      onClick={() => setShowNewProjectDialog(false)}
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={handleCreate} disabled={creating}>
+                    <Button
+                      className="bg-stone-900 text-amber-100 hover:bg-stone-800 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
+                      onClick={handleCreate}
+                      disabled={creating}
+                    >
                       {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                       Create
                     </Button>
@@ -1112,24 +1227,88 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 </DialogContent>
               </Dialog>
 
+              <Dialog
+                open={creatingFolder}
+                onOpenChange={(open) => {
+                  setCreatingFolder(open);
+                  if (!open) setNewFolderName('');
+                }}
+              >
+                <DialogContent className="gap-0 overflow-hidden border-stone-200 bg-stone-50 p-0 sm:max-w-md dark:border-white/[0.09] dark:bg-[#211e1b]">
+                  <DialogHeader className="border-b border-stone-200 bg-stone-100/80 px-6 pb-5 pt-6 text-left dark:border-white/[0.08] dark:bg-white/[0.025]">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-900 text-amber-200 shadow-sm shadow-stone-950/15 dark:bg-amber-300 dark:text-stone-950">
+                        <FolderPlus className="h-5 w-5" strokeWidth={2.25} />
+                      </span>
+                      <div>
+                        <DialogTitle className="text-xl font-semibold tracking-[-0.04em] text-stone-950 dark:text-stone-50">
+                          New folder
+                        </DialogTitle>
+                        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+                          Keep your projects organized.
+                        </p>
+                      </div>
+                    </div>
+                  </DialogHeader>
+                  <div className="px-6 py-5">
+                    <label className="grid gap-2 text-sm font-medium text-stone-700 dark:text-stone-200">
+                      Folder name
+                      <Input
+                        placeholder="Untitled folder"
+                        value={newFolderName}
+                        onChange={(event) => setNewFolderName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') void handleCreateFolder();
+                          if (event.key === 'Escape') {
+                            setCreatingFolder(false);
+                            setNewFolderName('');
+                          }
+                        }}
+                        className="border-stone-300 bg-white dark:border-white/[0.1] dark:bg-stone-950/30"
+                        autoFocus
+                      />
+                    </label>
+                  </div>
+                  <DialogFooter className="border-t border-stone-200 bg-stone-100/50 px-6 py-4 dark:border-white/[0.08] dark:bg-white/[0.02]">
+                    <Button
+                      variant="outline"
+                      className="border-stone-300 dark:border-white/[0.1]"
+                      onClick={() => {
+                        setCreatingFolder(false);
+                        setNewFolderName('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="bg-stone-900 text-amber-100 hover:bg-stone-800 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
+                      onClick={() => void handleCreateFolder()}
+                      disabled={!newFolderName.trim()}
+                    >
+                      Create folder
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
               {/* Search and Filter Bar */}
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1 max-w-md">
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
+                <div className="relative w-full sm:max-w-md sm:flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                   <Input
                     placeholder="Search projects..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-white/10 focus:border-blue-500"
+                    className="border-stone-200 bg-stone-100/80 pl-9 focus:border-amber-500 dark:border-white/[0.08] dark:bg-stone-900/70 dark:focus:border-amber-300"
                   />
                 </div>
 
-                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-300 dark:border-white/10">
+                <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-stone-200 bg-stone-100/80 p-1 dark:border-white/[0.08] dark:bg-stone-900/70">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleSort('updated')}
-                    className={`h-8 px-3 ${sortBy === 'updated' ? 'bg-slate-200 dark:bg-white/10' : ''}`}
+                    className={`h-8 px-3 ${sortBy === 'updated' ? 'bg-amber-200/70 text-stone-950 dark:bg-amber-300/15 dark:text-amber-100' : ''}`}
                   >
                     <Clock className="w-3.5 h-3.5 mr-1.5" />
                     Updated
@@ -1144,7 +1323,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleSort('created')}
-                    className={`h-8 px-3 ${sortBy === 'created' ? 'bg-slate-200 dark:bg-white/10' : ''}`}
+                    className={`h-8 px-3 ${sortBy === 'created' ? 'bg-amber-200/70 text-stone-950 dark:bg-amber-300/15 dark:text-amber-100' : ''}`}
                   >
                     <Calendar className="w-3.5 h-3.5 mr-1.5" />
                     Created
@@ -1159,7 +1338,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleSort('name')}
-                    className={`h-8 px-3 ${sortBy === 'name' ? 'bg-slate-200 dark:bg-white/10' : ''}`}
+                    className={`h-8 px-3 ${sortBy === 'name' ? 'bg-amber-200/70 text-stone-950 dark:bg-amber-300/15 dark:text-amber-100' : ''}`}
                   >
                     <Type className="w-3.5 h-3.5 mr-1.5" />
                     Name
@@ -1172,13 +1351,13 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   </Button>
                 </div>
 
-                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-300 dark:border-white/10">
+                <div className="hidden items-center gap-1 rounded-xl border border-stone-200 bg-stone-100/80 p-1 dark:border-white/[0.08] dark:bg-stone-900/70 sm:flex">
                   <Button
                     variant="ghost"
                     size="icon"
                     aria-label="Grid view"
                     onClick={() => setViewMode('grid')}
-                    className={`h-8 w-8 ${viewMode === 'grid' ? 'bg-slate-200 dark:bg-white/10' : ''}`}
+                    className={`h-8 w-8 ${viewMode === 'grid' ? 'bg-amber-200/70 text-stone-950 dark:bg-amber-300/15 dark:text-amber-100' : ''}`}
                   >
                     <Grid3X3 className="w-4 h-4" />
                   </Button>
@@ -1187,7 +1366,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     size="icon"
                     aria-label="List view"
                     onClick={() => setViewMode('list')}
-                    className={`h-8 w-8 ${viewMode === 'list' ? 'bg-slate-200 dark:bg-white/10' : ''}`}
+                    className={`h-8 w-8 ${viewMode === 'list' ? 'bg-amber-200/70 text-stone-950 dark:bg-amber-300/15 dark:text-amber-100' : ''}`}
                   >
                     <List className="w-4 h-4" />
                   </Button>
@@ -1196,7 +1375,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+            <div className="flex-1 overflow-y-auto bg-[#f7f5f0] px-4 pb-4 pt-3 transition-colors duration-200 dark:bg-[#171513] sm:p-7">
               {loading ? (
                 <div className="flex-1 flex items-center justify-center h-64">
                   <Loader2 className="w-8 h-8 animate-spin text-slate-400 dark:text-slate-500" />
@@ -1211,8 +1390,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     <p className="text-slate-500">Try a different search term</p>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-300 dark:border-white/10 rounded-2xl bg-white/50 dark:bg-white/5 p-12">
-                    <Sparkles className="w-12 h-12 text-blue-500 dark:text-blue-400 mb-4" />
+                  <div className="flex h-64 flex-col items-center justify-center rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-12 dark:border-white/[0.12] dark:bg-stone-900/35">
+                    <Sparkles className="mb-4 h-12 w-12 text-amber-500 dark:text-amber-300" />
                     <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">
                       {isGuest ? 'Start Drawing Locally' : 'Start Creating'}
                     </h3>
@@ -1225,7 +1404,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                       <Button
                         onClick={isGuest ? handleCreateGuestProject : openNewProjectDialog}
                         disabled={creating}
-                        className="bg-blue-600 hover:bg-blue-500"
+                        className="bg-stone-900 text-stone-50 hover:bg-stone-700 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
                       >
                         {creating ? (
                           <>
@@ -1266,15 +1445,15 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   </div>
                 )
               ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                   {filteredProjects.map((project) => (
                     <div
                       key={project.id}
                       onClick={(e) => handleCardClick(project.id, e)}
-                      className="surface-raised group relative flex cursor-pointer flex-col gap-3 rounded-xl bg-white p-4 transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-slate-50 dark:bg-slate-800/50 dark:hover:bg-slate-800"
+                      className="surface-raised group relative flex cursor-pointer flex-col gap-3 rounded-2xl border-l-2 border-l-amber-300 bg-stone-50 p-4 transition-[background-color,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-white dark:bg-stone-900/65 dark:hover:bg-stone-900"
                     >
                       {/* Thumbnail */}
-                      <div className="aspect-video bg-slate-100 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-white/5 flex items-center justify-center mb-2 group-hover:border-blue-400/20 dark:group-hover:border-blue-500/20 transition-colors overflow-hidden">
+                      <div className="mb-2 flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-stone-200 bg-stone-100 dark:border-white/[0.07] dark:bg-stone-950/60">
                         {project.thumbnail ? (
                           <img
                             src={project.thumbnail}
@@ -1282,7 +1461,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                             className="h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
                           />
                         ) : (
-                          <FileEdit className="w-8 h-8 text-slate-400 dark:text-slate-700 group-hover:text-slate-500 dark:group-hover:text-slate-600 transition-colors" />
+                          <FileEdit className="h-8 w-8 text-stone-400 transition-colors group-hover:text-amber-600 dark:text-stone-600 dark:group-hover:text-amber-300" />
                         )}
                       </div>
 
@@ -1297,43 +1476,49 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                               if (e.key === 'Escape') setRenamingId(null);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-7 text-sm bg-slate-100 dark:bg-slate-900 border-blue-500"
+                            className="h-7 border-amber-500 bg-stone-100 text-sm dark:border-amber-300 dark:bg-stone-950"
                             autoFocus
                           />
                         ) : (
-                          <div className="font-semibold truncate pr-8 text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <div className="truncate pr-8 font-semibold text-stone-900 transition-colors group-hover:text-amber-700 dark:text-stone-100 dark:group-hover:text-amber-200">
                             {project.title || 'Untitled'}
                           </div>
                         )}
 
                         {isMobile ? (
                           <Drawer>
-                            <DrawerTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <DrawerTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="absolute top-3 right-3 opacity-100 h-8 w-8 bg-white/50 dark:bg-black/50 backdrop-blur-sm rounded-full"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => event.stopPropagation()}
                               >
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DrawerTrigger>
-                            <DrawerContent>
+                            <DrawerContent
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => event.stopPropagation()}
+                            >
                               <DrawerHeader>
                                 <DrawerTitle>{project.title || 'Untitled'} Actions</DrawerTitle>
                               </DrawerHeader>
                               <div className="p-4 space-y-2 max-h-[70vh] overflow-y-auto">
-                                <Button
-                                  variant="outline"
-                                  className="w-full justify-start"
-                                  onClick={() => {
-                                    setRenameValue(project.title || '');
-                                    setRenamingId(project.id);
-                                    // Close drawer via UI interaction implicitly or we need a controlled drawer
-                                  }}
-                                >
-                                  <Pencil className="w-4 h-4 mr-2" />
-                                  Rename
-                                </Button>
+                                <DrawerClose asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => {
+                                      setMobileRenameValue(project.title || '');
+                                      setMobileRenameProject(project);
+                                    }}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Rename
+                                  </Button>
+                                </DrawerClose>
 
                                 {!isGuest && (project.role === 'owner' || !project.role) && (
                                   <Button
@@ -1498,7 +1683,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   Share
                                 </DropdownMenuItem>
                               )}
-                              {!isGuest && (
+                              {showFolderNavigation && !isGuest && (
                                 <DropdownMenuSub>
                                   <DropdownMenuSubTrigger>
                                     <FolderInput className="w-4 h-4 mr-2" />
@@ -1641,7 +1826,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         </div>
                         <div className="flex items-center gap-2">
                           {project.role && project.role !== 'owner' && (
-                            <span className="bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold border border-blue-200 dark:border-blue-500/20 flex items-center gap-1">
+                            <span className="flex items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
                               <Users className="w-3 h-3" />
                               {project.role}
                             </span>
@@ -1663,9 +1848,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     <div
                       key={project.id}
                       onClick={(e) => handleCardClick(project.id, e)}
-                      className="surface-raised group relative flex cursor-pointer items-center gap-4 rounded-lg bg-white p-3 transition-[background-color,box-shadow] duration-200 hover:bg-slate-50 dark:bg-slate-800/30 dark:hover:bg-slate-800/50"
+                      className="surface-raised group relative flex cursor-pointer items-center gap-4 rounded-xl bg-stone-50 p-3 transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-white dark:bg-stone-900/60 dark:hover:bg-stone-900"
                     >
-                      <div className="w-16 h-12 bg-slate-100 dark:bg-slate-900/50 rounded border border-slate-200 dark:border-white/5 flex items-center justify-center shrink-0">
+                      <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-100 dark:border-white/[0.07] dark:bg-stone-950/60">
                         <FileEdit className="w-5 h-5 text-slate-400 dark:text-slate-700" />
                       </div>
 
@@ -1680,11 +1865,11 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                               if (e.key === 'Escape') setRenamingId(null);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-7 text-sm bg-slate-100 dark:bg-slate-900 border-blue-500 max-w-xs"
+                            className="h-7 max-w-xs border-amber-500 bg-stone-100 text-sm dark:border-amber-300 dark:bg-stone-950"
                             autoFocus
                           />
                         ) : (
-                          <div className="font-medium truncate text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <div className="truncate font-medium text-stone-900 transition-colors group-hover:text-amber-700 dark:text-stone-100 dark:group-hover:text-amber-200">
                             {project.title || 'Untitled'}
                           </div>
                         )}
@@ -1702,7 +1887,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
                       <div className="flex items-center gap-2 shrink-0">
                         {project.role && project.role !== 'owner' && (
-                          <span className="bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold border border-blue-200 dark:border-blue-500/20 flex items-center gap-1">
+                          <span className="flex items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
                             <Users className="w-3 h-3" />
                             {project.role}
                           </span>
@@ -1715,27 +1900,38 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
                         {isMobile ? (
                           <Drawer>
-                            <DrawerTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <DrawerTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => event.stopPropagation()}
+                              >
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DrawerTrigger>
-                            <DrawerContent>
+                            <DrawerContent
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => event.stopPropagation()}
+                            >
                               <DrawerHeader>
                                 <DrawerTitle>{project.title || 'Untitled'} Actions</DrawerTitle>
                               </DrawerHeader>
                               <div className="p-4 space-y-2 max-h-[70vh] overflow-y-auto">
-                                <Button
-                                  variant="outline"
-                                  className="w-full justify-start"
-                                  onClick={() => {
-                                    setRenameValue(project.title || '');
-                                    setRenamingId(project.id);
-                                  }}
-                                >
-                                  <Pencil className="w-4 h-4 mr-2" />
-                                  Rename
-                                </Button>
+                                <DrawerClose asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => {
+                                      setMobileRenameValue(project.title || '');
+                                      setMobileRenameProject(project);
+                                    }}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Rename
+                                  </Button>
+                                </DrawerClose>
 
                                 {!isGuest && (project.role === 'owner' || !project.role) && (
                                   <Button
@@ -1902,7 +2098,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   Share
                                 </DropdownMenuItem>
                               )}
-                              {!isGuest && (
+                              {showFolderNavigation && !isGuest && (
                                 <DropdownMenuSub>
                                   <DropdownMenuSubTrigger>
                                     <FolderInput className="w-4 h-4 mr-2" />
@@ -2045,6 +2241,52 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={!!mobileRenameProject}
+        onOpenChange={(open) => {
+          if (!open && !isRenamingMobileProject) setMobileRenameProject(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-3">
+            <label
+              className="text-sm font-medium text-stone-700 dark:text-stone-200"
+              htmlFor="mobile-project-name"
+            >
+              Project name
+            </label>
+            <Input
+              id="mobile-project-name"
+              value={mobileRenameValue}
+              onChange={(event) => setMobileRenameValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleMobileRename();
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setMobileRenameProject(null)}
+              disabled={isRenamingMobileProject}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleMobileRename()}
+              disabled={!mobileRenameValue.trim() || isRenamingMobileProject}
+            >
+              {isRenamingMobileProject && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save name
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Controlled Share Dialog */}
       {sharingProject && (

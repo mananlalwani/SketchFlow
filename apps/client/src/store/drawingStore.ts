@@ -90,6 +90,8 @@ interface DrawingState {
   projectRevision?: number;
   projectRole?: 'owner' | 'editor' | 'viewer' | null;
   brushSize: number;
+  /** Pixel size used when creating new text objects. Kept separate from brush width. */
+  textFontSize: number;
   brushColor: string;
   brushOpacity: number;
   selectedObjectId?: string;
@@ -166,6 +168,7 @@ interface DrawingState {
   setProjectRevision: (revision: number | undefined) => void;
   setProjectRole: (role: 'owner' | 'editor' | 'viewer' | null) => void;
   setBrushSize: (size: number) => void;
+  setTextFontSize: (size: number) => void;
   setBrushColor: (color: string) => void;
   setBrushOpacity: (opacity: number) => void;
   setSelectedObject: (id: string | undefined) => void;
@@ -233,6 +236,7 @@ export const useDrawingStore = create<DrawingState>()(
         saveStatus: 'saved',
         currentProjectId: undefined,
         brushSize: 4,
+        textFontSize: 24,
         brushColor: '#ffffff',
         brushOpacity: 1,
         selectedObjectId: undefined,
@@ -384,6 +388,8 @@ export const useDrawingStore = create<DrawingState>()(
           })),
         setProjectRevision: (revision) => set({ projectRevision: revision }),
         setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(100, size)) }),
+        setTextFontSize: (size) =>
+          set({ textFontSize: Math.max(12, Math.min(240, Math.round(size))) }),
         setBrushColor: (color) => set({ brushColor: color }),
         setBrushOpacity: (opacity) => set({ brushOpacity: Math.max(0.1, Math.min(1, opacity)) }),
         setSelectedObject: (id) => set({ selectedObjectId: id, selectedObjectIds: id ? [id] : [] }),
@@ -561,6 +567,7 @@ export const useDrawingStore = create<DrawingState>()(
           const base = {
             customColors: state.customColors,
             brushSize: state.brushSize,
+            textFontSize: state.textFontSize,
             brushColor: state.brushColor,
             brushOpacity: state.brushOpacity,
             currentTool: state.currentTool,

@@ -44,7 +44,10 @@ export function Sidebar() {
   };
 
   return (
-    <div className="h-full w-16 border-r border-slate-200 dark:border-white/10 bg-slate-100/50 dark:bg-slate-900/50 flex flex-col items-center py-4 gap-2 z-20 transition-colors duration-200">
+    <div className="z-20 flex h-full w-[4.5rem] flex-col items-center gap-1 border-r border-stone-200/90 bg-stone-50/90 px-2 py-3 transition-colors duration-200 dark:border-white/[0.08] dark:bg-[#211e1b]/90">
+      <span className="mb-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-stone-400 dark:text-stone-500">
+        Tools
+      </span>
       {tools.map(({ id, icon: Icon, label }) => (
         <Button
           key={id}
@@ -52,12 +55,14 @@ export function Sidebar() {
           variant={currentTool === id ? 'default' : 'ghost'}
           size="icon"
           className={cn(
-            'w-10 h-10 rounded-xl transition-[background-color,color,box-shadow,transform] duration-150',
+            'h-10 w-10 rounded-xl transition-[background-color,color,box-shadow,transform] duration-150',
             currentTool === id
-              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10',
+              ? 'bg-stone-900 text-amber-100 shadow-sm shadow-stone-950/20 dark:bg-amber-300 dark:text-stone-950'
+              : 'text-stone-500 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-400 dark:hover:bg-white/[0.07] dark:hover:text-stone-50',
           )}
           title={label}
+          aria-label={label}
+          aria-pressed={currentTool === id}
         >
           <Icon className="w-5 h-5" />
         </Button>

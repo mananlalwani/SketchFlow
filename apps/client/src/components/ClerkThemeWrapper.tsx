@@ -15,73 +15,75 @@ export function ClerkThemeWrapper({ children }: ClerkThemeWrapperProps) {
     <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
       appearance={{
-        baseTheme: isDark ? undefined : undefined, // Clerk doesn't have built-in themes we import
         variables: {
-          colorPrimary: '#3b82f6',
-          colorBackground: isDark ? '#0f172a' : '#ffffff',
-          colorInputBackground: isDark ? '#1e293b' : '#f8fafc',
-          colorInputText: isDark ? '#f1f5f9' : '#0f172a',
-          colorText: isDark ? '#f1f5f9' : '#0f172a',
-          colorTextSecondary: isDark ? '#94a3b8' : '#64748b',
-          colorDanger: '#ef4444',
-          colorSuccess: '#22c55e',
-          colorWarning: '#f59e0b',
-          borderRadius: '0.5rem',
+          colorPrimary: isDark ? '#fcd34d' : '#d97706',
+          colorBackground: isDark ? '#211e1b' : '#faf9f6',
+          colorInputBackground: isDark ? '#2a2724' : '#ffffff',
+          colorInputText: isDark ? '#faf7f2' : '#1c1917',
+          colorText: isDark ? '#faf7f2' : '#1c1917',
+          colorTextSecondary: isDark ? '#b8afa5' : '#6b625a',
+          colorDanger: '#dc2626',
+          colorSuccess: '#15803d',
+          colorWarning: '#d97706',
+          borderRadius: '0.75rem',
         },
         elements: {
-          rootBox: isDark ? 'bg-slate-900' : 'bg-white',
+          rootBox: isDark ? 'bg-[#211e1b]' : 'bg-stone-50',
           card: isDark
-            ? 'bg-slate-900 border-slate-700 shadow-xl'
-            : 'bg-white border-slate-200 shadow-lg',
+            ? 'border border-[#3b352f] bg-[#211e1b] shadow-2xl shadow-black/35'
+            : 'border border-stone-200 bg-stone-50 shadow-xl shadow-stone-950/10',
 
-          headerTitle: isDark ? 'text-slate-100' : 'text-slate-900',
-          headerSubtitle: isDark ? 'text-slate-400' : 'text-slate-500',
+          headerTitle: isDark ? 'text-stone-50' : 'text-stone-950',
+          headerSubtitle: isDark ? 'text-stone-400' : 'text-stone-500',
 
           socialButtonsBlockButton: isDark
-            ? 'bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-700'
-            : 'bg-slate-50 border-slate-200 text-slate-900 hover:bg-slate-100',
-          socialButtonsBlockButtonText: isDark ? 'text-slate-100' : 'text-slate-900',
+            ? 'border-[#3b352f] bg-white/[0.035] text-stone-100 hover:bg-white/[0.08]'
+            : 'border-stone-200 bg-white text-stone-900 hover:bg-stone-100',
+          socialButtonsBlockButtonText: isDark ? 'text-stone-100' : 'text-stone-900',
           socialButtonsProviderIcon: isDark ? 'bg-white/90 rounded p-0.5' : '',
 
-          dividerLine: isDark ? 'bg-slate-700' : 'bg-slate-200',
-          dividerText: isDark ? 'text-slate-400' : 'text-slate-500',
+          dividerLine: isDark ? 'bg-[#3b352f]' : 'bg-stone-200',
+          dividerText: isDark ? 'text-stone-400' : 'text-stone-500',
 
-          formFieldLabel: isDark ? 'text-slate-300' : 'text-slate-700',
+          formFieldLabel: isDark ? 'text-stone-300' : 'text-stone-700',
           formFieldInput: isDark
-            ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500'
-            : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400',
-          formFieldInputShowPasswordButton: isDark ? 'text-slate-400' : 'text-slate-500',
+            ? 'border-[#3b352f] bg-[#2a2724] text-stone-100 placeholder:text-stone-500'
+            : 'border-stone-300 bg-white text-stone-900 placeholder:text-stone-400',
+          formFieldInputShowPasswordButton: isDark ? 'text-stone-400' : 'text-stone-500',
 
-          formButtonPrimary: 'bg-blue-600 hover:bg-blue-500 text-white',
+          formButtonPrimary:
+            'bg-amber-400 text-stone-950 shadow-sm shadow-amber-500/20 hover:bg-amber-300',
 
-          footer: isDark ? 'bg-slate-900' : 'bg-white',
-          footerActionLink: 'text-blue-500 hover:text-blue-400',
-          footerActionText: isDark ? 'text-slate-400' : 'text-slate-500',
+          footer: isDark ? 'bg-[#211e1b]' : 'bg-stone-50',
+          footerActionLink: isDark
+            ? 'text-amber-300 hover:text-amber-200'
+            : 'text-amber-700 hover:text-amber-800',
+          footerActionText: isDark ? 'text-stone-400' : 'text-stone-500',
 
           userButtonBox: 'focus:shadow-none',
           userButtonTrigger: 'focus:shadow-none',
           userButtonPopoverCard: isDark
-            ? 'bg-slate-900 border-slate-700'
-            : 'bg-white border-slate-200',
+            ? 'border-[#3b352f] bg-[#211e1b]'
+            : 'border-stone-200 bg-stone-50',
           userButtonPopoverActionButton: isDark
-            ? 'text-slate-100 hover:bg-slate-800'
-            : 'text-slate-900 hover:bg-slate-100',
-          userButtonPopoverActionButtonText: isDark ? 'text-slate-100' : 'text-slate-900',
-          userButtonPopoverActionButtonIcon: isDark ? 'text-slate-400' : 'text-slate-500',
-          userButtonPopoverFooter: isDark ? 'border-slate-700' : 'border-slate-200',
+            ? 'text-stone-100 hover:bg-white/[0.06]'
+            : 'text-stone-900 hover:bg-stone-100',
+          userButtonPopoverActionButtonText: isDark ? 'text-stone-100' : 'text-stone-900',
+          userButtonPopoverActionButtonIcon: isDark ? 'text-stone-400' : 'text-stone-500',
+          userButtonPopoverFooter: isDark ? 'border-[#3b352f]' : 'border-stone-200',
 
-          userPreviewMainIdentifier: isDark ? 'text-slate-100' : 'text-slate-900',
-          userPreviewSecondaryIdentifier: isDark ? 'text-slate-400' : 'text-slate-500',
+          userPreviewMainIdentifier: isDark ? 'text-stone-100' : 'text-stone-900',
+          userPreviewSecondaryIdentifier: isDark ? 'text-stone-400' : 'text-stone-500',
 
-          modalBackdrop: 'bg-black/50 backdrop-blur-sm',
-          modalContent: isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200',
+          modalBackdrop: 'bg-stone-950/55 backdrop-blur-sm',
+          modalContent: isDark ? 'border-[#3b352f] bg-[#211e1b]' : 'border-stone-200 bg-stone-50',
 
-          alertText: isDark ? 'text-slate-300' : 'text-slate-700',
+          alertText: isDark ? 'text-stone-300' : 'text-stone-700',
 
-          identityPreviewText: isDark ? 'text-slate-100' : 'text-slate-900',
+          identityPreviewText: isDark ? 'text-stone-100' : 'text-stone-900',
           identityPreviewEditButton: isDark
-            ? 'text-slate-400 hover:text-slate-300'
-            : 'text-slate-500 hover:text-slate-700',
+            ? 'text-stone-400 hover:text-stone-200'
+            : 'text-stone-500 hover:text-stone-700',
         },
       }}
     >

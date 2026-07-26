@@ -44,10 +44,10 @@ export function ColorPicker() {
         onClick={() => setIsExpanded(!isExpanded)}
         variant="glass"
         size="sm"
-        className="flex items-center gap-2 min-w-[110px] px-3 py-2 shadow-lg"
+        className="flex min-w-[110px] items-center gap-2 border border-stone-200/80 bg-stone-100/80 px-3 py-2 shadow-sm dark:border-white/[0.08] dark:bg-stone-900/70"
       >
-        <div className="relative w-5 h-5 rounded-lg border-2 border-slate-300 dark:border-white/40 color-preview shadow-lg overflow-hidden">
-          <div className="absolute inset-0 bg-slate-100 dark:bg-slate-900" />
+        <div className="relative h-5 w-5 overflow-hidden rounded-md border-2 border-stone-300 shadow-sm dark:border-white/30">
+          <div className="absolute inset-0 bg-stone-100 dark:bg-stone-950" />
           <div
             className="absolute inset-0"
             style={{ backgroundColor: brushColor, opacity: brushOpacity }}
@@ -58,16 +58,16 @@ export function ColorPicker() {
       </Button>
 
       {isExpanded && (
-        <div className="surface-raised absolute left-0 top-full z-50 mt-3 min-w-[300px] rounded-2xl bg-white p-5 shadow-2xl backdrop-blur-xl dark:bg-slate-800/95 animate-fade-in">
+        <div className="surface-raised absolute left-0 top-full z-50 mt-3 min-w-[300px] rounded-xl border-stone-200 bg-stone-50 p-4 shadow-xl shadow-stone-950/15 backdrop-blur-xl dark:border-white/[0.09] dark:bg-[#211e1b] animate-fade-in">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-300">
+            <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200">
               Color Palette
             </h3>
             <Button
               onClick={() => setIsExpanded(false)}
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 hover:bg-slate-100 dark:hover:bg-white/10"
+              className="h-6 w-6 p-0 hover:bg-stone-200/70 dark:hover:bg-white/[0.08]"
             >
               <X className="w-4 h-4" />
             </Button>
@@ -79,10 +79,10 @@ export function ColorPicker() {
                 <button
                   onClick={() => handleColorSelect(color)}
                   className={cn(
-                    'w-10 h-10 rounded-xl border-2 transition-[border-color,box-shadow,transform] duration-200 hover:scale-110 color-swatch shadow-lg',
+                    'h-10 w-10 rounded-lg border-2 transition-[border-color,box-shadow,transform] duration-200 hover:scale-110 shadow-sm',
                     brushColor === color
-                      ? 'border-blue-400 shadow-xl shadow-blue-500/50 ring-2 ring-blue-300/50 scale-110'
-                      : 'border-slate-300 dark:border-white/30 hover:border-slate-400 dark:hover:border-white/50',
+                      ? 'border-amber-400 shadow-lg shadow-amber-500/20 ring-2 ring-amber-300/50 scale-110'
+                      : 'border-stone-300 dark:border-white/30 hover:border-stone-400 dark:hover:border-white/50',
                   )}
                   style={{ backgroundColor: color }}
                   title={color}
@@ -102,18 +102,18 @@ export function ColorPicker() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2 pt-3 border-t border-slate-200 dark:border-white/10">
+          <div className="flex items-center gap-2 border-t border-stone-200 pt-3 dark:border-white/[0.08]">
             {showColorInput ? (
               <div className="flex items-center gap-2 w-full">
                 <input
                   type="color"
                   onChange={handleCustomColorAdd}
-                  className="w-10 h-10 rounded-lg border-2 border-slate-300 dark:border-white/30 bg-transparent cursor-pointer shadow-lg"
+                  className="h-10 w-10 cursor-pointer rounded-lg border-2 border-stone-300 bg-transparent shadow-sm dark:border-white/30"
                   autoFocus
                   aria-label="Choose custom color"
                   title="Choose custom color"
                 />
-                <span className="text-xs text-slate-500 dark:text-gray-400">Pick a color</span>
+                <span className="text-xs text-stone-500 dark:text-stone-400">Pick a color</span>
               </div>
             ) : (
               <Button

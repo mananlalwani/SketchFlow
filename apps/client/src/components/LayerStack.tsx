@@ -97,7 +97,7 @@ export function LayerStack({ className }: LayerStackProps) {
         <p className="text-xs text-slate-400">Last drawn is on top</p>
       </div>
       {objects.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 px-5 py-8 text-center dark:border-white/10">
+        <div className="border-y border-dashed border-stone-200 px-5 py-8 text-center dark:border-white/[0.1]">
           <Layers className="mx-auto mb-2 h-7 w-7 text-slate-300 dark:text-slate-700" />
           <p className="text-sm text-slate-500">Nothing on this board yet.</p>
         </div>
@@ -113,8 +113,8 @@ export function LayerStack({ className }: LayerStackProps) {
                 className={cn(
                   'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors',
                   isSelected
-                    ? 'bg-blue-50 text-blue-950 dark:bg-blue-500/10 dark:text-blue-100'
-                    : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06]',
+                    ? 'bg-amber-200/70 text-stone-950 dark:bg-amber-300/15 dark:text-amber-100'
+                    : 'text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-white/[0.06]',
                 )}
                 onClick={(event) => {
                   selectLayer(object.id, event.shiftKey);
@@ -122,7 +122,7 @@ export function LayerStack({ className }: LayerStackProps) {
                 aria-pressed={isSelected}
               >
                 <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-black/5 text-slate-600 dark:border-white/10 dark:text-slate-300"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-black/5 text-stone-600 dark:border-white/10 dark:text-stone-300"
                   style={{
                     backgroundColor: `${object.color}22`,
                     opacity: object.hidden ? 0.35 : 1,
@@ -142,7 +142,7 @@ export function LayerStack({ className }: LayerStackProps) {
         </div>
       )}
       {selectedObject && (
-        <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/10">
+        <div className="mt-4 border-t border-stone-200 pt-3 dark:border-white/[0.08]">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             Layer actions
           </p>

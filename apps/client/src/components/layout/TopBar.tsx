@@ -3,7 +3,7 @@ import { useDrawingStore } from '@/store/drawingStore';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Save, Trash2, Cloud, Loader2, Share2, Download, AlertCircle } from 'lucide-react';
+import { Save, Trash2, Cloud, Loader2, Share2, Download, AlertCircle, PenTool } from 'lucide-react';
 import { serializeProject } from '@/lib/utils';
 import { exportAsPNG, exportAsSVG, downloadFile, type ExportQuality } from '@/lib/export';
 import { createProject } from '@/lib/api';
@@ -211,29 +211,41 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   }, [handleSave]);
 
   return (
-    <div className="relative z-30 flex h-14 items-center justify-between border-b border-slate-200 bg-white/80 px-3 backdrop-blur-md transition-colors duration-200 dark:border-white/10 dark:bg-slate-900/80 sm:px-4">
+    <div className="relative z-30 flex h-14 items-center justify-between border-b border-stone-200/90 bg-stone-50/85 px-3 backdrop-blur-md transition-colors duration-200 dark:border-[#3b352f] dark:bg-[#211e1b]/95 sm:px-4">
       <div className="flex min-w-0 items-center gap-4">
-        <div
-          className="font-bold text-xl text-blue-600 dark:text-blue-400 cursor-pointer"
+        <button
+          type="button"
+          className="group flex items-center gap-2.5 rounded-lg px-1 py-1 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#211e1b]"
           onClick={goToHome}
+          aria-label="Return to projects"
         >
-          SketchFlow
-        </div>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-900 text-amber-200 shadow-sm shadow-stone-950/20 dark:bg-amber-300 dark:text-stone-950">
+            <PenTool className="h-4 w-4" strokeWidth={2.4} />
+          </span>
+          <span className="leading-none">
+            <span className="block font-semibold tracking-[-0.035em] text-stone-950 dark:text-stone-50">
+              SketchFlow
+            </span>
+            <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+              Canvas
+            </span>
+          </span>
+        </button>
 
         {!hideProjectControls && (
           <div className="hidden items-center sm:flex">
-            <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+            <div className="mx-2 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
 
             <div className="flex items-center gap-2 group">
               <input
                 value={projectTitle}
                 onChange={(e) => setProjectTitle(e.target.value)}
-                className="bg-transparent border border-transparent hover:border-slate-300 dark:hover:border-white/10 focus:border-blue-500 rounded px-2 py-1 text-sm transition-colors outline-none min-w-[150px] text-slate-900 dark:text-slate-100"
+                className="min-w-[150px] rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm text-stone-900 outline-none transition-colors hover:border-stone-300 hover:bg-stone-100/60 focus:border-amber-500 focus:bg-amber-50/40 dark:text-stone-100 dark:hover:border-[#3b352f] dark:hover:bg-white/[0.035] dark:focus:border-amber-300 dark:focus:bg-amber-300/[0.06]"
                 placeholder="Untitled Project"
               />
               <div className="flex items-center gap-2 text-xs">
                 {isSaving || saveStatus === 'syncing' ? (
-                  <span className="flex items-center text-blue-500 dark:text-blue-400">
+                  <span className="flex items-center text-emerald-600 dark:text-emerald-400">
                     <Loader2 className="w-3 h-3 animate-spin mr-1" /> Saving...
                   </span>
                 ) : saveStatus === 'retrying' ? (
@@ -280,7 +292,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
                     <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" /> Unsaved
                   </span>
                 ) : (
-                  <span className="text-slate-500 flex items-center">
+                  <span className="flex items-center text-stone-500 dark:text-stone-400">
                     <Cloud className="w-3 h-3 mr-1" /> Saved
                   </span>
                 )}
@@ -290,32 +302,32 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         )}
       </div>
 
-      <div className="hidden items-center gap-2 sm:flex">
+      <div className="hidden items-center gap-1 rounded-xl border border-stone-200/80 bg-stone-100/65 p-1 shadow-sm shadow-stone-950/[0.04] dark:border-[#3b352f] dark:bg-black/15 dark:shadow-none sm:flex">
         {!hideProjectControls && (
           <>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleSave}
-              className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+              className="text-stone-600 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/[0.06] dark:hover:text-stone-50"
               disabled={isSaving}
             >
               <Save className="w-4 h-4 mr-2" />
               Save
             </Button>
 
-            <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+            <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
             <Button
               variant="ghost"
               size="icon"
               onClick={handleClear}
               title="Clear Canvas"
-              className="text-slate-600 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-500/10"
+              className="text-stone-500 hover:bg-red-500/10 hover:text-red-600 dark:text-stone-400 dark:hover:text-red-300"
             >
               <Trash2 className="w-4 h-4" />
             </Button>
 
-            <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+            <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -324,7 +336,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
                   size="sm"
                   disabled={isExporting || objects.length === 0}
                   title="Export drawing"
-                  className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                  className="text-stone-600 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/[0.06] dark:hover:text-stone-50"
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Export
@@ -386,19 +398,19 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+            <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
 
             {!isGuest &&
               (currentProject ? (
                 <ProjectShareDialog
                   project={currentProject}
-                  triggerClassName="h-9 w-9 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10"
+                  triggerClassName="h-9 w-9 text-stone-600 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/[0.06] dark:hover:text-stone-50"
                 />
               ) : (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 text-slate-400 dark:text-slate-500"
+                  className="h-9 w-9 text-stone-400 dark:text-stone-600"
                   title="Save project first to share"
                   disabled
                 >
@@ -407,7 +419,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
               ))}
             <ShortcutsDialog mode="draw" />
 
-            <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+            <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
           </>
         )}
 
@@ -417,14 +429,17 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                className="text-stone-600 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/[0.06] dark:hover:text-stone-50"
               >
                 <User className="w-4 h-4 mr-2" />
                 Sign In
               </Button>
             </SignInButton>
             <SignUpButton mode="modal">
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Button
+                size="sm"
+                className="bg-amber-300 text-slate-950 hover:bg-amber-200 dark:bg-amber-300 dark:text-slate-950 dark:hover:bg-amber-200"
+              >
                 Sign Up
               </Button>
             </SignUpButton>
@@ -432,7 +447,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         )}
 
         <ConnectionStatus />
-        <div className="h-6 w-px bg-slate-200 dark:bg-white/10 mx-2" />
+        <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
         <SettingsDropdown />
       </div>
       <div className="flex items-center gap-1 sm:hidden">
