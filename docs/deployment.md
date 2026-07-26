@@ -1,7 +1,13 @@
 # Deployment
 
-SketchFlow is deployed as one Docker image: the Express/Socket.IO server serves the built React
-client. The current production model is a manually promoted VPS container, not Cloudflare Pages.
+SketchFlow has a split production deployment:
+
+- **Cloudflare Pages** serves the React client at `draw.mananlalwani.com`.
+- The **VPS Docker container** serves the Express API and Socket.IO at the API origin.
+
+Cloudflare Pages is connected to `main`, so a client-only change deploys from that integration. It
+does not need a new GHCR image or VPS restart. The API origin remains the source of truth for
+authentication, persistence, and collaboration.
 
 ## Before deploying
 
@@ -20,7 +26,17 @@ Sentry, OpenTelemetry, and `RELEASE_ID` are optional. They are not required for 
 start. Browser OpenTelemetry is intentionally disabled: never expose OTLP credentials or headers in
 a `VITE_*` variable.
 
-## Manual VPS deployment
+## What deploys where
+
+| Change                                                                        | Deploy action                                                                     |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `apps/client/**` only                                                         | Push to `main`; Cloudflare Pages publishes the frontend. No Docker work.          |
+| `apps/server/**`, `packages/shared/**`, dependency manifests, or `Dockerfile` | GitHub Actions builds and publishes a new GHCR image; then promote it on the VPS. |
+
+The `main` CI workflow detects this automatically: frontend-only commits skip the expensive
+container build and image publish jobs. It still runs the normal test and quality checks.
+
+## Manual VPS backend deployment
 
 After GitHub Actions has published the image, pull and restart it on the VPS using the existing
 container port and environment values. Prefer an `--env-file` stored only on the VPS over putting
@@ -39,9 +55,10 @@ The environment file should include `PORT=4967` when the host maps port 4967 dir
 
 ## Image and GitHub releases
 
-Pushing a `v*` tag runs the release workflow: it validates the source, publishes both the versioned
-GHCR image and `latest`, then creates a GitHub Release. It intentionally does not deploy the VPS.
-Use the image tag for a reproducible rollback or use `latest` for the newest successful main build.
+Pushing a `v*` tag is an explicit backend release: it validates the source, publishes both the
+versioned GHCR image and `latest`, then creates a GitHub Release. It intentionally does not deploy
+the VPS. Use the image tag for a reproducible rollback or use `latest` for the newest successful
+backend build.
 
 ## Optional observability
 
