@@ -246,9 +246,10 @@ export const useDrawingStore = create<DrawingState>()(
         showToolbar: true,
         viewMode: 'draw',
         shapeFilled: false,
-        triangleMode: 'right',
+        triangleMode: 'custom',
         starPoints: 5,
-        autoShape: true,
+        // Keep freehand drawing predictable until the person explicitly opts in.
+        autoShape: false,
         autoShapeThresholds: {
           closureFactor: 0.15,
           rectCornerMin: 2,
