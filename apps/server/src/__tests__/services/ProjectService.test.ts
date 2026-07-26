@@ -208,6 +208,67 @@ describe('ProjectService', () => {
       });
     });
 
+    it('persists lock and group metadata from an atomic client selection action', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        ...project,
+        data: {
+          objects: [
+            { id: 'first', type: 'rectangle', color: '#000000', size: 2 },
+            { id: 'second', type: 'stroke', color: '#000000', size: 2 },
+          ],
+        },
+      } as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockResolvedValue({} as never);
+
+      await expect(
+        service.commitCollaborationOperation({
+          ...operation,
+          operationId: 'operation_selection_1',
+          kind: 'batch',
+          data: {
+            operations: [
+              {
+                kind: 'upsert-object',
+                data: {
+                  object: {
+                    id: 'first',
+                    type: 'rectangle',
+                    color: '#000000',
+                    size: 2,
+                    groupId: 'group-1',
+                    locked: true,
+                  },
+                },
+              },
+              {
+                kind: 'upsert-object',
+                data: {
+                  object: {
+                    id: 'second',
+                    type: 'stroke',
+                    color: '#000000',
+                    size: 2,
+                    groupId: 'group-1',
+                    locked: true,
+                  },
+                },
+              },
+            ],
+          },
+        }),
+      ).resolves.toMatchObject({
+        status: 'applied',
+        data: {
+          objects: [
+            expect.objectContaining({ id: 'first', groupId: 'group-1', locked: true }),
+            expect.objectContaining({ id: 'second', groupId: 'group-1', locked: true }),
+          ],
+        },
+      });
+    });
+
     it('returns an existing matching operation as a duplicate without writing again', async () => {
       const receiptHash = 'a'.repeat(64);
       vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue({

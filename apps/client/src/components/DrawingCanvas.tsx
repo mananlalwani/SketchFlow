@@ -182,7 +182,6 @@ export function DrawingCanvas() {
     setSelectedObject,
     selectedObjectIds,
     setSelectedObjects,
-    toggleSelectedObject,
     updateObject,
     projectRole,
   } = useDrawingStore();
@@ -901,7 +900,13 @@ export function DrawingCanvas() {
           const obj = objects.find((o) => o.id === hitId);
           if (obj) {
             if (e.shiftKey) {
-              toggleSelectedObject(hitId);
+              const groupMemberIds = expandObjectIdsWithGroups(objects, [hitId]);
+              const groupIsSelected = groupMemberIds.every((id) => selectedObjectIds.includes(id));
+              setSelectedObjects(
+                groupIsSelected
+                  ? selectedObjectIds.filter((id) => !groupMemberIds.includes(id))
+                  : [...selectedObjectIds, ...groupMemberIds],
+              );
               return;
             }
             const groupIds = obj.groupId
@@ -924,11 +929,17 @@ export function DrawingCanvas() {
               return;
             }
             if (obj.locked) return;
+            // Locked objects remain selected so their state is clear, but never
+            // join a transform started from an unlocked group member.
+            const movableIds = ids.filter(
+              (id) => !objects.find((candidate) => candidate.id === id)?.locked,
+            );
+            if (!movableIds.length) return;
             const offset = getObjectDragOffset(obj, worldPos);
-            const drag = { id: hitId, ids, offsetX: offset.x, offsetY: offset.y };
+            const drag = { id: hitId, ids: movableIds, offsetX: offset.x, offsetY: offset.y };
             activeDragRef.current = drag;
             setDragPreviewObject(obj);
-            setDragPreviewObjects(objects.filter((candidate) => ids.includes(candidate.id)));
+            setDragPreviewObjects(objects.filter((candidate) => movableIds.includes(candidate.id)));
             setDraggedObject(drag);
             saveHistory();
             return;
@@ -1262,7 +1273,6 @@ export function DrawingCanvas() {
       setSelectedObject,
       setSelectedObjects,
       selectedObjectIds,
-      toggleSelectedObject,
     ],
   );
 
@@ -1581,7 +1591,7 @@ export function DrawingCanvas() {
           );
         })
         .map((object) => object.id);
-      setSelectedObjects(ids);
+      setSelectedObjects(expandObjectIdsWithGroups(objects, ids));
       setSelectionRect(null);
       setIsDrawing(false);
       return;
