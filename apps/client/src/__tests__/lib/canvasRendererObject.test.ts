@@ -80,4 +80,27 @@ describe('drawingObjectsToRendererScene', () => {
 
     expect(scene.shapes.map((shape) => shape.id)).toEqual(['visually-bottom', 'visually-top']);
   });
+
+  it('keeps fitted triangle vertices so auto-detected triangles are not redrawn as presets', () => {
+    const fittedVertices = [
+      { x: 12, y: 8 },
+      { x: 42, y: 18 },
+      { x: 20, y: 48 },
+    ];
+    const scene = drawingObjectsToRendererScene([
+      {
+        id: 'detected-triangle',
+        type: 'triangle',
+        x: 12,
+        y: 8,
+        width: 30,
+        height: 40,
+        color: '#123456',
+        size: 2,
+        points: fittedVertices,
+      },
+    ]);
+
+    expect(scene.shapes[0]?.points).toEqual(fittedVertices);
+  });
 });
