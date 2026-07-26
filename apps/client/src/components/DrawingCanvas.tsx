@@ -187,6 +187,24 @@ export function DrawingCanvas() {
 
   const [dragPreviewObject, setDragPreviewObject] = useState<DrawingObject | null>(null);
   const selectedObject = objects.find((object) => object.id === selectedObjectId);
+  const selectedObjects = objects.filter((object) => selectedObjectIds.includes(object.id));
+  const multiSelectionBounds =
+    selectedObjects.length > 1
+      ? selectedObjects
+          .map(getObjectBounds)
+          .filter((bounds): bounds is NonNullable<typeof bounds> => bounds !== null)
+          .reduce<NonNullable<ReturnType<typeof getObjectBounds>> | null>((combined, bounds) => {
+            if (!combined) return bounds;
+            const right = Math.max(combined.x + combined.width, bounds.x + bounds.width);
+            const bottom = Math.max(combined.y + combined.height, bounds.y + bounds.height);
+            return {
+              x: Math.min(combined.x, bounds.x),
+              y: Math.min(combined.y, bounds.y),
+              width: right - Math.min(combined.x, bounds.x),
+              height: bottom - Math.min(combined.y, bounds.y),
+            };
+          }, null)
+      : null;
   const selectedDisplayObject =
     dragPreviewObject?.id === selectedObject?.id ? dragPreviewObject : selectedObject;
   const selectedBounds = selectedDisplayObject ? getObjectBounds(selectedDisplayObject) : null;
@@ -2145,7 +2163,30 @@ export function DrawingCanvas() {
           strokeWidth={2}
         />
       </svg>
-      {selectedBounds && (
+      {multiSelectionBounds && (
+        <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible">
+          <rect
+            x={(multiSelectionBounds.x - viewX) * zoom - 5}
+            y={(multiSelectionBounds.y - viewY) * zoom - 5}
+            width={Math.max(12, multiSelectionBounds.width * zoom + 10)}
+            height={Math.max(12, multiSelectionBounds.height * zoom + 10)}
+            rx="3"
+            fill="rgba(37, 99, 235, 0.04)"
+            stroke="#2563eb"
+            strokeWidth="2"
+            strokeDasharray="6 4"
+          />
+          <g
+            transform={`translate(${(multiSelectionBounds.x - viewX) * zoom - 5} ${(multiSelectionBounds.y - viewY) * zoom - 28})`}
+          >
+            <rect width="94" height="19" rx="4" fill="#2563eb" />
+            <text x="8" y="13" fill="white" fontSize="11" fontWeight="600">
+              {selectedObjects.length} selected
+            </text>
+          </g>
+        </svg>
+      )}
+      {selectedBounds && !multiSelectionBounds && (
         <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible">
           <g
             transform={`rotate(${selectedRotation} ${(selectedBounds.x + selectedBounds.width / 2 - viewX) * zoom} ${(selectedBounds.y + selectedBounds.height / 2 - viewY) * zoom})`}
