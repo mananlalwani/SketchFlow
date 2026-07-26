@@ -36,6 +36,35 @@ function textDimensions(text: string, fontSize: number) {
   };
 }
 
+function objectBounds(object: DrawingObject) {
+  if (object.type === 'stroke' && object.points?.length) {
+    const xs = object.points.map((point) => point.x);
+    const ys = object.points.map((point) => point.y);
+    return {
+      x: Math.min(...xs) - object.size,
+      y: Math.min(...ys) - object.size,
+      width: Math.max(...xs) - Math.min(...xs) + object.size * 2,
+      height: Math.max(...ys) - Math.min(...ys) + object.size * 2,
+    };
+  }
+  if (object.x === undefined || object.y === undefined) return null;
+  return {
+    x: Math.min(object.x, object.x + (object.width ?? 0)),
+    y: Math.min(object.y, object.y + (object.height ?? 0)),
+    width: Math.abs(object.width ?? 0),
+    height: Math.abs(object.height ?? 0),
+  };
+}
+
+function translateObject(object: DrawingObject, deltaX: number, deltaY: number): DrawingObject {
+  return {
+    ...object,
+    x: object.x === undefined ? undefined : object.x + deltaX,
+    y: object.y === undefined ? undefined : object.y + deltaY,
+    points: object.points?.map((point) => ({ ...point, x: point.x + deltaX, y: point.y + deltaY })),
+  };
+}
+
 /** Object-level controls, intentionally shared by the desktop panel and mobile drawer. */
 export function SelectionInspector() {
   const {
@@ -54,27 +83,38 @@ export function SelectionInspector() {
   const isMultiSelection = selectedObjects.length > 1;
   const object = objects.find((candidate) => candidate.id === selectedObjectId);
   const alignSelected = (axis: 'x' | 'y', edge: 'min' | 'max') => {
-    const positioned = selectedObjects.filter(
-      (candidate): candidate is DrawingObject & { x: number; y: number } =>
-        candidate.x !== undefined && candidate.y !== undefined,
-    );
+    const positioned = selectedObjects
+      .map((object) => ({ object, bounds: objectBounds(object) }))
+      .filter(
+        (
+          candidate,
+        ): candidate is {
+          object: DrawingObject;
+          bounds: NonNullable<ReturnType<typeof objectBounds>>;
+        } => candidate.bounds !== null,
+      );
     if (positioned.length < 2) return;
     const target =
       edge === 'min'
-        ? Math.min(...positioned.map((candidate) => candidate[axis]))
+        ? Math.min(...positioned.map((candidate) => candidate.bounds[axis]))
         : Math.max(
             ...positioned.map(
               (candidate) =>
-                candidate[axis] + (axis === 'x' ? (candidate.width ?? 0) : (candidate.height ?? 0)),
+                candidate.bounds[axis] +
+                (axis === 'x' ? candidate.bounds.width : candidate.bounds.height),
             ),
           );
     saveHistory();
     setObjects(
       objects.map((candidate) => {
-        if (!positioned.some((selected) => selected.id === candidate.id)) return candidate;
-        if (axis === 'x')
-          return { ...candidate, x: target - (edge === 'max' ? (candidate.width ?? 0) : 0) };
-        return { ...candidate, y: target - (edge === 'max' ? (candidate.height ?? 0) : 0) };
+        const selected = positioned.find((item) => item.object.id === candidate.id);
+        if (!selected) return candidate;
+        const farEdge =
+          selected.bounds[axis] + (axis === 'x' ? selected.bounds.width : selected.bounds.height);
+        const delta = target - (edge === 'max' ? farEdge : selected.bounds[axis]);
+        return axis === 'x'
+          ? translateObject(candidate, delta, 0)
+          : translateObject(candidate, 0, delta);
       }),
     );
     requestFullRedraw();
@@ -82,33 +122,42 @@ export function SelectionInspector() {
 
   const distributeSelected = (axis: 'x' | 'y') => {
     const positioned = selectedObjects
+      .map((object) => ({ object, bounds: objectBounds(object) }))
       .filter(
-        (candidate): candidate is DrawingObject & { x: number; y: number } =>
-          candidate.x !== undefined && candidate.y !== undefined,
+        (
+          candidate,
+        ): candidate is {
+          object: DrawingObject;
+          bounds: NonNullable<ReturnType<typeof objectBounds>>;
+        } => candidate.bounds !== null,
       )
-      .sort((a, b) => a[axis] - b[axis]);
+      .sort((a, b) => a.bounds[axis] - b.bounds[axis]);
     if (positioned.length < 3) return;
     const first = positioned[0];
     const last = positioned[positioned.length - 1];
-    const firstEdge = first[axis];
-    const lastEdge = last[axis] + (axis === 'x' ? (last.width ?? 0) : (last.height ?? 0));
+    const firstEdge = first.bounds[axis];
+    const lastEdge = last.bounds[axis] + (axis === 'x' ? last.bounds.width : last.bounds.height);
     const occupied = positioned.reduce(
-      (sum, candidate) => sum + (axis === 'x' ? (candidate.width ?? 0) : (candidate.height ?? 0)),
+      (sum, candidate) => sum + (axis === 'x' ? candidate.bounds.width : candidate.bounds.height),
       0,
     );
     const gap = (lastEdge - firstEdge - occupied) / (positioned.length - 1);
     let cursor = firstEdge;
     const positions = new Map<string, number>();
     for (const candidate of positioned) {
-      positions.set(candidate.id, cursor);
-      cursor += (axis === 'x' ? (candidate.width ?? 0) : (candidate.height ?? 0)) + gap;
+      positions.set(candidate.object.id, cursor);
+      cursor += (axis === 'x' ? candidate.bounds.width : candidate.bounds.height) + gap;
     }
     saveHistory();
     setObjects(
       objects.map((candidate) => {
         const position = positions.get(candidate.id);
         if (position === undefined) return candidate;
-        return axis === 'x' ? { ...candidate, x: position } : { ...candidate, y: position };
+        const bounds = objectBounds(candidate);
+        if (!bounds) return candidate;
+        return axis === 'x'
+          ? translateObject(candidate, position - bounds.x, 0)
+          : translateObject(candidate, 0, position - bounds.y);
       }),
     );
     requestFullRedraw();
