@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { generateId } from '@/lib/utils';
+import { expandObjectIdsWithGroups } from '@/lib/canvasObjectTransform';
 import { useDrawingStore, type DrawingObject } from '@/store/drawingStore';
 
 function duplicateObject(object: DrawingObject): DrawingObject {
@@ -72,6 +73,7 @@ export function SelectionInspector() {
     selectedObjectId,
     selectedObjectIds,
     setSelectedObject,
+    setSelectedObjects,
     updateObject,
     addObject,
     saveHistory,
@@ -164,23 +166,38 @@ export function SelectionInspector() {
   };
 
   const groupSelected = () => {
+    const ids = expandObjectIdsWithGroups(objects, selectedObjectIds);
+    if (ids.length < 2) return;
     saveHistory();
     const groupId = generateId();
     setObjects(
       objects.map((candidate) =>
-        selectedObjectIds.includes(candidate.id) ? { ...candidate, groupId } : candidate,
+        ids.includes(candidate.id) ? { ...candidate, groupId } : candidate,
       ),
     );
+    setSelectedObjects(ids);
     requestFullRedraw();
   };
 
   const ungroupSelected = () => {
+    const groupIds = new Set(
+      selectedObjects
+        .map((candidate) => candidate.groupId)
+        .filter((groupId): groupId is string => Boolean(groupId)),
+    );
+    if (!groupIds.size) return;
+    const ids = objects
+      .filter((candidate) => candidate.groupId && groupIds.has(candidate.groupId))
+      .map((candidate) => candidate.id);
     saveHistory();
     setObjects(
       objects.map((candidate) =>
-        selectedObjectIds.includes(candidate.id) ? { ...candidate, groupId: undefined } : candidate,
+        candidate.groupId && groupIds.has(candidate.groupId)
+          ? { ...candidate, groupId: undefined }
+          : candidate,
       ),
     );
+    setSelectedObjects(ids);
     requestFullRedraw();
   };
 
@@ -215,7 +232,12 @@ export function SelectionInspector() {
           <Button size="sm" variant="secondary" onClick={groupSelected}>
             Group
           </Button>
-          <Button size="sm" variant="secondary" onClick={ungroupSelected}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={ungroupSelected}
+            disabled={!selectedObjects.some((candidate) => candidate.groupId)}
+          >
             Ungroup
           </Button>
         </div>

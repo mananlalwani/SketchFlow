@@ -35,6 +35,7 @@ import {
 } from '@/lib/canvasPointer';
 import {
   getObjectDragOffset,
+  expandObjectIdsWithGroups,
   translateObjectInCollection,
   translateObjectsBy,
 } from '@/lib/canvasObjectTransform';
@@ -187,11 +188,13 @@ export function DrawingCanvas() {
   } = useDrawingStore();
 
   const [dragPreviewObject, setDragPreviewObject] = useState<DrawingObject | null>(null);
+  const [dragPreviewObjects, setDragPreviewObjects] = useState<DrawingObject[] | null>(null);
   const selectedObject = objects.find((object) => object.id === selectedObjectId);
   const selectedObjects = objects.filter((object) => selectedObjectIds.includes(object.id));
+  const displayedSelectedObjects = dragPreviewObjects ?? selectedObjects;
   const multiSelectionBounds =
-    selectedObjects.length > 1
-      ? selectedObjects
+    displayedSelectedObjects.length > 1
+      ? displayedSelectedObjects
           .map(getObjectBounds)
           .filter((bounds): bounds is NonNullable<typeof bounds> => bounds !== null)
           .reduce<NonNullable<ReturnType<typeof getObjectBounds>> | null>((combined, bounds) => {
@@ -207,7 +210,8 @@ export function DrawingCanvas() {
           }, null)
       : null;
   const selectedDisplayObject =
-    dragPreviewObject?.id === selectedObject?.id ? dragPreviewObject : selectedObject;
+    dragPreviewObjects?.find((object) => object.id === selectedObject?.id) ??
+    (dragPreviewObject?.id === selectedObject?.id ? dragPreviewObject : selectedObject);
   const selectedBounds = selectedDisplayObject ? getObjectBounds(selectedDisplayObject) : null;
   const selectedRotation = selectedDisplayObject?.rotation ?? 0;
   const canDirectTransform = Boolean(
@@ -905,7 +909,13 @@ export function DrawingCanvas() {
                   .filter((candidate) => candidate.groupId === obj.groupId)
                   .map((candidate) => candidate.id)
               : [hitId];
-            if (!selectedObjectIds.includes(hitId)) setSelectedObjects(groupIds);
+            const ids = expandObjectIdsWithGroups(
+              objects,
+              selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds,
+            );
+            if (!selectedObjectIds.includes(hitId) || ids.length !== selectedObjectIds.length) {
+              setSelectedObjects(ids);
+            }
             if (e.pointerType === 'touch' && 'vibrate' in navigator) navigator.vibrate(12);
             // Selection is intentionally non-destructive. It can activate
             // resize/rotate handles, but only the Move tool starts a drag.
@@ -915,10 +925,10 @@ export function DrawingCanvas() {
             }
             if (obj.locked) return;
             const offset = getObjectDragOffset(obj, worldPos);
-            const ids = selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds;
             const drag = { id: hitId, ids, offsetX: offset.x, offsetY: offset.y };
             activeDragRef.current = drag;
             setDragPreviewObject(obj);
+            setDragPreviewObjects(objects.filter((candidate) => ids.includes(candidate.id)));
             setDraggedObject(drag);
             saveHistory();
             return;
@@ -1346,90 +1356,97 @@ export function DrawingCanvas() {
               dragRedrawScheduledRef.current = false;
 
               if (draggedObjectsRef.current) {
-                const updatedObj = draggedObjectsRef.current.find((o) => o.id === activeDrag.id);
+                const updatedObjects = draggedObjectsRef.current;
+                const previews = updatedObjects.filter((object) =>
+                  activeDrag.ids.includes(object.id),
+                );
+                const updatedObj = previews.find((object) => object.id === activeDrag.id);
                 if (updatedObj) {
                   setDragPreviewObject(updatedObj);
-                  if (
-                    updatedObj.type === 'stroke' &&
-                    updatedObj.points &&
-                    updatedObj.points.length > 1
-                  ) {
-                    workerRef.current?.postMessage({
-                      type: 'remove-group',
-                      groupId: updatedObj.id,
-                    });
+                  setDragPreviewObjects(previews);
+                  for (const updatedObj of previews) {
+                    if (
+                      updatedObj.type === 'stroke' &&
+                      updatedObj.points &&
+                      updatedObj.points.length > 1
+                    ) {
+                      workerRef.current?.postMessage({
+                        type: 'remove-group',
+                        groupId: updatedObj.id,
+                      });
 
-                    const strokes: StrokeData[] = [];
-                    for (let i = 0; i < updatedObj.points.length - 1; i++) {
-                      const a = updatedObj.points[i];
-                      const b = updatedObj.points[i + 1];
-                      strokes.push({
-                        x0: a.x,
-                        y0: a.y,
-                        x1: b.x,
-                        y1: b.y,
+                      const strokes: StrokeData[] = [];
+                      for (let i = 0; i < updatedObj.points.length - 1; i++) {
+                        const a = updatedObj.points[i];
+                        const b = updatedObj.points[i + 1];
+                        strokes.push({
+                          x0: a.x,
+                          y0: a.y,
+                          x1: b.x,
+                          y1: b.y,
+                          color: updatedObj.color,
+                          size: updatedObj.size,
+                          alpha: updatedObj.alpha ?? 1,
+                          groupId: updatedObj.id,
+                          timestamp: Date.now(),
+                        });
+                      }
+                      if (strokes.length) {
+                        workerRef.current?.postMessage({
+                          type: 'strokes',
+                          data: strokes,
+                        });
+                      }
+                    } else if (
+                      (updatedObj.type === 'line' ||
+                        updatedObj.type === 'rectangle' ||
+                        updatedObj.type === 'ellipse' ||
+                        updatedObj.type === 'circle' ||
+                        updatedObj.type === 'triangle' ||
+                        updatedObj.type === 'parabola' ||
+                        updatedObj.type === 'text' ||
+                        updatedObj.type === 'image' ||
+                        updatedObj.type === 'star' ||
+                        updatedObj.type === 'arrow') &&
+                      updatedObj.x !== undefined &&
+                      updatedObj.y !== undefined
+                    ) {
+                      const shape: ShapeData = {
+                        id: updatedObj.id,
+                        type: updatedObj.type,
+                        x: updatedObj.x,
+                        y: updatedObj.y,
+                        width: updatedObj.width ?? 0,
+                        height: updatedObj.height ?? 0,
                         color: updatedObj.color,
                         size: updatedObj.size,
                         alpha: updatedObj.alpha ?? 1,
-                        groupId: updatedObj.id,
+                        filled: updatedObj.filled,
+                        orientation: (
+                          updatedObj as {
+                            orientation?: 'up' | 'down' | 'left' | 'right';
+                          }
+                        ).orientation,
+                        text: updatedObj.text,
+                        fontSize: updatedObj.fontSize,
+                        imageData: updatedObj.imageData,
+                        points: updatedObj.points,
+                        // The worker only reads transforms from `properties`.
+                        // Preserve rotation in the incremental drag scene just
+                        // like the full-scene renderer does, otherwise a moved
+                        // rotated object temporarily renders unrotated.
+                        properties: {
+                          ...updatedObj.properties,
+                          rotation: updatedObj.rotation ?? 0,
+                          hidden: updatedObj.hidden ?? false,
+                        },
                         timestamp: Date.now(),
-                      });
-                    }
-                    if (strokes.length) {
+                      };
                       workerRef.current?.postMessage({
-                        type: 'strokes',
-                        data: strokes,
+                        type: 'shape',
+                        data: shape,
                       });
                     }
-                  } else if (
-                    (updatedObj.type === 'line' ||
-                      updatedObj.type === 'rectangle' ||
-                      updatedObj.type === 'ellipse' ||
-                      updatedObj.type === 'circle' ||
-                      updatedObj.type === 'triangle' ||
-                      updatedObj.type === 'parabola' ||
-                      updatedObj.type === 'text' ||
-                      updatedObj.type === 'image' ||
-                      updatedObj.type === 'star' ||
-                      updatedObj.type === 'arrow') &&
-                    updatedObj.x !== undefined &&
-                    updatedObj.y !== undefined
-                  ) {
-                    const shape: ShapeData = {
-                      id: updatedObj.id,
-                      type: updatedObj.type,
-                      x: updatedObj.x,
-                      y: updatedObj.y,
-                      width: updatedObj.width ?? 0,
-                      height: updatedObj.height ?? 0,
-                      color: updatedObj.color,
-                      size: updatedObj.size,
-                      alpha: updatedObj.alpha ?? 1,
-                      filled: updatedObj.filled,
-                      orientation: (
-                        updatedObj as {
-                          orientation?: 'up' | 'down' | 'left' | 'right';
-                        }
-                      ).orientation,
-                      text: updatedObj.text,
-                      fontSize: updatedObj.fontSize,
-                      imageData: updatedObj.imageData,
-                      points: updatedObj.points,
-                      // The worker only reads transforms from `properties`.
-                      // Preserve rotation in the incremental drag scene just
-                      // like the full-scene renderer does, otherwise a moved
-                      // rotated object temporarily renders unrotated.
-                      properties: {
-                        ...updatedObj.properties,
-                        rotation: updatedObj.rotation ?? 0,
-                        hidden: updatedObj.hidden ?? false,
-                      },
-                      timestamp: Date.now(),
-                    };
-                    workerRef.current?.postMessage({
-                      type: 'shape',
-                      data: shape,
-                    });
                   }
                 }
               }
@@ -1586,6 +1603,7 @@ export function DrawingCanvas() {
       }
       activeDragRef.current = null;
       setDragPreviewObject(null);
+      setDragPreviewObjects(null);
       setDraggedObject(null);
 
       requestAnimationFrame(() => {
