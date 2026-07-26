@@ -722,7 +722,7 @@ export class SketchFlowServer {
     this.app.use(errorHandlerMiddleware);
 
     // Serve React app for all other routes (SPA fallback)
-    this.app.get('/{*splat}', (_req, res) => {
+    this.app.get('/{*splat}', rateLimitMiddleware({ windowMs: 60 * 1000, maxRequests: 120 }), (_req, res) => {
       res.sendFile(path.join(this.clientDistPath, 'index.html'));
     });
   }
