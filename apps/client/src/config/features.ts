@@ -13,7 +13,7 @@ export const FEATURES = {
    * Set to false to disable shape detection completely
    * When disabled: hides UI controls and prevents shape detection from running
    */
-  AUTO_SHAPE: false,
+  AUTO_SHAPE: true,
 
   /**
    * Advanced shape detection - experimental improved detection
