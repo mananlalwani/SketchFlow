@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Palette, Layers, Settings, Moon, Sun, Trash2, FolderOpen, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FEATURES } from '@/config/features';
 import { LayerStack } from '@/components/LayerStack';
 import { SelectionInspector } from '@/components/SelectionInspector';
 import {
@@ -64,6 +65,8 @@ export function MobilePropertiesDrawer({
     setTriangleMode,
     starPoints,
     setStarPoints,
+    autoShape,
+    setAutoShape,
     projectTitle,
     setProjectTitle,
     saveStatus,
@@ -205,6 +208,29 @@ export function MobilePropertiesDrawer({
                       onClick={() => setEraserMode('object')}
                     >
                       Object
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {FEATURES.AUTO_SHAPE && currentTool === 'pen' && (
+                <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                        Auto-shape
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Turn deliberate pen shapes into clean geometry.
+                      </p>
+                    </div>
+                    <Button
+                      variant={autoShape ? 'default' : 'secondary'}
+                      size="sm"
+                      aria-pressed={autoShape}
+                      onClick={() => setAutoShape(!autoShape)}
+                    >
+                      {autoShape ? 'On' : 'Off'}
                     </Button>
                   </div>
                 </div>

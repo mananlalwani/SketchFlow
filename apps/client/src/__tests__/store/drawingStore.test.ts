@@ -21,8 +21,7 @@ describe('drawingStore', () => {
       showToolbar: true,
       viewMode: 'draw',
       shapeFilled: false,
-      triangleMode: 'right',
-      autoShape: true,
+      autoShape: false,
       history: [[]],
       historyIndex: 0,
       zoom: 1,
@@ -44,22 +43,12 @@ describe('drawingStore', () => {
   });
 
   describe('auto shape', () => {
-    it('starts enabled and remains user-toggleable', () => {
+    it('starts disabled and remains user-toggleable', () => {
       const { setAutoShape } = useDrawingStore.getState();
 
-      expect(useDrawingStore.getState().autoShape).toBe(true);
-      setAutoShape(false);
       expect(useDrawingStore.getState().autoShape).toBe(false);
-    });
-  });
-
-  describe('triangle mode', () => {
-    it('starts in drag-to-draw mode and still supports explicit triangle choices', () => {
-      const { setTriangleMode } = useDrawingStore.getState();
-
-      expect(useDrawingStore.getState().triangleMode).toBe('right');
-      setTriangleMode('custom');
-      expect(useDrawingStore.getState().triangleMode).toBe('custom');
+      setAutoShape(true);
+      expect(useDrawingStore.getState().autoShape).toBe(true);
     });
   });
 
