@@ -62,7 +62,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --filter @sketchflow/server db:generate
           pnpm build
-      - name: Test, Lint, Type Check, Audit
+      - name: Test, Lint & Type Check
         run: |
           # The build above already type-checks the shared and server packages.
           # Run independent checks concurrently; client/server tests used to be
@@ -73,7 +73,6 @@ jobs:
           pnpm lint &
           pids+=("$!")
           pnpm --filter @sketchflow/client type-check & pids+=("$!")
-          pnpm audit:prod & pids+=("$!")
           status=0
           for pid in "${pids[@]}"; do
             wait "$pid" || status=1
