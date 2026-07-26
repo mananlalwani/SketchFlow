@@ -4,6 +4,7 @@ import { io, type Socket } from 'socket.io-client';
 const mocks = vi.hoisted(() => ({
   checkPermission: vi.fn(),
   get: vi.fn(),
+  getByShareToken: vi.fn(),
   commitCollaborationOperation: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ vi.mock('../../services/ProjectService.js', () => ({
   ProjectService: class {
     checkPermission = mocks.checkPermission;
     get = mocks.get;
+    getByShareToken = mocks.getByShareToken;
     commitCollaborationOperation = mocks.commitCollaborationOperation;
     cleanupCorruptCollaborators = vi.fn();
   },
@@ -79,6 +81,13 @@ describe('Socket.IO boundary', () => {
       data: { objects: [] },
       revision: 1,
     });
+    mocks.getByShareToken.mockResolvedValue({
+      id: 'ckz1h2abc0000qwerty123456',
+      title: 'Shared board',
+      data: { objects: [] },
+      revision: 1,
+      role: 'viewer',
+    });
     mocks.commitCollaborationOperation.mockResolvedValue({
       status: 'applied',
       operationId: 'operation_1234567',
@@ -93,12 +102,12 @@ describe('Socket.IO boundary', () => {
     await sketchServer.stop();
   });
 
-  function connect(token?: string, endpoint = url): Promise<Socket> {
+  function connect(token?: string, endpoint = url, shareToken?: string): Promise<Socket> {
     return new Promise((resolve, reject) => {
       const client = io(endpoint, {
         transports: ['websocket'],
         reconnection: false,
-        auth: token ? { token } : {},
+        auth: token ? { token } : shareToken ? { shareToken } : {},
       });
       clients.push(client);
       client.once('connect', () => resolve(client));
@@ -120,6 +129,19 @@ describe('Socket.IO boundary', () => {
 
   it('does not treat a public share token as a realtime credential', async () => {
     await expect(connect('a'.repeat(43))).rejects.toThrow('Invalid authentication token');
+  });
+
+  it('allows a public share link to join only its read-only live room', async () => {
+    const projectId = 'ckz1h2abc0000qwerty123456';
+    const client = await connect(undefined, url, 'a'.repeat(43));
+    const hydrated = new Promise<unknown>((resolve) =>
+      client.once('collaboration:hydrated', resolve),
+    );
+
+    client.emit('room:join', projectId);
+
+    await expect(hydrated).resolves.toMatchObject({ projectId, title: 'Shared board' });
+    expect(mocks.checkPermission).not.toHaveBeenCalled();
   });
 
   it('disconnects an expired session immediately after handshake', async () => {

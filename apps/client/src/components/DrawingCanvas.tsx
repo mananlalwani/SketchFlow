@@ -698,6 +698,7 @@ export function DrawingCanvas() {
           width: number;
           height: number;
           orientation: 'up' | 'down' | 'left' | 'right';
+          points?: { x: number; y: number }[];
         }
       | null => {
       if (!points || points.length < 3) return null;
@@ -750,6 +751,9 @@ export function DrawingCanvas() {
               width: bbox.width,
               height: bbox.height,
               orientation: shape.properties.orientation as 'up' | 'down' | 'left' | 'right',
+              ...(shape.points?.length
+                ? { points: shape.points.map(({ x, y }) => ({ x, y })) }
+                : {}),
             };
           } else {
             const shapeObj = {
@@ -1706,6 +1710,7 @@ export function DrawingCanvas() {
                 ...common,
                 type: 'parabola' as const,
                 orientation: shape.orientation,
+                ...(shape.points?.length ? { points: shape.points } : {}),
               };
             } else if (shape.kind === 'line') {
               shapeObject = { ...common, type: 'line' as const };

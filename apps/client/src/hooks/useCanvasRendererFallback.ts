@@ -80,6 +80,31 @@ export function useCanvasRendererFallback(
           } else {
             context.strokeRect(object.x, object.y, object.width ?? 0, object.height ?? 0);
           }
+        } else if (object.type === 'parabola') {
+          context.beginPath();
+          if (object.points && object.points.length > 1) {
+            context.moveTo(object.points[0].x, object.points[0].y);
+            for (const point of object.points.slice(1)) context.lineTo(point.x, point.y);
+          } else {
+            const steps = 64;
+            const width = object.width ?? 0;
+            const height = object.height ?? 0;
+            const opensSideways = object.orientation === 'left' || object.orientation === 'right';
+            const direction = object.orientation === 'left' || object.orientation === 'up' ? -1 : 1;
+            for (let index = 0; index <= steps; index++) {
+              const t = index / steps;
+              const normalized = (t - 0.5) * 2;
+              const x = opensSideways
+                ? object.x + (direction > 0 ? 0 : width) + direction * width * normalized ** 2
+                : object.x + t * width;
+              const y = opensSideways
+                ? object.y + t * height
+                : object.y + (direction > 0 ? 0 : height) + direction * height * normalized ** 2;
+              if (index === 0) context.moveTo(x, y);
+              else context.lineTo(x, y);
+            }
+          }
+          context.stroke();
         } else if (object.type === 'text' && object.text) {
           context.font = `${object.fontSize ?? 16}px sans-serif`;
           context.textBaseline = 'top';
