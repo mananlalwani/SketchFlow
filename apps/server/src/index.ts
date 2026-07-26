@@ -288,6 +288,7 @@ export class SketchFlowServer {
         status: 'ok',
         database: 'connected',
         connections: this.connectionRegistry.count(),
+        release: env.RELEASE_ID ?? 'unknown',
       });
     });
 
