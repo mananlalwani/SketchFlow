@@ -1370,33 +1370,25 @@ export function DrawingCanvas() {
                       updatedObj.points &&
                       updatedObj.points.length > 1
                     ) {
-                      workerRef.current?.postMessage({
-                        type: 'remove-group',
-                        groupId: updatedObj.id,
-                      });
-
-                      const strokes: StrokeData[] = [];
-                      for (let i = 0; i < updatedObj.points.length - 1; i++) {
-                        const a = updatedObj.points[i];
-                        const b = updatedObj.points[i + 1];
-                        strokes.push({
-                          x0: a.x,
-                          y0: a.y,
-                          x1: b.x,
-                          y1: b.y,
-                          color: updatedObj.color,
-                          size: updatedObj.size,
-                          alpha: updatedObj.alpha ?? 1,
-                          groupId: updatedObj.id,
-                          timestamp: Date.now(),
-                        });
-                      }
-                      if (strokes.length) {
-                        workerRef.current?.postMessage({
-                          type: 'strokes',
-                          data: strokes,
-                        });
-                      }
+                      // Strokes live in the retained shape scene after a
+                      // full redraw. Updating that entry by id is atomic for
+                      // the next blit; removing/rebuilding a raster stroke
+                      // exposed an empty frame and caused visible flicker.
+                      const stroke: ShapeData = {
+                        id: updatedObj.id,
+                        type: 'stroke',
+                        x: 0,
+                        y: 0,
+                        width: 0,
+                        height: 0,
+                        color: updatedObj.color,
+                        size: updatedObj.size,
+                        alpha: updatedObj.alpha ?? 1,
+                        points: updatedObj.points,
+                        properties: { hidden: updatedObj.hidden ?? false },
+                        timestamp: Date.now(),
+                      };
+                      workerRef.current?.postMessage({ type: 'shape', data: stroke });
                     } else if (
                       (updatedObj.type === 'line' ||
                         updatedObj.type === 'rectangle' ||
