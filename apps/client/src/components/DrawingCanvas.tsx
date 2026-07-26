@@ -2095,9 +2095,11 @@ export function DrawingCanvas() {
         return memo;
       },
       onWheel: ({ event, active, delta: [dx, dy], ctrlKey }) => {
+        // Keep the browser from scrolling or zooming the document while the
+        // canvas handles this trackpad/mouse-wheel gesture.
+        event.preventDefault();
         if (ctrlKey) {
           // Zoom
-          event.preventDefault();
           const delta = dy > 0 ? 0.9 : 1.1; // Invert direction for standard feel
 
           const canvas = canvasRef.current;
