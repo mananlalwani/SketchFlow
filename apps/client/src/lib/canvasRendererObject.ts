@@ -11,7 +11,11 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
   const shapes: ShapeData[] = [];
   const strokes: StrokeData[] = [];
 
-  for (const object of objects) {
+  const orderedObjects = objects
+    .map((object, index) => ({ object, index }))
+    .sort((a, b) => (a.object.zIndex ?? a.index) - (b.object.zIndex ?? b.index));
+
+  for (const { object } of orderedObjects) {
     if (object.type === 'stroke') {
       if (!object.points || object.points.length < 2) continue;
       // Keep a stroke in the same retained scene sequence as shapes. The
