@@ -217,8 +217,11 @@ export function MobilePropertiesDrawer({
                 <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                      <p className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
                         Auto-shape
+                        <span className="rounded-full border border-amber-300/80 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-amber-800 dark:border-amber-300/30 dark:bg-amber-300/10 dark:text-amber-200">
+                          Beta
+                        </span>
                       </p>
                       <p className="text-xs text-slate-400">
                         Turn deliberate pen shapes into clean geometry.

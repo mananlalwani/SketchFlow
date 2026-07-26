@@ -742,8 +742,11 @@ export function DrawingToolbar() {
         {/* Auto Shape toggle + settings - Hidden when feature is disabled */}
         {FEATURES.AUTO_SHAPE && (
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-gray-300 min-w-[36px]">
-              Auto Shape:
+            <label className="flex min-w-[36px] items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-gray-300">
+              Auto Shape
+              <span className="rounded border border-amber-300/80 bg-amber-100 px-1 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-amber-800 dark:border-amber-300/30 dark:bg-amber-300/10 dark:text-amber-200">
+                Beta
+              </span>
             </label>
             <Button
               onClick={() => setAutoShape(!autoShape)}
