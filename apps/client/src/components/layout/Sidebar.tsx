@@ -11,6 +11,7 @@ import {
   Type,
   Hand,
   MousePointer2,
+  Move,
   ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,7 @@ import { cn } from '@/lib/utils';
 const tools = [
   { id: 'hand', icon: Hand, label: 'Pan' },
   { id: 'select', icon: MousePointer2, label: 'Select (V)' },
+  { id: 'move', icon: Move, label: 'Move' },
   { id: 'pen', icon: Pen, label: 'Pen' },
   { id: 'eraser', icon: Eraser, label: 'Eraser' },
   { id: 'line', icon: Minus, label: 'Line' },

@@ -307,7 +307,9 @@ export function SelectionInspector() {
         <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-blue-200 pt-3 dark:border-blue-500/20">
           <div>
             <p className="text-sm text-slate-600 dark:text-slate-300">Position</p>
-            <p className="text-xs text-slate-400">Use Move on canvas or nudge precisely.</p>
+            <p className="text-xs text-slate-400">
+              Use Select or Move on canvas, or nudge precisely.
+            </p>
           </div>
           <div className="grid grid-cols-3 gap-0.5">
             <span />
