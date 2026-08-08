@@ -18,8 +18,8 @@
     "check:client-budgets": "pnpm --filter @sketchflow/client build && node scripts/check-client-budgets.mjs"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
-    "prettier": "3.6.2"
+    "concurrently": "^10.0.4",
+    "prettier": "3.9.6"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["@clerk/shared", "@prisma/engines", "@sentry/cli", "@swc/core", "core-js", "esbuild", "prisma", "protobufjs"],
