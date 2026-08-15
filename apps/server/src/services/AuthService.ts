@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserService } from './UserService.js';
+import { z } from 'zod';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -25,9 +26,8 @@ export class AuthService {
     }
 
     // Check query parameter (for development/testing)
-    if (req.query.token && typeof req.query.token === 'string') {
-      return req.query.token;
-    }
+    const queryToken = z.string().safeParse(req.query.token);
+    if (queryToken.success) return queryToken.data;
 
     return null;
   }

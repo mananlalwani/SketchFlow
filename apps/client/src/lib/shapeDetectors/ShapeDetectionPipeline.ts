@@ -1,14 +1,14 @@
 import type { BoundingBox, Point } from '../geometry';
 import type { ProcessedStroke } from '../strokeProcessor';
 import {
-  createDetectedShape,
+  createDetectedDrawing,
   DEFAULT_THRESHOLDS,
   type DetectionResult,
   type DetectionThresholds,
 } from './types';
 
-export interface ShapeDetectionResult {
-  detectedShape: DetectionResult | null;
+export interface DrawingDetectionResult {
+  detectedDrawing: DetectionResult | null;
   allCandidates: DetectionResult[];
   processingTime: number;
   processedStroke: ProcessedStroke;
@@ -28,9 +28,9 @@ export interface DetectionOptions {
   debugMode?: boolean;
 }
 
-type ShapeKind = 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola';
+type DrawingKind = 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola';
 
-const SUPPORTED_SHAPES: ShapeKind[] = [
+const SUPPORTED_DRAWINGS: DrawingKind[] = [
   'rectangle',
   'triangle',
   'circle',
@@ -39,14 +39,20 @@ const SUPPORTED_SHAPES: ShapeKind[] = [
   'parabola',
 ];
 
-const CLOSED_SHAPE_PRIORITY: Record<ShapeKind, number> = {
-  rectangle: 4,
-  triangle: 3,
-  circle: 2,
-  ellipse: 1,
-  line: 0,
-  parabola: 0,
-};
+function closedDrawingPriority(type: string): number {
+  switch (type) {
+    case 'rectangle':
+      return 4;
+    case 'triangle':
+      return 3;
+    case 'circle':
+      return 2;
+    case 'ellipse':
+      return 1;
+    default:
+      return 0;
+  }
+}
 
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 
@@ -366,7 +372,7 @@ function lineCandidate(
   return {
     confidence,
     error: normalizedError,
-    shape: createDetectedShape('line', box, {
+    drawing: createDetectedDrawing('line', box, {
       points: [start, end],
       properties: {
         angle: Math.atan2(end.y - start.y, end.x - start.x),
@@ -446,7 +452,7 @@ function parabolaCandidate(
   return {
     confidence: clamp(1 - error / thresholds.parabolaMaxError),
     error,
-    shape: createDetectedShape('parabola', boundingBox(fittedPoints), {
+    drawing: createDetectedDrawing('parabola', boundingBox(fittedPoints), {
       points: fittedPoints,
       properties: { orientation, curvature },
     }),
@@ -458,14 +464,14 @@ function parabolaCandidate(
  * A deterministic, single-pass recognizer. It intentionally recognizes only shapes
  * the canvas can turn into editable objects; freehand strokes remain freehand.
  */
-export class ShapeDetectionPipeline {
+export class DrawingDetectionPipeline {
   private readonly options: DetectionOptions;
 
   constructor(options: DetectionOptions = {}) {
     this.options = options;
   }
 
-  detectShape(points: Point[], callOptions: DetectionOptions = {}): ShapeDetectionResult {
+  detectDrawing(points: Point[], callOptions: DetectionOptions = {}): DrawingDetectionResult {
     const start = performance.now();
     const options = { ...this.options, ...callOptions };
     const thresholds = {
@@ -501,14 +507,14 @@ export class ShapeDetectionPipeline {
 
     if (source.length < 3 || Math.max(box.width, box.height) < minSize) {
       return {
-        detectedShape: null,
+        detectedDrawing: null,
         allCandidates: [],
         processingTime: performance.now() - start,
         processedStroke,
       };
     }
 
-    const enabled = new Set(options.enabledDetectors ?? SUPPORTED_SHAPES);
+    const enabled = new Set(options.enabledDetectors ?? SUPPORTED_DRAWINGS);
     const candidates: DetectionResult[] = [];
     if (!isClosed && enabled.has('line')) {
       const candidate = lineCandidate(processedPoints, box, thresholds);
@@ -531,7 +537,7 @@ export class ShapeDetectionPipeline {
           candidates.push({
             confidence: rectangle.score,
             error: rectangle.error,
-            shape: createDetectedShape('rectangle', box, {
+            drawing: createDetectedDrawing('rectangle', box, {
               points:
                 vertices.length === 4
                   ? vertices
@@ -556,7 +562,7 @@ export class ShapeDetectionPipeline {
           candidates.push({
             confidence: triangle.score,
             error: triangle.error,
-            shape: createDetectedShape('triangle', box, { points: triangle.vertices }),
+            drawing: createDetectedDrawing('triangle', box, { points: triangle.vertices }),
           });
         }
       }
@@ -570,7 +576,7 @@ export class ShapeDetectionPipeline {
           candidates.push({
             confidence: 1 - ellipse.error,
             error: ellipse.error,
-            shape: createDetectedShape(ellipse.type, box),
+            drawing: createDetectedDrawing(ellipse.type, box),
           });
         }
       }
@@ -586,12 +592,11 @@ export class ShapeDetectionPipeline {
       // A rounded rectangle can also score well as an ellipse. Once the loop
       // has passed the stricter four-edge fit, retain that stronger intent.
       const priorityDifference =
-        CLOSED_SHAPE_PRIORITY[right.shape.type as ShapeKind] -
-        CLOSED_SHAPE_PRIORITY[left.shape.type as ShapeKind];
+        closedDrawingPriority(right.drawing.type) - closedDrawingPriority(left.drawing.type);
       return priorityDifference || right.confidence - left.confidence || left.error - right.error;
     });
     return {
-      detectedShape: eligible[0] ?? null,
+      detectedDrawing: eligible[0] ?? null,
       allCandidates: options.returnAllCandidates ? eligible : [],
       processingTime: performance.now() - start,
       processedStroke,

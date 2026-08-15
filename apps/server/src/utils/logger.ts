@@ -1,7 +1,15 @@
 import { trace, context } from '@opentelemetry/api';
+import { z } from 'zod';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type LogFormat = 'pretty' | 'json';
+type LogValue = string | number | boolean | null | undefined | Date | Error | readonly string[];
+type LogMetadata = Record<string, LogValue>;
+
+interface TraceContext {
+  traceId?: string;
+  spanId?: string;
+}
 
 interface LogEntry {
   timestamp: string;
@@ -10,7 +18,7 @@ interface LogEntry {
   requestId?: string;
   traceId?: string;
   spanId?: string;
-  [key: string]: unknown;
+  [key: string]: LogValue;
 }
 
 /**
@@ -34,29 +42,19 @@ const REDACT_PATTERNS = [
 /**
  * Redact sensitive values from an object (shallow)
  */
-function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    const isSensitive = REDACT_PATTERNS.some((pattern) => pattern.test(key));
-
-    if (isSensitive) {
-      result[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      // Recursively redact nested objects (one level deep for safety)
-      result[key] = redactSensitive(value as Record<string, unknown>);
-    } else {
-      result[key] = value;
-    }
-  }
-
-  return result;
+function redactSensitive(obj: LogMetadata) {
+  return Object.fromEntries(
+    Object.entries(obj).map(([key, value]) => [
+      key,
+      REDACT_PATTERNS.some((pattern) => pattern.test(key)) ? '[REDACTED]' : value,
+    ]),
+  );
 }
 
 /**
  * Get current trace context from OpenTelemetry
  */
-function getTraceContext(): { traceId?: string; spanId?: string } {
+function getTraceContext(): TraceContext {
   try {
     const span = trace.getSpan(context.active());
     if (span) {
@@ -78,10 +76,14 @@ class Logger {
   private static requestId: string | undefined;
 
   constructor() {
-    this.logLevel = (process.env.LOG_LEVEL as LogLevel) || 'info';
-    this.logFormat =
-      (process.env.LOG_FORMAT as LogFormat) ||
-      (process.env.NODE_ENV === 'production' ? 'json' : 'pretty');
+    this.logLevel = z
+      .enum(['debug', 'info', 'warn', 'error'])
+      .catch('info')
+      .parse(process.env.LOG_LEVEL);
+    this.logFormat = z
+      .enum(['pretty', 'json'])
+      .catch(process.env.NODE_ENV === 'production' ? 'json' : 'pretty')
+      .parse(process.env.LOG_FORMAT);
   }
 
   /**
@@ -99,7 +101,7 @@ class Logger {
   }
 
   private shouldLog(level: LogLevel): boolean {
-    const levels: Record<LogLevel, number> = {
+    const levels = {
       debug: 0,
       info: 1,
       warn: 2,
@@ -108,7 +110,7 @@ class Logger {
     return levels[level] >= levels[this.logLevel];
   }
 
-  private formatMessage(level: LogLevel, message: string, meta?: Record<string, unknown>): string {
+  private formatMessage(level: LogLevel, message: string, meta?: LogMetadata): string {
     const traceContext = getTraceContext();
     const redactedMeta = meta ? redactSensitive(meta) : undefined;
 
@@ -137,34 +139,35 @@ class Logger {
     return `[${entry.timestamp}] ${levelStr}${reqIdStr}${traceStr} ${message}${metaStr}`;
   }
 
-  debug(message: string, meta?: Record<string, unknown>): void {
+  debug(message: string, meta?: LogMetadata): void {
     if (this.shouldLog('debug')) {
       console.log(this.formatMessage('debug', message, meta));
     }
   }
 
-  info(message: string, meta?: Record<string, unknown>): void {
+  info(message: string, meta?: LogMetadata): void {
     if (this.shouldLog('info')) {
       console.log(this.formatMessage('info', message, meta));
     }
   }
 
-  warn(message: string, meta?: Record<string, unknown>): void {
+  warn(message: string, meta?: LogMetadata): void {
     if (this.shouldLog('warn')) {
       console.warn(this.formatMessage('warn', message, meta));
     }
   }
 
-  error(message: string, error?: unknown, meta?: Record<string, unknown>): void {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript permits throwing any value; this boundary normalizes it before logging.
+  error(message: string, error?: unknown, meta?: LogMetadata): void {
     if (this.shouldLog('error')) {
-      const errorMeta: Record<string, unknown> = { ...meta };
+      const errorMeta = { ...meta } satisfies LogMetadata;
 
       if (error instanceof Error) {
         errorMeta.errorMessage = error.message;
         errorMeta.errorStack = error.stack;
         errorMeta.errorName = error.name;
       } else if (error !== undefined) {
-        errorMeta.error = error;
+        errorMeta.error = String(error);
       }
 
       console.error(this.formatMessage('error', message, errorMeta));
@@ -189,7 +192,7 @@ class Logger {
     url: string,
     statusCode: number,
     durationMs: number,
-    meta?: Record<string, unknown>,
+    meta?: LogMetadata,
   ): void {
     const logMeta = {
       method,
@@ -212,7 +215,7 @@ class Logger {
   /**
    * Create a child logger with additional context (for service-specific logging)
    */
-  child(context: Record<string, unknown>): ChildLogger {
+  child(context: LogMetadata): ChildLogger {
     return new ChildLogger(this, context);
   }
 }
@@ -223,22 +226,23 @@ class Logger {
 class ChildLogger {
   constructor(
     private parent: Logger,
-    private context: Record<string, unknown>,
+    private context: LogMetadata,
   ) {}
 
-  debug(message: string, meta?: Record<string, unknown>): void {
+  debug(message: string, meta?: LogMetadata): void {
     this.parent.debug(message, { ...this.context, ...meta });
   }
 
-  info(message: string, meta?: Record<string, unknown>): void {
+  info(message: string, meta?: LogMetadata): void {
     this.parent.info(message, { ...this.context, ...meta });
   }
 
-  warn(message: string, meta?: Record<string, unknown>): void {
+  warn(message: string, meta?: LogMetadata): void {
     this.parent.warn(message, { ...this.context, ...meta });
   }
 
-  error(message: string, error?: unknown, meta?: Record<string, unknown>): void {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript permits throwing any value; this boundary normalizes it before logging.
+  error(message: string, error?: unknown, meta?: LogMetadata): void {
     this.parent.error(message, error, { ...this.context, ...meta });
   }
 }

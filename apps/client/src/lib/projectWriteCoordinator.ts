@@ -1,11 +1,12 @@
 import { createProjectOnce, updateProjectOnce } from './api';
 import { NetworkError, ValidationError } from './errorHandling';
+import type { JsonValue } from '@sketchflow/shared';
 
-export interface ProjectWriteSnapshot<T = unknown> {
+export interface ProjectWriteSnapshot {
   projectKey: string;
   projectId?: string;
   title: string;
-  data: T;
+  data: JsonValue;
   documentVersion: number;
   expectedRevision?: number;
   /** True only for an authenticated cloud request. */
@@ -16,19 +17,19 @@ export interface ProjectWriteSnapshot<T = unknown> {
   token?: null;
 }
 
-export interface ProjectWriteResult<T = unknown> {
+export interface ProjectWriteResult {
   id: string;
   revision?: number;
-  data?: T;
+  data?: JsonValue;
 }
 
 export interface ProjectWriteTransport {
-  create<T>(snapshot: ProjectWriteSnapshot<T>): Promise<ProjectWriteResult<T>>;
-  update<T>(
+  create(snapshot: ProjectWriteSnapshot): Promise<ProjectWriteResult>;
+  update(
     id: string,
-    snapshot: ProjectWriteSnapshot<T>,
+    snapshot: ProjectWriteSnapshot,
     expectedRevision?: number,
-  ): Promise<ProjectWriteResult<T>>;
+  ): Promise<ProjectWriteResult>;
 }
 
 export interface ProjectWriteCoordinatorOptions {
@@ -39,7 +40,7 @@ export interface ProjectWriteCoordinatorOptions {
 
 type Waiter = {
   resolve: (result: ProjectWriteResult) => void;
-  reject: (reason: unknown) => void;
+  reject: (reason?: Error) => void;
 };
 
 type Pending = { snapshot: ProjectWriteSnapshot; waiters: Waiter[] };
@@ -77,7 +78,7 @@ export class ProjectWriteCoordinator {
       options.sleep ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
   }
 
-  public enqueue<T>(snapshot: ProjectWriteSnapshot<T>): Promise<ProjectWriteResult<T>> {
+  public enqueue(snapshot: ProjectWriteSnapshot): Promise<ProjectWriteResult> {
     const lane = this.lanes.get(snapshot.projectKey) ?? {
       running: false,
       paused: false,
@@ -92,7 +93,9 @@ export class ProjectWriteCoordinator {
       );
     }
 
-    return new Promise<ProjectWriteResult<T>>((resolve, reject) => {
+    return new Promise<ProjectWriteResult>((resolve, reject) => {
+      // SAFETY: Each lane keeps the snapshot and its resolver together; only the
+      // result produced for this same queued snapshot is delivered to this resolver.
       const waiter: Waiter = { resolve: resolve as Waiter['resolve'], reject };
       if (!lane.pending || snapshot.documentVersion >= lane.pending.snapshot.documentVersion) {
         const prior = lane.pending;
@@ -161,10 +164,11 @@ export class ProjectWriteCoordinator {
       }
       pending.waiters.forEach((waiter) => waiter.resolve(result));
     } catch (error) {
-      pending.waiters.forEach((waiter) => waiter.reject(error));
+      const failure = error instanceof Error ? error : new Error(String(error));
+      pending.waiters.forEach((waiter) => waiter.reject(failure));
       if (lane.generation === generation) {
         lane.paused = true;
-        lane.pauseReason = isTransient(error) ? 'transient' : 'permanent';
+        lane.pauseReason = isTransient(failure) ? 'transient' : 'permanent';
       }
     } finally {
       lane.running = false;
@@ -177,31 +181,32 @@ export class ProjectWriteCoordinator {
    * failure could duplicate a cloud project. Updates are CAS-protected and can
    * safely receive bounded transient retries with a newly acquired token.
    */
-  private async updateWithRetry<T>(
+  private async updateWithRetry(
     id: string,
-    snapshot: ProjectWriteSnapshot<T>,
+    snapshot: ProjectWriteSnapshot,
     expectedRevision: number | undefined,
     lane: Lane,
     generation: number,
-  ): Promise<ProjectWriteResult<T>> {
+  ): Promise<ProjectWriteResult> {
     for (let attempt = 0; ; attempt += 1) {
       try {
         return await this.transport.update(id, snapshot, expectedRevision);
       } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
         const delayMs = this.retryDelaysMs[attempt];
-        if (delayMs === undefined || !isTransient(error) || lane.generation !== generation) {
-          throw error;
+        if (delayMs === undefined || !isTransient(failure) || lane.generation !== generation) {
+          throw failure;
         }
         await this.sleep(delayMs);
         // Do not dispatch a retry for a session that was hydrated while the
         // previous attempt was waiting.
-        if (lane.generation !== generation) throw error;
+        if (lane.generation !== generation) throw failure;
       }
     }
   }
 }
 
-function isTransient(error: unknown): boolean {
+function isTransient(error: Error): boolean {
   return (
     error instanceof NetworkError && (error.statusCode === undefined || error.statusCode >= 500)
   );

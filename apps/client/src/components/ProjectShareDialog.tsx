@@ -314,7 +314,9 @@ export function ProjectShareDialog({
                 <select
                   aria-label="Collaborator role"
                   value={newCollabRole}
-                  onChange={(e) => setNewCollabRole(e.target.value as 'editor' | 'viewer')}
+                  onChange={(e) =>
+                    setNewCollabRole(e.target.value === 'viewer' ? 'viewer' : 'editor')
+                  }
                   className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 rounded px-2 py-2 text-sm text-slate-900 dark:text-slate-100"
                 >
                   <option value="editor">Editor</option>

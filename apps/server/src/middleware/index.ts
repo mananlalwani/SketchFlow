@@ -9,7 +9,10 @@ import { captureServerException, captureServerSignal } from '../sentry.js';
  * Request ID middleware - adds correlation ID to all requests
  */
 export function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const requestId = (req.headers['x-request-id'] as string) || randomUUID();
+  const requestHeader = req.headers['x-request-id'];
+  const requestId = Array.isArray(requestHeader)
+    ? requestHeader[0] || randomUUID()
+    : requestHeader || randomUUID();
   req.headers['x-request-id'] = requestId;
   res.setHeader('x-request-id', requestId);
   Logger.setRequestId(requestId);
@@ -80,8 +83,8 @@ interface RateLimitEntry {
 const rateLimitStore = new Map<string, RateLimitEntry>();
 type RateLimitRedisClient = {
   isOpen: boolean;
-  on(event: 'error', listener: (error: Error) => void): unknown;
-  connect(): Promise<unknown>;
+  on(event: 'error', listener: (error: Error) => void): RateLimitRedisClient;
+  connect(): Promise<RateLimitRedisClient>;
   incr(key: string): Promise<number>;
   pExpire(key: string, milliseconds: number): Promise<number>;
   pTTL(key: string): Promise<number>;

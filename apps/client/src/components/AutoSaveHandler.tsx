@@ -20,10 +20,87 @@ import {
   markOfflineSaveAttempt,
   removeOfflineSave,
 } from '@/lib/offlineQueue';
+import type { DrawingObject, DrawingState } from '@/store/drawingStore';
+import type { JsonValue } from '@sketchflow/shared';
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 
-export function AutoSaveHandler() {
+type SaveStatus = DrawingState['saveStatus'];
+
+interface AutoSaveDrawingState {
+  unsavedChanges: boolean;
+  currentProjectId?: string;
+  projectRevision?: number;
+  projectRole?: 'owner' | 'editor' | 'viewer' | null;
+  documentVersion: number;
+  objects: DrawingObject[];
+  projectTitle: string;
+  markSaved(documentVersion: number): void;
+  requestFullRedraw(): void;
+  setObjects(objects: DrawingObject[]): void;
+  setProjectRevision(revision: number | undefined): void;
+  setSaveStatus(status: SaveStatus): void;
+}
+
+interface AutoSaveDrawingStore {
+  (): AutoSaveDrawingState;
+  getState(): AutoSaveDrawingState;
+}
+
+export interface AutoSaveRuntime {
+  useDrawingStore: AutoSaveDrawingStore;
+  useAuth(): Pick<ReturnType<typeof useAuth>, 'getToken' | 'userId'>;
+  useAuthStore(): { isGuest: boolean };
+  writeCoordinator: Pick<typeof activeProjectWriteCoordinator, 'enqueue' | 'resume'>;
+  ProjectWriteResetError: typeof ProjectWriteResetError;
+  serializeProject(objects: DrawingObject[], width: number, height: number): string;
+  deserializeProject(data: JsonValue | string): DrawingObject[];
+  getEmergencyBackup: typeof getEmergencyBackup;
+  removeEmergencyBackup: typeof removeEmergencyBackup;
+  saveEmergencyBackup: typeof saveEmergencyBackup;
+  enqueueOfflineSave: typeof enqueueOfflineSave;
+  getOfflineSaveQueue: typeof getOfflineSaveQueue;
+  markOfflineSaveAttempt: typeof markOfflineSaveAttempt;
+  removeOfflineSave: typeof removeOfflineSave;
+  useToast(): Pick<ReturnType<typeof useToast>, 'toast'>;
+}
+
+const defaultRuntime: AutoSaveRuntime = {
+  useDrawingStore,
+  useAuth,
+  useAuthStore,
+  writeCoordinator: activeProjectWriteCoordinator,
+  ProjectWriteResetError,
+  serializeProject,
+  deserializeProject,
+  getEmergencyBackup,
+  removeEmergencyBackup,
+  saveEmergencyBackup,
+  enqueueOfflineSave,
+  getOfflineSaveQueue,
+  markOfflineSaveAttempt,
+  removeOfflineSave,
+  useToast,
+};
+
+export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSaveRuntime }) {
+  const {
+    useDrawingStore,
+    useAuth,
+    useAuthStore,
+    writeCoordinator,
+    ProjectWriteResetError,
+    serializeProject,
+    deserializeProject,
+    getEmergencyBackup,
+    removeEmergencyBackup,
+    saveEmergencyBackup,
+    enqueueOfflineSave,
+    getOfflineSaveQueue,
+    markOfflineSaveAttempt,
+    removeOfflineSave,
+    useToast,
+  } = runtime;
   const {
     unsavedChanges,
     currentProjectId,
@@ -56,7 +133,15 @@ export function AutoSaveHandler() {
         console.warn('Emergency backup failed:', e);
       }
     })();
-  }, [objects, projectTitle, currentProjectId, projectRole, unsavedChanges]);
+  }, [
+    objects,
+    projectTitle,
+    currentProjectId,
+    projectRole,
+    saveEmergencyBackup,
+    serializeProject,
+    unsavedChanges,
+  ]);
 
   const performSave = useCallback(async (): Promise<boolean> => {
     if (!currentProjectId || projectRole === 'viewer') return false;
@@ -72,7 +157,7 @@ export function AutoSaveHandler() {
 
     setSaveStatus('syncing');
     try {
-      const saved = await activeProjectWriteCoordinator.enqueue({
+      const saved = await writeCoordinator.enqueue({
         projectKey: savedProjectId,
         projectId: savedProjectId,
         title: savedTitle,
@@ -120,7 +205,13 @@ export function AutoSaveHandler() {
     projectRevision,
     documentVersion,
     getToken,
+    ProjectWriteResetError,
+    enqueueOfflineSave,
+    removeEmergencyBackup,
     setSaveStatus,
+    serializeProject,
+    useDrawingStore,
+    writeCoordinator,
   ]);
 
   useEffect(() => {
@@ -162,7 +253,7 @@ export function AutoSaveHandler() {
           return;
         }
         try {
-          await activeProjectWriteCoordinator.enqueue({
+          await writeCoordinator.enqueue({
             projectKey: operation.projectId,
             projectId: operation.projectId,
             title: operation.title,
@@ -186,13 +277,23 @@ export function AutoSaveHandler() {
       // Only transiently failed lanes may resume on reconnect. A conflict or
       // permission failure requires an explicit manual save after the user has
       // reconciled the project.
-      activeProjectWriteCoordinator.resume(undefined, { transientOnly: true });
+      writeCoordinator.resume(undefined, { transientOnly: true });
       void replayQueue();
     };
 
     window.addEventListener('online', retryWhenOnline);
     return () => window.removeEventListener('online', retryWhenOnline);
-  }, [getToken, isGuest, performSave, setSaveStatus, userId]);
+  }, [
+    getToken,
+    getOfflineSaveQueue,
+    isGuest,
+    markOfflineSaveAttempt,
+    performSave,
+    removeOfflineSave,
+    setSaveStatus,
+    userId,
+    writeCoordinator,
+  ]);
 
   useEffect(() => {
     const tryRecoverBackup = async () => {
@@ -218,7 +319,14 @@ export function AutoSaveHandler() {
     };
 
     void tryRecoverBackup();
-  }, [currentProjectId, toast]);
+  }, [
+    currentProjectId,
+    deserializeProject,
+    getEmergencyBackup,
+    removeEmergencyBackup,
+    toast,
+    useDrawingStore,
+  ]);
 
   return null;
 }

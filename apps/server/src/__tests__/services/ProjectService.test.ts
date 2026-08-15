@@ -41,16 +41,6 @@ vi.mock('../../lib/prisma.js', () => {
   };
 });
 
-// Mock logger
-vi.mock('../../utils/logger.js', () => ({
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
 // Import after mocking
 import { prisma } from '../../lib/prisma.js';
 

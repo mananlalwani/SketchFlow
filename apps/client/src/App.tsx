@@ -54,7 +54,7 @@ function EditorRoute() {
       // but we can check if we just loaded it.
       const loadShared = async () => {
         try {
-          const record = await getSharedProject<string>(shareToken);
+          const record = await getSharedProject(shareToken);
 
           // Skip if this project is already loaded
           if (currentProjectId === record.id) {

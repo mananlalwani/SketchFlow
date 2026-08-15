@@ -1,13 +1,14 @@
 import { fireEvent, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useCanvasKeyboardShortcuts } from '@/hooks/useCanvasKeyboardShortcuts';
+import {
+  useCanvasKeyboardShortcuts,
+  type RendererWorkerPort,
+} from '@/hooks/useCanvasKeyboardShortcuts';
 import { useDrawingStore } from '@/store/drawingStore';
 
 describe('useCanvasKeyboardShortcuts', () => {
-  const canvas = {
-    getBoundingClientRect: () => ({ width: 1000, height: 600 }),
-  } as HTMLCanvasElement;
-  const worker = { postMessage: vi.fn() } as unknown as Worker;
+  let canvas: HTMLCanvasElement;
+  const worker: RendererWorkerPort = { postMessage: vi.fn() };
   const setIsShiftPressed = vi.fn();
   const onSpacePanStart = vi.fn();
   const onSpacePanEnd = vi.fn();
@@ -15,6 +16,8 @@ describe('useCanvasKeyboardShortcuts', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    canvas = document.createElement('canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1000, 600));
     useDrawingStore.setState({
       currentTool: 'pen',
       zoom: 1,

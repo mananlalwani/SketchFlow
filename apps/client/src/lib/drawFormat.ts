@@ -12,6 +12,9 @@
  * a combination of app secret + file-specific salt using PBKDF2.
  */
 
+import type { JsonValue } from '@sketchflow/shared';
+import { z } from 'zod';
+
 // Magic header to identify our format
 const MAGIC_HEADER = new Uint8Array([0x44, 0x52, 0x41, 0x57, 0x41, 0x50, 0x50, 0x31]); // "DRAWAPP1"
 const FORMAT_VERSION = 1;
@@ -24,6 +27,11 @@ const APP_SECRET = import.meta.env.VITE_DRAW_FORMAT_KEY ?? 'sketchflow-dra-v1';
 
 // Additional obfuscation layer
 const OBFUSCATION_KEY = [0x4a, 0x7b, 0x2c, 0x9d, 0x1e, 0x5f, 0x8a, 0x3b];
+
+/** Copies a typed view into an owned ArrayBuffer accepted by Web Crypto. */
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return new Uint8Array(bytes).buffer;
+}
 
 function xorObfuscate(data: Uint8Array): Uint8Array {
   const result = new Uint8Array(data.length);
@@ -46,7 +54,7 @@ async function deriveKey(salt: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: salt.buffer as ArrayBuffer,
+      salt: toArrayBuffer(salt),
       iterations: 100000,
       hash: 'SHA-256',
     },
@@ -68,7 +76,7 @@ function generateIV(): Uint8Array {
 /**
  * Encode project data to our custom .dra format
  */
-export async function encodeDrawFormat(data: unknown): Promise<ArrayBuffer> {
+export async function encodeDrawFormat(data: JsonValue): Promise<ArrayBuffer> {
   const encoder = new TextEncoder();
 
   // Serialize and compress the data
@@ -85,9 +93,9 @@ export async function encodeDrawFormat(data: unknown): Promise<ArrayBuffer> {
 
   // Encrypt the obfuscated data
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+    { name: 'AES-GCM', iv: toArrayBuffer(iv) },
     key,
-    obfuscated.buffer as ArrayBuffer,
+    toArrayBuffer(obfuscated),
   );
 
   // Build the final file
@@ -122,7 +130,7 @@ export async function encodeDrawFormat(data: unknown): Promise<ArrayBuffer> {
 /**
  * Decode our custom .dra format back to project data
  */
-export async function decodeDrawFormat(buffer: ArrayBuffer): Promise<unknown> {
+export async function decodeDrawFormat(buffer: ArrayBuffer): Promise<JsonValue> {
   const bytes = new Uint8Array(buffer);
   const decoder = new TextDecoder();
 
@@ -163,9 +171,9 @@ export async function decodeDrawFormat(buffer: ArrayBuffer): Promise<unknown> {
   let decrypted: ArrayBuffer;
   try {
     decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+      { name: 'AES-GCM', iv: toArrayBuffer(iv) },
       key,
-      encryptedData.buffer as ArrayBuffer,
+      toArrayBuffer(encryptedData),
     );
   } catch {
     throw new Error('Failed to decrypt file - file may be corrupted');
@@ -179,7 +187,7 @@ export async function decodeDrawFormat(buffer: ArrayBuffer): Promise<unknown> {
   const jsonString = decoder.decode(deobfuscated);
 
   try {
-    return JSON.parse(jsonString);
+    return z.json().parse(JSON.parse(jsonString));
   } catch {
     throw new Error('Failed to parse file data');
   }

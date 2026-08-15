@@ -1,12 +1,22 @@
 import { useEffect } from 'react';
-import { useDrawingSocket } from '@/hooks/useSocket';
 import type { DrawingObject } from '@/store/drawingStore';
-import type { CollaborationAppliedEvent, CollaborationHydration } from '@/types/socket';
+import type { CollaborationAppliedEvent, CollaborationHydration, JsonValue } from '@/types/socket';
+import { drawingObjectSchema } from '@/lib/drawingObjectSchema';
+import { z } from 'zod';
 
-type SocketOn = ReturnType<typeof useDrawingSocket>['on'];
+export interface CollaborationSocket {
+  on(
+    event: 'collaboration:hydrated',
+    listener: (state: CollaborationHydration) => void,
+  ): () => void;
+  on(
+    event: 'collaboration:applied',
+    listener: (event: CollaborationAppliedEvent) => void,
+  ): () => void;
+}
 
 interface CanvasCollaborationAdapterOptions {
-  on: SocketOn;
+  on: CollaborationSocket['on'];
   isConnected: boolean;
   currentProjectId?: string;
   projectRevision?: number;
@@ -20,32 +30,22 @@ interface CanvasCollaborationAdapterOptions {
   requestFullRedraw: () => void;
 }
 
-function isDrawingObject(value: unknown): value is DrawingObject {
-  if (!value || typeof value !== 'object') return false;
+const authoritativeProjectSchema = z
+  .object({ objects: z.array(drawingObjectSchema) })
+  .passthrough();
 
-  const object = value as Record<string, unknown>;
-  return (
-    typeof object.id === 'string' &&
-    typeof object.type === 'string' &&
-    typeof object.color === 'string' &&
-    typeof object.size === 'number'
-  );
-}
-
-export function getAuthoritativeObjects(data: unknown): DrawingObject[] | null {
-  if (typeof data === 'string') {
+export function getAuthoritativeObjects(data: JsonValue | string): DrawingObject[] | null {
+  const serialized = z.string().safeParse(data);
+  if (serialized.success) {
     try {
-      data = JSON.parse(data);
+      const project = authoritativeProjectSchema.safeParse(JSON.parse(serialized.data));
+      return project.success ? project.data.objects : null;
     } catch {
       return null;
     }
   }
-  if (!data || typeof data !== 'object') return null;
-
-  const objects = (data as { objects?: unknown }).objects;
-  if (!Array.isArray(objects) || !objects.every(isDrawingObject)) return null;
-
-  return objects;
+  const project = authoritativeProjectSchema.safeParse(data);
+  return project.success ? project.data.objects : null;
 }
 
 /** Applies revisioned canonical project state received over the collaboration socket. */

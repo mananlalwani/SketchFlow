@@ -103,9 +103,9 @@ export function expandObjectIdsWithGroups(
 ): string[] {
   const selectedIds = new Set(ids);
   const groupIds = new Set(
-    objects
-      .filter((object) => selectedIds.has(object.id) && object.groupId)
-      .map((object) => object.groupId as string),
+    objects.flatMap((object) =>
+      selectedIds.has(object.id) && object.groupId ? [object.groupId] : [],
+    ),
   );
 
   if (!groupIds.size) return [...selectedIds];

@@ -28,11 +28,18 @@ type Stroke = {
 };
 
 type StrokeMessage = {
-  type: 'stroke' | 'strokes';
-  data: Stroke | Stroke[];
+  type: 'stroke';
+  data: Stroke;
 };
+type StrokesMessage = { type: 'strokes'; data: Stroke[] };
 
-type Shape = {
+interface DrawingProperties {
+  pointCount?: number;
+  rotation?: number;
+  hidden?: boolean;
+}
+
+type Drawing = {
   id: string;
   type:
     | 'stroke'
@@ -59,27 +66,27 @@ type Shape = {
   text?: string;
   fontSize?: number;
   imageData?: string; // Base64 data URL for images
-  properties?: Record<string, unknown>; // Shape-specific properties (e.g., star point count)
+  properties?: DrawingProperties;
 };
 
 type PathContext = Pick<OffscreenCanvasRenderingContext2D, 'moveTo' | 'lineTo'>;
-type ParabolaShape = Pick<Shape, 'x' | 'y' | 'width' | 'height' | 'orientation' | 'points'>;
+type ParabolaDrawing = Pick<Drawing, 'x' | 'y' | 'width' | 'height' | 'orientation' | 'points'>;
 
 /** Trace an authored parabola path when present, otherwise the legacy preset curve. */
-function traceParabolaPath(context: PathContext, shape: ParabolaShape) {
-  if (shape.points && shape.points.length > 1) {
-    context.moveTo(shape.points[0].x, shape.points[0].y);
-    for (const point of shape.points.slice(1)) context.lineTo(point.x, point.y);
+function traceParabolaPath(context: PathContext, drawing: ParabolaDrawing) {
+  if (drawing.points && drawing.points.length > 1) {
+    context.moveTo(drawing.points[0].x, drawing.points[0].y);
+    for (const point of drawing.points.slice(1)) context.lineTo(point.x, point.y);
     return;
   }
 
   const steps = 64;
-  const x0 = shape.x,
-    y0 = shape.y,
-    w = shape.width,
-    h = shape.height;
-  if (shape.orientation === 'left' || shape.orientation === 'right') {
-    const dir = shape.orientation === 'right' ? 1 : -1;
+  const x0 = drawing.x,
+    y0 = drawing.y,
+    w = drawing.width,
+    h = drawing.height;
+  if (drawing.orientation === 'left' || drawing.orientation === 'right') {
+    const dir = drawing.orientation === 'right' ? 1 : -1;
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const yy = y0 + t * h;
@@ -89,7 +96,7 @@ function traceParabolaPath(context: PathContext, shape: ParabolaShape) {
       else context.lineTo(xx, yy);
     }
   } else {
-    const dir = shape.orientation === 'down' ? 1 : -1;
+    const dir = drawing.orientation === 'down' ? 1 : -1;
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const xx = x0 + t * w;
@@ -119,13 +126,13 @@ async function loadImageBitmap(dataUrl: string): Promise<ImageBitmap | null> {
   }
 }
 
-type ShapeMessage = {
+type DrawingMessage = {
   type: 'shape';
-  data: Shape;
+  data: Drawing;
 };
-type ClearShapeMessage = {
+type ClearDrawingMessage = {
   type: 'clear-shape';
-  data: Shape;
+  data: Drawing;
 };
 
 type ViewportMessage = {
@@ -156,23 +163,24 @@ type SnapshotImageMessage = {
   worldHeight?: number;
 };
 type ThemeMessage = { type: 'theme'; bgColor: string };
-type LoadObjectsMessage = { type: 'load-objects'; data: Shape[] };
+type LoadObjectsMessage = { type: 'load-objects'; data: Drawing[] };
 type LoadSceneMessage = {
   type: 'load-scene';
   requestId: string;
-  shapes: Shape[];
+  drawings: Drawing[];
   strokes: Stroke[];
 };
 
 type Inbound =
   | InitMessage
   | StrokeMessage
-  | ShapeMessage
+  | StrokesMessage
+  | DrawingMessage
   | ViewportMessage
   | ClearMessage
   | ClearRegionMessage
   | RemoveGroupMessage
-  | ClearShapeMessage
+  | ClearDrawingMessage
   | SnapshotMessage
   | SnapshotImageMessage
   | ThemeMessage
@@ -201,7 +209,7 @@ let worldW = 51200; // 20x 1440p width (2560 × 20)
 let worldH = 28800; // 20x 1440p height (1440 × 20)
 
 // Retained vector model for precise zoom rendering
-const retainedShapes: Shape[] = [];
+const retainedDrawings: Drawing[] = [];
 
 // Consolidated stroke paths for efficient rendering
 interface ConsolidatedPath {
@@ -222,13 +230,12 @@ let lastViewport: ViewportMessage = {
   canvasWidth: 0,
   canvasHeight: 0,
   dpr: 1,
-  sequence: undefined as number | undefined,
 };
 
 let lastBlitTime = 0;
 let lastSceneRequestId: string | undefined;
 let blitScheduled = false;
-let blitTimer: number | null = null;
+let blitTimer: ReturnType<typeof setTimeout> | null = null;
 const BLIT_INTERVAL_MS = 1000 / 60; // ~60 FPS cap
 
 // Theme-aware background color (default dark - must match canvas wrapper bg)
@@ -353,27 +360,19 @@ function adjustColorForTheme(color: string): string {
   return color;
 }
 
-function getStarPointCount(shape: { properties?: Record<string, unknown> }): number {
-  const value = shape.properties?.pointCount;
-  return typeof value === 'number' && Number.isInteger(value) && value >= 3 && value <= 64
-    ? value
-    : 5;
+function getStarPointCount(drawing: Pick<Drawing, 'properties'>): number {
+  const value = drawing.properties?.pointCount;
+  return value !== undefined && Number.isInteger(value) && value >= 3 && value <= 64 ? value : 5;
 }
 
 function applyObjectRotation(
   context: OffscreenCanvasRenderingContext2D,
-  shape: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    properties?: Record<string, unknown>;
-  },
+  drawing: Pick<Drawing, 'x' | 'y' | 'width' | 'height' | 'properties'>,
 ) {
-  const degrees = Number(shape.properties?.rotation ?? 0);
+  const degrees = Number(drawing.properties?.rotation ?? 0);
   if (!Number.isFinite(degrees) || degrees === 0) return;
-  const centerX = shape.x + shape.width / 2;
-  const centerY = shape.y + shape.height / 2;
+  const centerX = drawing.x + drawing.width / 2;
+  const centerY = drawing.y + drawing.height / 2;
   context.translate(centerX, centerY);
   context.rotate((degrees * Math.PI) / 180);
   context.translate(-centerX, -centerY);
@@ -462,21 +461,21 @@ function drawStrokeToWorld(stroke: Stroke) {
   path.bounds.maxY = Math.max(path.bounds.maxY, stroke.y1);
 }
 
-function drawShapeToWorld(shape: Shape) {
+function drawDrawingToWorld(drawing: Drawing) {
   // Check if shape already exists (for updates during dragging)
-  const existingIndex = retainedShapes.findIndex((s) => s.id === shape.id);
+  const existingIndex = retainedDrawings.findIndex((s) => s.id === drawing.id);
   if (existingIndex >= 0) {
     // Update existing shape
-    retainedShapes[existingIndex] = shape;
+    retainedDrawings[existingIndex] = drawing;
   } else {
     // Add new shape
-    retainedShapes.push(shape);
+    retainedDrawings.push(drawing);
   }
 
   // Preload image if it's an image shape - load immediately
-  if (shape.type === 'image' && shape.imageData) {
-    if (!imageBitmapCache.has(shape.imageData)) {
-      loadImageBitmap(shape.imageData)
+  if (drawing.type === 'image' && drawing.imageData) {
+    if (!imageBitmapCache.has(drawing.imageData)) {
+      loadImageBitmap(drawing.imageData)
         .then(() => {
           scheduleBlit(); // Re-render once image is loaded
         })
@@ -508,7 +507,7 @@ function blit() {
   screenCtx.fillRect(0, 0, targetW, targetH);
 
   // Determine dynamic SSAA factor with safety caps - keep it low for performance
-  const vectorCount = consolidatedPaths.size + retainedShapes.length;
+  const vectorCount = consolidatedPaths.size + retainedDrawings.length;
   // Use lower SSAA during active drawing (many paths) for responsiveness
   const maxSSAA = vectorCount > 50 ? 1 : 2;
   const dynamicSSAA = Math.max(1, Math.min(maxSSAA, Math.round(zoom * safeDpr)));
@@ -531,10 +530,7 @@ function blit() {
   // Draw raster world in screen space with adaptive smoothing unless we choose to skip
   const shouldSkipRaster = vectorCount > 0 && zoom >= 1.15;
   if (world && !shouldSkipRaster) {
-    const anyCtx = screenCtx as unknown as {
-      imageSmoothingEnabled?: boolean;
-      imageSmoothingQuality?: 'low' | 'medium' | 'high';
-    };
+    const anyCtx = screenCtx;
     const scale = zoom * safeDpr;
     const frac = Math.abs(scale - Math.round(scale));
     const shouldSmooth = frac > 0.05 || scale < 1;
@@ -557,8 +553,8 @@ function blit() {
   const vy1 = viewY;
   const vx2 = viewX + canvasWidth / Math.max(zoom, 0.0001);
   const vy2 = viewY + canvasHeight / Math.max(zoom, 0.0001);
-  const visibleShapeCount = retainedShapes.filter((shape) =>
-    objectIntersectsViewport(shape, vx1, vy1, vx2, vy2),
+  const visibleDrawingCount = retainedDrawings.filter((drawing) =>
+    objectIntersectsViewport(drawing, vx1, vy1, vx2, vy2),
   ).length;
   const visiblePathCount = Array.from(consolidatedPaths.values()).filter((path) => {
     const margin = path.size;
@@ -591,35 +587,8 @@ function blit() {
     vectorSSCtx.scale(zoom, zoom);
 
     // Draw images first (in background)
-    for (let i = 0; i < retainedShapes.length; i++) {
-      const sh = retainedShapes[i] as unknown as {
-        type:
-          | 'stroke'
-          | 'line'
-          | 'rectangle'
-          | 'ellipse'
-          | 'circle'
-          | 'triangle'
-          | 'parabola'
-          | 'text'
-          | 'image'
-          | 'arrow'
-          | 'star';
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        color: string;
-        size: number;
-        alpha?: number;
-        filled?: boolean;
-        orientation?: 'up' | 'down' | 'left' | 'right';
-        points?: { x: number; y: number; width?: number }[];
-        text?: string;
-        fontSize?: number;
-        imageData?: string;
-        properties?: Record<string, unknown>;
-      };
+    for (let i = 0; i < retainedDrawings.length; i++) {
+      const sh = retainedDrawings[i];
       if (sh.type === 'image' && sh.imageData && !sh.properties?.hidden) {
         // Check viewport intersection for images (they can be large)
         if (objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
@@ -678,35 +647,8 @@ function blit() {
       vectorSSCtx.restore();
     }
 
-    for (let i = 0; i < retainedShapes.length; i++) {
-      const sh = retainedShapes[i] as unknown as {
-        type:
-          | 'stroke'
-          | 'line'
-          | 'rectangle'
-          | 'ellipse'
-          | 'circle'
-          | 'triangle'
-          | 'parabola'
-          | 'text'
-          | 'image'
-          | 'arrow'
-          | 'star';
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        color: string;
-        size: number;
-        alpha?: number;
-        filled?: boolean;
-        orientation?: 'up' | 'down' | 'left' | 'right';
-        points?: { x: number; y: number; width?: number }[];
-        text?: string;
-        fontSize?: number;
-        imageData?: string;
-        properties?: Record<string, unknown>;
-      };
+    for (let i = 0; i < retainedDrawings.length; i++) {
+      const sh = retainedDrawings[i];
       if (sh.properties?.hidden) continue;
       // Skip images - already rendered above
       if (sh.type === 'image') continue;
@@ -860,10 +802,7 @@ function blit() {
     vectorSSCtx.restore();
 
     // Composite SS buffer to screen at device resolution
-    const anyCtx = screenCtx as unknown as {
-      imageSmoothingEnabled?: boolean;
-      imageSmoothingQuality?: 'low' | 'medium' | 'high';
-    };
+    const anyCtx = screenCtx;
     anyCtx.imageSmoothingEnabled = true;
     anyCtx.imageSmoothingQuality = 'high';
     screenCtx.save();
@@ -871,15 +810,15 @@ function blit() {
     screenCtx.drawImage(vectorSS, 0, 0, vectorSS.width, vectorSS.height, 0, 0, targetW, targetH);
     screenCtx.restore();
     anyCtx.imageSmoothingEnabled = false;
-    const retainedObjectCount = retainedShapes.length + consolidatedPaths.size;
+    const retainedObjectCount = retainedDrawings.length + consolidatedPaths.size;
     self.postMessage({
       type: 'frame-rendered',
       requestId: lastSceneRequestId,
       viewportSequence: lastViewport.sequence,
       renderMs: performance.now() - renderStartedAt,
       retainedObjectCount,
-      visibleObjectCount: visibleShapeCount + visiblePathCount,
-      culledObjectCount: retainedObjectCount - visibleShapeCount - visiblePathCount,
+      visibleObjectCount: visibleDrawingCount + visiblePathCount,
+      culledObjectCount: retainedObjectCount - visibleDrawingCount - visiblePathCount,
     } satisfies Outbound);
     return;
   }
@@ -895,35 +834,8 @@ function blit() {
   screenCtx.scale(zoom, zoom);
 
   // Draw images first (in background)
-  for (let i = 0; i < retainedShapes.length; i++) {
-    const sh = retainedShapes[i] as unknown as {
-      type:
-        | 'stroke'
-        | 'line'
-        | 'rectangle'
-        | 'ellipse'
-        | 'circle'
-        | 'triangle'
-        | 'parabola'
-        | 'text'
-        | 'image'
-        | 'arrow'
-        | 'star';
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      color: string;
-      size: number;
-      alpha?: number;
-      filled?: boolean;
-      orientation?: 'up' | 'down' | 'left' | 'right';
-      points?: { x: number; y: number; width?: number }[];
-      text?: string;
-      fontSize?: number;
-      imageData?: string;
-      properties?: Record<string, unknown>;
-    };
+  for (let i = 0; i < retainedDrawings.length; i++) {
+    const sh = retainedDrawings[i];
     if (
       sh.type === 'image' &&
       sh.imageData &&
@@ -988,35 +900,8 @@ function blit() {
     screenCtx.restore();
   }
 
-  for (let i = 0; i < retainedShapes.length; i++) {
-    const sh = retainedShapes[i] as unknown as {
-      type:
-        | 'stroke'
-        | 'line'
-        | 'rectangle'
-        | 'ellipse'
-        | 'circle'
-        | 'triangle'
-        | 'parabola'
-        | 'text'
-        | 'image'
-        | 'arrow'
-        | 'star';
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      color: string;
-      size: number;
-      alpha?: number;
-      filled?: boolean;
-      orientation?: 'up' | 'down' | 'left' | 'right';
-      points?: { x: number; y: number; width?: number }[];
-      text?: string;
-      fontSize?: number;
-      imageData?: string;
-      properties?: Record<string, unknown>;
-    };
+  for (let i = 0; i < retainedDrawings.length; i++) {
+    const sh = retainedDrawings[i];
     if (sh.properties?.hidden) continue;
     // Skip images - already rendered above
     if (sh.type === 'image') continue;
@@ -1182,15 +1067,15 @@ function blit() {
   }
 
   screenCtx.restore();
-  const retainedObjectCount = retainedShapes.length + consolidatedPaths.size;
+  const retainedObjectCount = retainedDrawings.length + consolidatedPaths.size;
   self.postMessage({
     type: 'frame-rendered',
     requestId: lastSceneRequestId,
     viewportSequence: lastViewport.sequence,
     renderMs: performance.now() - renderStartedAt,
     retainedObjectCount,
-    visibleObjectCount: visibleShapeCount + visiblePathCount,
-    culledObjectCount: retainedObjectCount - visibleShapeCount - visiblePathCount,
+    visibleObjectCount: visibleDrawingCount + visiblePathCount,
+    culledObjectCount: retainedObjectCount - visibleDrawingCount - visiblePathCount,
   } satisfies Outbound);
 }
 
@@ -1200,7 +1085,7 @@ function scheduleBlit() {
   if (elapsed >= BLIT_INTERVAL_MS) {
     lastBlitTime = now;
     if (blitTimer !== null) {
-      clearTimeout(blitTimer as unknown as number);
+      clearTimeout(blitTimer);
       blitTimer = null;
     }
     blit();
@@ -1215,11 +1100,11 @@ function scheduleBlit() {
     blit();
     blitScheduled = false;
     blitTimer = null;
-  }, delay) as unknown as number;
+  }, delay);
 }
 
 function handleMessage(evt: MessageEvent<Inbound>) {
-  const msg = evt.data as Inbound;
+  const msg = evt.data;
   switch (msg.type) {
     case 'init': {
       const ctx = msg.canvas.getContext('2d');
@@ -1239,32 +1124,31 @@ function handleMessage(evt: MessageEvent<Inbound>) {
     }
     case 'stroke': {
       ensureWorld();
-      drawStrokeToWorld(msg.data as Stroke);
+      drawStrokeToWorld(msg.data);
       scheduleBlit();
       break;
     }
     case 'strokes': {
       ensureWorld();
-      const arr = msg.data as Stroke[];
+      const arr = msg.data;
       for (let i = 0; i < arr.length; i++) drawStrokeToWorld(arr[i]);
       scheduleBlit();
       break;
     }
     case 'shape': {
       ensureWorld();
-      drawShapeToWorld(msg.data as Shape);
+      drawDrawingToWorld(msg.data);
       scheduleBlit();
       break;
     }
     case 'load-objects': {
       ensureWorld();
       // Clear existing retained objects and consolidated paths
-      retainedShapes.length = 0;
+      retainedDrawings.length = 0;
       consolidatedPaths.clear();
       // Load all shapes (including images)
-      const loadMsg = msg as LoadObjectsMessage;
-      for (let i = 0; i < loadMsg.data.length; i++) {
-        drawShapeToWorld(loadMsg.data[i] as Shape);
+      for (let i = 0; i < msg.data.length; i++) {
+        drawDrawingToWorld(msg.data[i]);
       }
       scheduleBlit();
       break;
@@ -1272,23 +1156,22 @@ function handleMessage(evt: MessageEvent<Inbound>) {
     case 'load-scene': {
       ensureWorld();
       const startedAt = performance.now();
-      retainedShapes.length = 0;
+      retainedDrawings.length = 0;
       consolidatedPaths.clear();
-      const scene = msg as LoadSceneMessage;
-      lastSceneRequestId = scene.requestId;
-      for (let i = 0; i < scene.strokes.length; i++) drawStrokeToWorld(scene.strokes[i]);
-      for (let i = 0; i < scene.shapes.length; i++) drawShapeToWorld(scene.shapes[i]);
+      lastSceneRequestId = msg.requestId;
+      for (let i = 0; i < msg.strokes.length; i++) drawStrokeToWorld(msg.strokes[i]);
+      for (let i = 0; i < msg.drawings.length; i++) drawDrawingToWorld(msg.drawings[i]);
       self.postMessage({
         type: 'scene-applied',
-        requestId: scene.requestId,
-        objectCount: scene.shapes.length + scene.strokes.length,
+        requestId: msg.requestId,
+        objectCount: msg.drawings.length + msg.strokes.length,
         ingestionMs: performance.now() - startedAt,
       } satisfies Outbound);
       scheduleBlit();
       break;
     }
     case 'viewport': {
-      lastViewport = msg as ViewportMessage;
+      lastViewport = msg;
       scheduleBlit();
       break;
     }
@@ -1299,14 +1182,14 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         worldCtx.fillRect(0, 0, worldW, worldH);
       }
       // Also clear retained vectors and consolidated paths
-      retainedShapes.length = 0;
+      retainedDrawings.length = 0;
       consolidatedPaths.clear();
       scheduleBlit();
       break;
     }
     case 'clear-region': {
       ensureWorld();
-      const m = msg as ClearRegionMessage;
+      const m = msg;
       if (worldCtx) {
         worldCtx.save();
         worldCtx.fillStyle = canvasBgColor;
@@ -1338,8 +1221,8 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       for (const gid of groupsToRemove) {
         consolidatedPaths.delete(gid);
       }
-      for (let i = retainedShapes.length - 1; i >= 0; i--) {
-        const sh = retainedShapes[i];
+      for (let i = retainedDrawings.length - 1; i >= 0; i--) {
+        const sh = retainedDrawings[i];
         // Skip images - they are not erasable
         if (sh.type === 'image') {
           continue;
@@ -1368,7 +1251,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
           maxY = Math.max(sh.y, ry);
         }
         if (intersects(minX, minY, maxX, maxY)) {
-          retainedShapes.splice(i, 1);
+          retainedDrawings.splice(i, 1);
         }
       }
       scheduleBlit();
@@ -1377,7 +1260,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
     case 'clear-shape': {
       ensureWorld();
       if (!worldCtx) break;
-      const sh = (msg as ClearShapeMessage).data;
+      const sh = msg.data;
       const bg = canvasBgColor;
       worldCtx.save();
       if (sh.type === 'rectangle') {
@@ -1436,15 +1319,15 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       break;
     }
     case 'remove-group': {
-      const m = msg as RemoveGroupMessage;
+      const m = msg;
       // Remove from consolidated paths
       consolidatedPaths.delete(m.groupId);
       scheduleBlit();
       break;
     }
     case 'snapshot-image': {
-      const m = msg as SnapshotImageMessage;
-      if (typeof m.worldWidth === 'number' && typeof m.worldHeight === 'number') {
+      const m = msg;
+      if (m.worldWidth !== undefined && m.worldHeight !== undefined) {
         worldW = m.worldWidth;
         worldH = m.worldHeight;
       }
@@ -1468,7 +1351,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       break;
     }
     case 'theme': {
-      const m = msg as ThemeMessage;
+      const m = msg;
       canvasBgColor = m.bgColor;
       // Detect if we're in light mode based on background color luminance
       const bgRgb = hexToRgb(m.bgColor);
@@ -1494,17 +1377,8 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       }
       // Draw vectors in world space
       // Images first (in background)
-      for (let i = 0; i < retainedShapes.length; i++) {
-        const sh = retainedShapes[i] as unknown as {
-          type: string;
-          imageData?: string;
-          x?: number;
-          y?: number;
-          width?: number;
-          height?: number;
-          alpha?: number;
-          properties?: Record<string, unknown>;
-        };
+      for (let i = 0; i < retainedDrawings.length; i++) {
+        const sh = retainedDrawings[i];
         if (
           sh.type === 'image' &&
           sh.imageData &&
@@ -1557,8 +1431,8 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         ctx.restore();
       }
       // Shapes (skip images - already rendered above)
-      for (let i = 0; i < retainedShapes.length; i++) {
-        const sh = retainedShapes[i];
+      for (let i = 0; i < retainedDrawings.length; i++) {
+        const sh = retainedDrawings[i];
         if (sh.properties?.hidden) continue;
         if (sh.type === 'image') continue;
         ctx.save();
@@ -1615,7 +1489,10 @@ function handleMessage(evt: MessageEvent<Inbound>) {
           if (!blob) return;
           const reader = new FileReader();
           reader.onload = () => {
-            self.postMessage({ type: 'snapshot', dataUrl: String(reader.result) } as Outbound);
+            self.postMessage({
+              type: 'snapshot',
+              dataUrl: String(reader.result),
+            } satisfies Outbound);
           };
           reader.readAsDataURL(blob);
         })
@@ -1625,4 +1502,4 @@ function handleMessage(evt: MessageEvent<Inbound>) {
   }
 }
 
-self.onmessage = handleMessage as unknown as (ev: MessageEvent) => void;
+self.onmessage = (event) => handleMessage(event);

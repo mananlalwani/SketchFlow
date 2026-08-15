@@ -1,14 +1,14 @@
 import type { DrawingObject } from '@/store/drawingStore';
-import type { ShapeData, StrokeData } from '@/types/socket';
+import type { DrawingData, StrokeData } from '@/types/socket';
 
 export interface RendererScene {
-  shapes: ShapeData[];
+  drawings: DrawingData[];
   strokes: StrokeData[];
 }
 
 /** Converts retained drawing objects to the compact worker representation. */
 export function drawingObjectsToRendererScene(objects: readonly DrawingObject[]): RendererScene {
-  const shapes: ShapeData[] = [];
+  const drawings: DrawingData[] = [];
   const strokes: StrokeData[] = [];
 
   const orderedObjects = objects
@@ -21,7 +21,7 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
       // Keep a stroke in the same retained scene sequence as shapes. The
       // worker's old separate stroke pass made every shape visually topmost,
       // even when the Layers panel placed a stroke above it.
-      shapes.push({
+      drawings.push({
         id: object.id,
         type: 'stroke',
         x: 0,
@@ -39,7 +39,7 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
     }
 
     if (object.x === undefined || object.y === undefined) continue;
-    shapes.push({
+    drawings.push({
       id: object.id,
       type: object.type,
       x: object.x,
@@ -64,5 +64,5 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
     });
   }
 
-  return { shapes, strokes };
+  return { drawings, strokes };
 }

@@ -22,7 +22,13 @@ export interface Vector2D {
   x: number;
   y: number;
   magnitude: number;
-  normalized: Vector2D;
+  normalized: NormalizedVector2D;
+}
+
+export interface NormalizedVector2D {
+  x: number;
+  y: number;
+  magnitude: number;
 }
 
 // === Point Operations ===
@@ -53,28 +59,19 @@ export function createVector(p1: Point, p2: Point): Vector2D {
   const y = p2.y - p1.y;
   const magnitude = Math.sqrt(x * x + y * y);
 
+  const normalized =
+    magnitude > 0
+      ? { x: x / magnitude, y: y / magnitude, magnitude: 1 }
+      : { x: 0, y: 0, magnitude: 0 };
   return {
     x,
     y,
     magnitude,
-    normalized:
-      magnitude > 0
-        ? {
-            x: x / magnitude,
-            y: y / magnitude,
-            magnitude: 1,
-            normalized: {
-              x: x / magnitude,
-              y: y / magnitude,
-              magnitude: 1,
-              normalized: {} as Vector2D,
-            },
-          }
-        : { x: 0, y: 0, magnitude: 0, normalized: {} as Vector2D },
+    normalized,
   };
 }
 
-export function dotProduct(v1: Vector2D, v2: Vector2D): number {
+export function dotProduct(v1: Pick<Vector2D, 'x' | 'y'>, v2: Pick<Vector2D, 'x' | 'y'>): number {
   return v1.x * v2.x + v1.y * v2.y;
 }
 

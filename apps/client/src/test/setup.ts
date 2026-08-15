@@ -22,7 +22,7 @@ class MockResizeObserver {
   unobserve = vi.fn();
   disconnect = vi.fn();
 }
-global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+Object.defineProperty(globalThis, 'ResizeObserver', { value: MockResizeObserver });
 
 // Mock IntersectionObserver
 class MockIntersectionObserver {
@@ -34,7 +34,7 @@ class MockIntersectionObserver {
   thresholds = [];
   takeRecords = vi.fn().mockReturnValue([]);
 }
-global.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
+Object.defineProperty(globalThis, 'IntersectionObserver', { value: MockIntersectionObserver });
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {

@@ -1,4 +1,4 @@
-import { Layers, PenLine, Shapes, Type } from 'lucide-react';
+import { Layers, PenLine, Square, Type } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { expandObjectIdsWithGroups } from '@/lib/canvasObjectTransform';
@@ -15,7 +15,7 @@ function layerLabel(object: { type: string; text?: string; name?: string }) {
 function LayerGlyph({ type }: { type: string }) {
   if (type === 'stroke') return <PenLine className="h-4 w-4" />;
   if (type === 'text') return <Type className="h-4 w-4" />;
-  return <Shapes className="h-4 w-4" />;
+  return <Square className="h-4 w-4" />;
 }
 
 interface LayerStackProps {

@@ -1,25 +1,12 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useDrawingStore } from '@/store/drawingStore';
-
-vi.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({
-    toast: vi.fn(),
-  }),
-}));
-
-vi.mock('@/lib/api', () => ({
-  createProject: vi.fn(),
-  updateProject: vi.fn(),
-  getProject: vi.fn(),
-  listProjects: vi.fn().mockResolvedValue([]),
-}));
 
 // Simple toolbar component for testing core functionality
 // (The real DrawingToolbar has many dependencies that are hard to mock)
 function ToolbarTestComponent() {
-  const { currentTool, brushSize, shapeFilled, setTool, setBrushSize, setShapeFilled } =
+  const { currentTool, brushSize, drawingFilled, setTool, setBrushSize, setDrawingFilled } =
     useDrawingStore();
 
   const h = React.createElement;
@@ -28,7 +15,7 @@ function ToolbarTestComponent() {
     { 'data-testid': 'toolbar' },
     h('div', { 'data-testid': 'current-tool' }, currentTool),
     h('div', { 'data-testid': 'brush-size' }, brushSize),
-    h('div', { 'data-testid': 'shape-filled' }, shapeFilled ? 'filled' : 'outline'),
+    h('div', { 'data-testid': 'shape-filled' }, drawingFilled ? 'filled' : 'outline'),
     h('button', { onClick: () => setTool('pen'), 'data-testid': 'tool-pen' }, 'Pen'),
     h('button', { onClick: () => setTool('eraser'), 'data-testid': 'tool-eraser' }, 'Eraser'),
     h(
@@ -44,7 +31,7 @@ function ToolbarTestComponent() {
     }),
     h(
       'button',
-      { onClick: () => setShapeFilled(!shapeFilled), 'data-testid': 'toggle-fill' },
+      { onClick: () => setDrawingFilled(!drawingFilled), 'data-testid': 'toggle-fill' },
       'Toggle Fill',
     ),
   );
@@ -56,7 +43,7 @@ describe('DrawingToolbar (simplified)', () => {
     useDrawingStore.setState({
       currentTool: 'pen',
       brushSize: 4,
-      shapeFilled: false,
+      drawingFilled: false,
     });
   });
 

@@ -10,7 +10,7 @@ export function useLiveCursors(projectId: string | null) {
   const lastEmitTime = useRef<number>(0);
   const THROTTLE_MS = 33; // ~30fps
   const allowGuestSocket =
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('share');
+    globalThis.window !== undefined && new URLSearchParams(window.location.search).has('share');
   const canUseRealtime = isAuthenticated || (isGuest && allowGuestSocket);
   const selfCursorId = isAuthenticated ? user?.id : guestId;
   const deviceCursorId = useMemo(() => {

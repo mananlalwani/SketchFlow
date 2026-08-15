@@ -18,6 +18,12 @@ export interface RendererViewportMessage extends CanvasViewportState {
   dpr: number;
 }
 
+export type RendererWorkerMessage = RendererViewportMessage | { type: 'clear' };
+
+export interface RendererWorkerPort {
+  postMessage(message: RendererWorkerMessage): void;
+}
+
 export function createRendererViewportMessage(
   { width, height }: CanvasSize,
   { zoom, viewX, viewY }: CanvasViewportState,
@@ -35,7 +41,7 @@ export function createRendererViewportMessage(
 }
 
 export function postRendererViewport(
-  worker: Worker | null,
+  worker: RendererWorkerPort | null,
   size: CanvasSize,
   viewport: CanvasViewportState,
 ) {

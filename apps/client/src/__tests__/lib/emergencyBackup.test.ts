@@ -1,54 +1,39 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { createEmergencyBackupService, type EmergencyBackup } from '@/lib/emergencyBackup';
 
-const mocks = vi.hoisted(() => {
-  const backups = new Map<string, unknown>();
-  const transaction = () => ({
+const backups = new Map<string, EmergencyBackup>();
+const backupService = createEmergencyBackupService(async () => ({
+  transaction: () => ({
     store: {
-      get: vi.fn(async (projectId: string) => backups.get(projectId)),
-      put: vi.fn(async (backup: { projectId: string }) => backups.set(backup.projectId, backup)),
-      delete: vi.fn(async (projectId: string) => backups.delete(projectId)),
+      get: async (projectId) => backups.get(projectId),
+      put: async (backup) => void backups.set(backup.projectId, backup),
+      delete: async (projectId) => void backups.delete(projectId),
     },
     done: Promise.resolve(),
-  });
-
-  return {
-    backups,
-    openDB: vi.fn(async () => ({
-      transaction,
-      get: vi.fn(async (_store: string, projectId: string) => backups.get(projectId)),
-    })),
-  };
-});
-
-vi.mock('idb', () => ({ openDB: mocks.openDB }));
-
-import {
-  getEmergencyBackup,
-  removeEmergencyBackup,
-  saveEmergencyBackup,
-} from '@/lib/emergencyBackup';
+  }),
+  get: async (_storeName, projectId) => backups.get(projectId),
+}));
 
 describe('emergencyBackup', () => {
   beforeEach(() => {
-    mocks.backups.clear();
-    mocks.openDB.mockClear();
+    backups.clear();
   });
 
   it('does not let a delayed older backup overwrite a newer snapshot', async () => {
-    await saveEmergencyBackup({
+    await backupService.save({
       projectId: 'project-1',
       title: 'Newer',
       data: 'newer-data',
       timestamp: 2,
     });
-    await saveEmergencyBackup({
+    await backupService.save({
       projectId: 'project-1',
       title: 'Older',
       data: 'older-data',
       timestamp: 1,
     });
 
-    await expect(getEmergencyBackup('project-1')).resolves.toMatchObject({
+    await expect(backupService.get('project-1')).resolves.toMatchObject({
       title: 'Newer',
       data: 'newer-data',
       timestamp: 2,
@@ -56,20 +41,20 @@ describe('emergencyBackup', () => {
   });
 
   it('deletes only the backup matching a completed save snapshot', async () => {
-    await saveEmergencyBackup({
+    await backupService.save({
       projectId: 'project-1',
       title: 'Newer',
       data: 'newer-data',
       timestamp: 2,
     });
 
-    await removeEmergencyBackup('project-1', { title: 'Older', data: 'older-data' });
-    await expect(getEmergencyBackup('project-1')).resolves.toMatchObject({
+    await backupService.remove('project-1', { title: 'Older', data: 'older-data' });
+    await expect(backupService.get('project-1')).resolves.toMatchObject({
       title: 'Newer',
       data: 'newer-data',
     });
 
-    await removeEmergencyBackup('project-1', { title: 'Newer', data: 'newer-data' });
-    await expect(getEmergencyBackup('project-1')).resolves.toBeUndefined();
+    await backupService.remove('project-1', { title: 'Newer', data: 'newer-data' });
+    await expect(backupService.get('project-1')).resolves.toBeUndefined();
   });
 });

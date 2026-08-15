@@ -11,6 +11,10 @@ import {
 } from '../../validation/project.js';
 
 describe('project request validation', () => {
+  interface NestedValue {
+    value?: NestedValue;
+  }
+
   it('accepts a bounded project save with a positive expected revision', () => {
     expect(
       projectInputSchema.safeParse({
@@ -40,9 +44,12 @@ describe('project request validation', () => {
   });
 
   it('rejects deeply nested, oversized text, and oversized image payloads', () => {
-    const nested: { value?: unknown } = {};
+    const nested: NestedValue = {};
     let cursor = nested;
-    for (let depth = 0; depth < 21; depth++) cursor = cursor.value = {} as { value?: unknown };
+    for (let depth = 0; depth < 21; depth++) {
+      cursor.value = {};
+      cursor = cursor.value;
+    }
     expect(projectInputSchema.safeParse({ title: 'Deep', data: nested }).success).toBe(false);
     expect(
       projectInputSchema.safeParse({ title: 'Text', data: { text: 'x'.repeat(100_001) } }).success,
@@ -56,9 +63,12 @@ describe('project request validation', () => {
   });
 
   it('does not let object-count validation bypass nested field and depth limits', () => {
-    const nested: { value?: unknown } = {};
+    const nested: NestedValue = {};
     let cursor = nested;
-    for (let depth = 0; depth < 21; depth++) cursor = cursor.value = {} as { value?: unknown };
+    for (let depth = 0; depth < 21; depth++) {
+      cursor.value = {};
+      cursor = cursor.value;
+    }
 
     expect(
       projectInputSchema.safeParse({

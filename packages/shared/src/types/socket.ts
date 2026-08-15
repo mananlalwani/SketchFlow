@@ -23,7 +23,13 @@ export interface StrokePoint {
   width?: number;
 }
 
-export interface ShapeData {
+export type JsonPrimitive = string | number | boolean | null;
+export interface JsonObject {
+  [key: string]: JsonValue | undefined;
+}
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+
+export interface DrawingData {
   id: string;
   type:
     | 'stroke'
@@ -50,7 +56,7 @@ export interface ShapeData {
   fontSize?: number;
   imageData?: string;
   points?: StrokePoint[];
-  properties?: Record<string, unknown>;
+  properties?: JsonObject;
   timestamp?: number;
   createdBy?: string;
   createdAt?: number;
@@ -98,7 +104,7 @@ export interface ProjectStroke {
   alpha?: number;
 }
 
-export interface ProjectShapeLine {
+export interface ProjectDrawingLine {
   id: string;
   type: 'line';
   x: number;
@@ -110,7 +116,7 @@ export interface ProjectShapeLine {
   alpha?: number;
 }
 
-export interface ProjectShapeRect {
+export interface ProjectDrawingRect {
   id: string;
   type: 'rectangle';
   x: number;
@@ -123,7 +129,7 @@ export interface ProjectShapeRect {
   filled?: boolean;
 }
 
-export interface ProjectShapeEllipse {
+export interface ProjectDrawingEllipse {
   id: string;
   type: 'ellipse';
   x: number;
@@ -136,7 +142,7 @@ export interface ProjectShapeEllipse {
   filled?: boolean;
 }
 
-export interface ProjectShapeParabola {
+export interface ProjectDrawingParabola {
   id: string;
   type: 'parabola';
   x: number;
@@ -149,7 +155,7 @@ export interface ProjectShapeParabola {
   orientation?: 'up' | 'down' | 'left' | 'right';
 }
 
-export interface ProjectShapeCircle {
+export interface ProjectDrawingCircle {
   id: string;
   type: 'circle';
   x: number;
@@ -162,7 +168,7 @@ export interface ProjectShapeCircle {
   filled?: boolean;
 }
 
-export interface ProjectShapeTriangle {
+export interface ProjectDrawingTriangle {
   id: string;
   type: 'triangle';
   x: number;
@@ -175,7 +181,7 @@ export interface ProjectShapeTriangle {
   filled?: boolean;
 }
 
-export interface ProjectShapeText {
+export interface ProjectDrawingText {
   id: string;
   type: 'text';
   x: number;
@@ -189,7 +195,7 @@ export interface ProjectShapeText {
   fontSize: number;
 }
 
-export interface ProjectShapeImage {
+export interface ProjectDrawingImage {
   id: string;
   type: 'image';
   x: number;
@@ -204,14 +210,14 @@ export interface ProjectShapeImage {
 
 export type ProjectObject =
   | ProjectStroke
-  | ProjectShapeLine
-  | ProjectShapeRect
-  | ProjectShapeEllipse
-  | ProjectShapeCircle
-  | ProjectShapeTriangle
-  | ProjectShapeParabola
-  | ProjectShapeText
-  | ProjectShapeImage;
+  | ProjectDrawingLine
+  | ProjectDrawingRect
+  | ProjectDrawingEllipse
+  | ProjectDrawingCircle
+  | ProjectDrawingTriangle
+  | ProjectDrawingParabola
+  | ProjectDrawingText
+  | ProjectDrawingImage;
 
 export interface ProjectFile {
   version: ProjectVersion;
@@ -226,7 +232,7 @@ export interface CollaborationCommit {
   operationId: string;
   expectedRevision: number;
   kind: 'replace-project' | 'upsert-object' | 'delete-object' | 'batch';
-  data: unknown;
+  data: JsonValue;
   title?: string;
 }
 
@@ -235,7 +241,7 @@ export type CollaborationCommitResult =
       status: 'applied';
       operationId: string;
       revision: number;
-      data: unknown;
+      data: JsonValue;
       title: string;
     }
   | { status: 'duplicate'; operationId: string; revision: number }
@@ -250,14 +256,14 @@ export interface CollaborationAppliedEvent {
   operationId: string;
   revision: number;
   kind: 'replace-project' | 'upsert-object' | 'delete-object' | 'batch';
-  data: unknown;
+  data: JsonValue;
   title: string;
 }
 
 export interface CollaborationHydration {
   projectId: string;
   revision: number;
-  data: unknown;
+  data: JsonValue;
   title: string;
 }
 

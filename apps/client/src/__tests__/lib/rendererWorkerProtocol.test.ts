@@ -27,7 +27,7 @@ describe('renderer worker protocol', () => {
     ]);
 
     expect(message).toMatchObject({ type: 'load-scene', requestId: 'scene-1' });
-    expect(message.shapes).toHaveLength(1);
+    expect(message.drawings).toHaveLength(1);
     expect(message.strokes).toHaveLength(1);
   });
 

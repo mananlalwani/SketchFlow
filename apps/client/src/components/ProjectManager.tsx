@@ -149,8 +149,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
   const handleCardClick = (projectId: string, e: React.MouseEvent) => {
     // Check if click originated from within a dropdown menu (rendered in portal)
-    const target = e.target as HTMLElement;
-    if (target.closest('[role="menu"]') || target.closest('[data-radix-popper-content-wrapper]')) {
+    if (
+      e.target instanceof HTMLElement &&
+      (e.target.closest('[role="menu"]') || e.target.closest('[data-radix-popper-content-wrapper]'))
+    ) {
       return;
     }
 
@@ -203,7 +205,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         const token = await getToken();
         const [projectList, folderList] = await Promise.all([
           listProjects(token),
-          listFolders(token).catch(() => [] as FolderRecord[]),
+          listFolders(token).catch((): FolderRecord[] => []),
         ]);
         setProjects(
           projectList
@@ -408,7 +410,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const handleLoad = async (id: string) => {
     try {
       const token = await getToken();
-      const record = await getProject<ReturnType<typeof serializeProject>>(id, token);
+      const record = await getProject(id, token);
       const objects = deserializeProject(record.data);
 
       // Install a fully clean project session in one store transition so a load
@@ -441,7 +443,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     }
     try {
       const token = await getToken();
-      const record = await getProject<ReturnType<typeof serializeProject>>(id, token);
+      const record = await getProject(id, token);
       const updated = await updateProject(
         id,
         renameValue.trim(),
@@ -469,10 +471,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     setIsRenamingMobileProject(true);
     try {
       const token = await getToken();
-      const record = await getProject<ReturnType<typeof serializeProject>>(
-        mobileRenameProject.id,
-        token,
-      );
+      const record = await getProject(mobileRenameProject.id, token);
       const updated = await updateProject(
         mobileRenameProject.id,
         mobileRenameValue.trim(),
@@ -501,7 +500,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const handleExportPNG = async (projectId: string, title: string) => {
     try {
       const token = await getToken();
-      const record = await getProject<ReturnType<typeof serializeProject>>(projectId, token);
+      const record = await getProject(projectId, token);
       const objects = deserializeProject(record.data);
 
       const canvas = document.createElement('canvas');
@@ -583,7 +582,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const handleExportPDF = async (projectId: string, title: string) => {
     try {
       const token = await getToken();
-      const record = await getProject<ReturnType<typeof serializeProject>>(projectId, token);
+      const record = await getProject(projectId, token);
       const objects = deserializeProject(record.data);
 
       const canvas = document.createElement('canvas');
@@ -691,7 +690,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   const handleExportDRA = async (projectId: string, title: string) => {
     try {
       const token = await getToken();
-      const record = await getProject<ReturnType<typeof serializeProject>>(projectId, token);
+      const record = await getProject(projectId, token);
 
       const encrypted = await encodeDrawFormat(record.data);
 
@@ -715,7 +714,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     input.type = 'file';
     input.accept = DRAW_FORMAT_EXTENSION;
     input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
+      const file = e.target instanceof HTMLInputElement ? e.target.files?.[0] : undefined;
       if (!file) return;
 
       try {
@@ -741,7 +740,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     input.type = 'file';
     input.accept = '.pdf';
     input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
+      const file = e.target instanceof HTMLInputElement ? e.target.files?.[0] : undefined;
       if (!file) return;
 
       try {
@@ -1537,10 +1536,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   onClick={() => {
                                     getToken()
                                       .then((token) => {
-                                        getProject<ReturnType<typeof serializeProject>>(
-                                          project.id,
-                                          token,
-                                        ).then((record) => {
+                                        getProject(project.id, token).then((record) => {
                                           createProject(
                                             `${project.title} (Copy)`,
                                             record.data,
@@ -1716,10 +1712,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 onSelect={() => {
                                   getToken()
                                     .then((token) => {
-                                      getProject<ReturnType<typeof serializeProject>>(
-                                        project.id,
-                                        token,
-                                      ).then((record) => {
+                                      getProject(project.id, token).then((record) => {
                                         createProject(
                                           `${project.title} (Copy)`,
                                           record.data,
@@ -1950,10 +1943,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                   onClick={() => {
                                     getToken()
                                       .then((token) => {
-                                        getProject<ReturnType<typeof serializeProject>>(
-                                          project.id,
-                                          token,
-                                        ).then((record) => {
+                                        getProject(project.id, token).then((record) => {
                                           createProject(
                                             `${project.title} (Copy)`,
                                             record.data,
@@ -2131,10 +2121,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 onSelect={() => {
                                   getToken()
                                     .then((token) => {
-                                      getProject<ReturnType<typeof serializeProject>>(
-                                        project.id,
-                                        token,
-                                      ).then((record) => {
+                                      getProject(project.id, token).then((record) => {
                                         createProject(
                                           `${project.title} (Copy)`,
                                           record.data,

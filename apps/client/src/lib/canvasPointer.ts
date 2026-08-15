@@ -2,6 +2,14 @@ import type { StrokeData, StrokePoint } from '@/types/socket';
 
 export type CanvasPoint = StrokePoint;
 
+export interface PointerSample {
+  clientX: number;
+  clientY: number;
+  pointerType: string;
+  pressure: number;
+  getCoalescedEvents?: () => PointerSample[];
+}
+
 export function screenPointToWorld(
   rect: Pick<DOMRect, 'left' | 'top'>,
   viewport: { zoom: number; viewX: number; viewY: number },
@@ -14,13 +22,13 @@ export function screenPointToWorld(
   };
 }
 
-export function constrainShapeEnd(
+export function constrainDrawingEnd(
   start: CanvasPoint,
   end: CanvasPoint,
-  shapeType: string,
+  drawingType: string,
   constrained: boolean,
 ): CanvasPoint {
-  if (!constrained || (shapeType !== 'rectangle' && shapeType !== 'ellipse')) return end;
+  if (!constrained || (drawingType !== 'rectangle' && drawingType !== 'ellipse')) return end;
 
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
@@ -46,7 +54,7 @@ export function buildStrokePoints(strokes: readonly StrokeData[]): CanvasPoint[]
   ];
 }
 
-export function getPointerSamples(event: PointerEvent): PointerEvent[] {
+export function getPointerSamples(event: PointerSample): PointerSample[] {
   const samples = event.getCoalescedEvents?.();
   return samples && samples.length ? samples : [event];
 }

@@ -2,6 +2,9 @@
  * Centralized error handling with user-friendly messages
  */
 import { reportError } from './errorReporting';
+import type { ErrorContext } from './errorReporting';
+
+export type ErrorInput = Error | string | null | undefined;
 
 export class NetworkError extends Error {
   constructor(
@@ -37,7 +40,7 @@ export class StorageError extends Error {
 /**
  * Convert technical errors into user-friendly messages
  */
-export function getUserFriendlyErrorMessage(error: unknown): string {
+export function getUserFriendlyErrorMessage(error: ErrorInput): string {
   if (error instanceof NetworkError) {
     if (error.statusCode === 404) {
       return 'The requested resource was not found.';
@@ -88,7 +91,7 @@ export function getUserFriendlyErrorMessage(error: unknown): string {
 /**
  * Get an action suggestion based on the error type
  */
-export function getErrorActionSuggestion(error: unknown): string | null {
+export function getErrorActionSuggestion(error: ErrorInput): string | null {
   if (error instanceof NetworkError) {
     if (error.statusCode && error.statusCode >= 500) {
       return 'Wait a moment and try again';
@@ -115,56 +118,33 @@ interface ErrorHandlerOptions {
   /** Custom user message */
   userMessage?: string;
   /** Context for error reporting */
-  context?: Record<string, unknown>;
+  context?: ErrorContext;
   /** Callback for retry action */
   onRetry?: () => void;
+}
+
+export interface ErrorHandlingResult {
+  message: string;
+  suggestion: string | null;
 }
 
 /**
  * Central error handler that reports errors and optionally shows user feedback
  */
 export function handleError(
-  error: unknown,
+  error: ErrorInput,
   options: ErrorHandlerOptions = {},
-): { message: string; suggestion: string | null } {
+): ErrorHandlingResult {
   const { context = {}, userMessage } = options;
 
   // Report error for tracking
-  if (error instanceof Error) {
-    reportError(error, context);
-  } else {
-    reportError(new Error(String(error)), context);
-  }
+  reportError(error instanceof Error ? error : new Error(error ?? 'Unknown error'), context);
 
   // Get user-friendly messages
   const message = userMessage || getUserFriendlyErrorMessage(error);
   const suggestion = getErrorActionSuggestion(error);
 
   return { message, suggestion };
-}
-
-/**
- * Wrap async functions with automatic error handling
- */
-export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(
-  fn: T,
-  options: ErrorHandlerOptions = {},
-): T {
-  return (async (...args: Parameters<T>) => {
-    try {
-      return await fn(...args);
-    } catch (error) {
-      const { message, suggestion } = handleError(error, options);
-
-      // Re-throw with enhanced error
-      const enhancedError = error instanceof Error ? error : new Error(String(error));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (enhancedError as any).userMessage = message;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (enhancedError as any).userSuggestion = suggestion;
-      throw enhancedError;
-    }
-  }) as T;
 }
 
 /**

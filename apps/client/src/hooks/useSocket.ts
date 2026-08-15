@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/store/authStore';
+import { clientEnv } from '@/config/env';
 import type {
   CollaborationCommit,
   CollaborationCommitResult,
@@ -9,25 +10,17 @@ import type {
 } from '@/types/socket';
 
 type SocketInstance = Socket<ServerToClientEvents, ClientToServerEvents>;
-
-type ListenerCallback = (data: unknown) => void;
-
-type Env = {
-  env?: {
-    DEV?: boolean;
-    VITE_SOCKET_BASE_URL?: string;
-    VITE_SERVER_PORT?: string;
-    VITE_WS_URL?: string;
-    VITE_API_URL?: string;
-  };
-};
-
-const socketEnv = import.meta as unknown as Env;
+type ServerListenerArgs = {
+  [Event in keyof ServerToClientEvents]: [event: Event, callback: ServerToClientEvents[Event]];
+}[keyof ServerToClientEvents];
+type OptionalServerListenerArgs = {
+  [Event in keyof ServerToClientEvents]: [event: Event, callback?: ServerToClientEvents[Event]];
+}[keyof ServerToClientEvents];
 
 const resolveSocketBaseUrl = () => {
   // Prefer VITE_WS_URL, then VITE_API_URL, then VITE_SOCKET_BASE_URL, then fallback
 
-  const wsUrl = (import.meta.env && import.meta.env.VITE_WS_URL) || socketEnv.env?.VITE_WS_URL;
+  const wsUrl = clientEnv.WS_URL;
   if (wsUrl) {
     // const msg = '[Socket] Using VITE_WS_URL: ' + wsUrl.replace(/\/$/, '');
     // alert(msg);
@@ -35,7 +28,7 @@ const resolveSocketBaseUrl = () => {
     return wsUrl.replace(/\/$/, '');
   }
 
-  const apiUrl = (import.meta.env && import.meta.env.VITE_API_URL) || socketEnv.env?.VITE_API_URL;
+  const apiUrl = clientEnv.API_URL;
   if (apiUrl) {
     // const msg = '[Socket] Using VITE_API_URL: ' + apiUrl.replace(/\/$/, '');
     // alert(msg);
@@ -43,21 +36,21 @@ const resolveSocketBaseUrl = () => {
     return apiUrl.replace(/\/$/, '');
   }
 
-  const override = socketEnv.env?.VITE_SOCKET_BASE_URL;
+  const override = clientEnv.SOCKET_URL;
   if (override) {
     // console.log('[Socket] Using VITE_SOCKET_BASE_URL:', override.replace(/\/$/, ''));
     return override.replace(/\/$/, '');
   }
 
-  const fallbackPort = socketEnv.env?.VITE_SERVER_PORT || '3000';
+  const fallbackPort = clientEnv.SERVER_PORT;
 
-  if (typeof window === 'undefined') {
+  if (globalThis.window === undefined) {
     // console.log('[Socket] Using SSR fallback URL:', `http://localhost:${fallbackPort}`);
     return `http://localhost:${fallbackPort}`;
   }
 
   const currentOrigin = window.location.origin.replace(/\/$/, '');
-  const desiredPort = socketEnv.env?.VITE_SERVER_PORT;
+  const desiredPort = clientEnv.SERVER_PORT;
 
   if (desiredPort && desiredPort !== window.location.port) {
     const url = `${window.location.protocol}//${window.location.hostname}:${desiredPort}`;
@@ -71,7 +64,8 @@ const resolveSocketBaseUrl = () => {
 
 class SocketManager {
   private socket: SocketInstance | null = null;
-  private listeners: Map<string, Set<ListenerCallback>> = new Map();
+  private connectionListeners = new Set<(connected: boolean) => void>();
+  private errorListeners = new Set<(error: Error) => void>();
   private isConnected = false;
 
   connect(token?: string, shareToken?: string) {
@@ -104,12 +98,12 @@ class SocketManager {
 
     this.socket.on('connect', () => {
       this.isConnected = true;
-      this.notifyListeners('connect', true);
+      this.notifyConnectionListeners(true);
     });
 
     this.socket.on('disconnect', (reason) => {
       this.isConnected = false;
-      this.notifyListeners('connect', false);
+      this.notifyConnectionListeners(false);
       // Log disconnect for debugging, but don't spam console
       if (reason !== 'io client disconnect') {
         console.debug('Disconnected:', reason);
@@ -118,7 +112,7 @@ class SocketManager {
 
     this.socket.on('connect_error', (error) => {
       console.error('Connection error:', error);
-      this.notifyListeners('error', error);
+      this.notifyErrorListeners(error);
     });
 
     return this.socket;
@@ -137,47 +131,108 @@ class SocketManager {
     ...args: Parameters<ClientToServerEvents[T]>
   ) {
     if (this.socket?.connected) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.socket as any).emit(event, ...args);
+      this.socket.emit(event, ...args);
     }
   }
 
-  on<T extends keyof ServerToClientEvents>(event: T, callback: ServerToClientEvents[T]) {
-    if (this.socket) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.socket as any).on(event, callback as any);
+  on(...args: ServerListenerArgs) {
+    if (!this.socket) return;
+    switch (args[0]) {
+      case 'connection:count':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'cursor:move':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'cursor:join':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'cursor:leave':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'cursors:all':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'selection:change':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'selection:leave':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'selections:all':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'collaboration:hydrated':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'collaboration:applied':
+        this.socket.on(args[0], args[1]);
+        break;
+      case 'error':
+        this.socket.on(args[0], args[1]);
+        break;
     }
   }
 
-  off<T extends keyof ServerToClientEvents>(event: T, callback?: ServerToClientEvents[T]) {
-    if (this.socket) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.socket as any).off(event, callback as any);
+  off(...args: OptionalServerListenerArgs) {
+    if (!this.socket) return;
+    switch (args[0]) {
+      case 'connection:count':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'cursor:move':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'cursor:join':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'cursor:leave':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'cursors:all':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'selection:change':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'selection:leave':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'selections:all':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'collaboration:hydrated':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'collaboration:applied':
+        this.socket.off(args[0], args[1]);
+        break;
+      case 'error':
+        this.socket.off(args[0], args[1]);
+        break;
     }
   }
 
-  subscribe(event: string, callback: ListenerCallback) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)!.add(callback);
-
+  subscribeConnection(callback: (connected: boolean) => void) {
+    this.connectionListeners.add(callback);
     return () => {
-      const eventListeners = this.listeners.get(event);
-      if (eventListeners) {
-        eventListeners.delete(callback);
-        if (eventListeners.size === 0) {
-          this.listeners.delete(event);
-        }
-      }
+      this.connectionListeners.delete(callback);
     };
   }
 
-  private notifyListeners(event: string, data: unknown) {
-    const eventListeners = this.listeners.get(event);
-    if (eventListeners) {
-      eventListeners.forEach((callback) => callback(data));
-    }
+  subscribeError(callback: (error: Error) => void) {
+    this.errorListeners.add(callback);
+    return () => {
+      this.errorListeners.delete(callback);
+    };
+  }
+
+  private notifyConnectionListeners(connected: boolean) {
+    this.connectionListeners.forEach((callback) => callback(connected));
+  }
+
+  private notifyErrorListeners(error: Error) {
+    this.errorListeners.forEach((callback) => callback(error));
   }
 
   getConnectionStatus() {
@@ -203,7 +258,9 @@ export const useSocket = () => {
   const wasConnectedRef = React.useRef(false);
   const { isGuest, isAuthenticated, getToken } = useAuthStore();
   const shareToken =
-    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('share');
+    globalThis.window === undefined
+      ? null
+      : new URLSearchParams(window.location.search).get('share');
 
   useEffect(() => {
     let disposed = false;
@@ -214,8 +271,7 @@ export const useSocket = () => {
 
     let socket: SocketInstance | null = null;
 
-    const unsubscribeConnect = socketManager.subscribe('connect', (data: unknown) => {
-      const connected = data as boolean;
+    const unsubscribeConnect = socketManager.subscribeConnection((connected) => {
       const wasConnected = wasConnectedRef.current;
       setIsConnected(connected);
       wasConnectedRef.current = connected;
@@ -224,8 +280,7 @@ export const useSocket = () => {
       }
     });
 
-    const unsubscribeError = socketManager.subscribe('error', (data: unknown) => {
-      const error = data as Error;
+    const unsubscribeError = socketManager.subscribeError((error) => {
       setConnectionError(error);
     });
 
@@ -262,13 +317,10 @@ export const useSocket = () => {
     [],
   );
 
-  const on = useCallback(
-    <T extends keyof ServerToClientEvents>(event: T, callback: ServerToClientEvents[T]) => {
-      socketManager.on(event, callback);
-      return () => socketManager.off(event, callback);
-    },
-    [],
-  );
+  const on = useCallback((...args: ServerListenerArgs) => {
+    socketManager.on(...args);
+    return () => socketManager.off(...args);
+  }, []);
 
   const reconnect = useCallback(() => {
     void getToken().then((token) => {

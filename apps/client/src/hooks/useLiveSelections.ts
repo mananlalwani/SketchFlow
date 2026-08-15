@@ -12,7 +12,7 @@ export function useLiveSelections(projectId: string | null, selectedObjectIds: r
   const { user, isAuthenticated, isGuest, guestId } = useAuthStore();
   const previousIdsRef = useRef('');
   const allowGuestSocket =
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('share');
+    globalThis.window !== undefined && new URLSearchParams(window.location.search).has('share');
   const canUseRealtime = isAuthenticated || (isGuest && allowGuestSocket);
   const userId = isAuthenticated ? user?.id : guestId;
   const selectionKey = [...selectedObjectIds].sort().join(',');

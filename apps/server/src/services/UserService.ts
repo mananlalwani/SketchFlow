@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { logger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +22,30 @@ export interface UserSession {
   token: string;
   expiresAt: number;
   createdAt: number;
+}
+
+const userSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  username: z.string(),
+  passwordHash: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+const userSessionSchema = z.object({
+  userId: z.string(),
+  token: z.string(),
+  expiresAt: z.number(),
+  createdAt: z.number(),
+});
+
+function parseUser(raw: string): User {
+  return userSchema.parse(JSON.parse(raw));
+}
+
+function parseUserSession(raw: string): UserSession {
+  return userSessionSchema.parse(JSON.parse(raw));
 }
 
 export class UserService {
@@ -111,7 +136,7 @@ export class UserService {
     if (!fs.existsSync(p)) return null;
     try {
       const raw = fs.readFileSync(p, 'utf-8');
-      return JSON.parse(raw) as User;
+      return parseUser(raw);
     } catch (e) {
       logger.error('Failed to read user', e);
       return null;
@@ -123,7 +148,7 @@ export class UserService {
     for (const file of files) {
       try {
         const raw = fs.readFileSync(path.join(this.usersDir, file), 'utf-8');
-        const user = JSON.parse(raw) as User;
+        const user = parseUser(raw);
         if (user.email === email.toLowerCase()) {
           return user;
         }
@@ -139,7 +164,7 @@ export class UserService {
     for (const file of files) {
       try {
         const raw = fs.readFileSync(path.join(this.usersDir, file), 'utf-8');
-        const user = JSON.parse(raw) as User;
+        const user = parseUser(raw);
         if (user.username === username) {
           return user;
         }
@@ -192,7 +217,7 @@ export class UserService {
 
     try {
       const raw = fs.readFileSync(p, 'utf-8');
-      const session = JSON.parse(raw) as UserSession;
+      const session = parseUserSession(raw);
 
       if (session.expiresAt <= Date.now()) {
         this.deleteSession(token);
@@ -234,7 +259,7 @@ export class UserService {
     for (const file of files) {
       try {
         const raw = fs.readFileSync(path.join(this.sessionsDir, file), 'utf-8');
-        const session = JSON.parse(raw) as UserSession;
+        const session = parseUserSession(raw);
 
         if (session.expiresAt > now) {
           this.sessions.set(session.token, session);

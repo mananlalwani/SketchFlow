@@ -2,23 +2,9 @@ import * as Sentry from '@sentry/react';
 
 import { clientEnv } from '@/config/env';
 
-const SENSITIVE_KEY =
-  /(authorization|cookie|token|secret|password|email|image|canvas|object|payload|data)/i;
 const SHARE_PATH = /\/shared\/[^/?#]+|[?&]share=[^&#]+/gi;
 
-function redact(value: unknown): unknown {
-  if (typeof value === 'string') return value.replace(SHARE_PATH, '/shared/[redacted]');
-  if (Array.isArray(value)) return value.map(redact);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [
-        key,
-        SENSITIVE_KEY.test(key) ? '[redacted]' : redact(entry),
-      ]),
-    );
-  }
-  return value;
-}
+export type ErrorTelemetryContext = Record<string, string | number | boolean | undefined>;
 
 function sanitizeUrl(url: string | undefined): string | undefined {
   if (!url) return url;
@@ -48,24 +34,24 @@ export function initSentry(): void {
         delete event.request.cookies;
         delete event.request.headers;
       }
-      event.contexts = redact(event.contexts) as typeof event.contexts;
-      event.extra = redact(event.extra) as typeof event.extra;
+      event.contexts = {};
+      event.extra = {};
       event.user = undefined;
       return event;
     },
     beforeBreadcrumb(breadcrumb) {
       return {
         ...breadcrumb,
-        data: redact(breadcrumb.data) as typeof breadcrumb.data,
+        data: undefined,
         message: breadcrumb.message?.replace(SHARE_PATH, '/shared/[redacted]'),
       };
     },
   });
 }
 
-export function captureException(error: Error, context?: Record<string, unknown>): void {
+export function captureException(error: Error, context?: ErrorTelemetryContext): void {
   Sentry.captureException(error, {
-    contexts: context ? { sketchflow: redact(context) as Record<string, unknown> } : undefined,
+    contexts: context ? { sketchflow: context } : undefined,
   });
 }
 
@@ -82,7 +68,7 @@ export function captureOperationalSignal(
   Sentry.captureMessage(signal, {
     level: 'warning',
     tags: { signal },
-    extra: redact(details) as Record<string, unknown>,
+    extra: details,
   });
 }
 

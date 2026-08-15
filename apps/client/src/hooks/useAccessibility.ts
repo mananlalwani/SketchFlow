@@ -90,7 +90,7 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[], enabled = tr
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement).contentEditable === 'true'
+        (e.target instanceof HTMLElement && e.target.contentEditable === 'true')
       ) {
         return;
       }
@@ -142,21 +142,44 @@ export function announceToScreenReader(
  * Get accessible label for tool
  */
 export function getToolLabel(tool: string, shortcut?: string): string {
-  const labels: Record<string, string> = {
-    pen: 'Pen tool',
-    eraser: 'Eraser tool',
-    line: 'Line tool',
-    rectangle: 'Rectangle tool',
-    ellipse: 'Ellipse tool',
-    triangle: 'Triangle tool',
-    star: 'Star tool',
-    text: 'Text tool',
-    hand: 'Pan tool',
-    move: 'Move tool',
-    eyedropper: 'Color picker tool',
-    image: 'Image tool',
-  };
-
-  const label = labels[tool] || tool;
+  let label = tool;
+  switch (tool) {
+    case 'pen':
+      label = 'Pen tool';
+      break;
+    case 'eraser':
+      label = 'Eraser tool';
+      break;
+    case 'line':
+      label = 'Line tool';
+      break;
+    case 'rectangle':
+      label = 'Rectangle tool';
+      break;
+    case 'ellipse':
+      label = 'Ellipse tool';
+      break;
+    case 'triangle':
+      label = 'Triangle tool';
+      break;
+    case 'star':
+      label = 'Star tool';
+      break;
+    case 'text':
+      label = 'Text tool';
+      break;
+    case 'hand':
+      label = 'Pan tool';
+      break;
+    case 'move':
+      label = 'Move tool';
+      break;
+    case 'eyedropper':
+      label = 'Color picker tool';
+      break;
+    case 'image':
+      label = 'Image tool';
+      break;
+  }
   return shortcut ? `${label} (${shortcut})` : label;
 }

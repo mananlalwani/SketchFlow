@@ -5,28 +5,41 @@
 import { Point, BoundingBox } from '../geometry';
 import { ProcessedStroke } from '../strokeProcessor';
 
-export interface DetectionResult {
-  confidence: number; // 0-1, higher = more confident
-  shape: DetectedShape;
-  error: number; // Average fitting error
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  metadata?: Record<string, any>;
+export interface DetectionMetadata {
+  straightness?: number;
+  curvature?: number;
 }
 
-export interface DetectedShape {
+export interface DetectedDrawingProperties {
+  angle?: number;
+  length?: number;
+  orientation?: 'up' | 'down' | 'left' | 'right';
+  curvature?: number;
+  pointCount?: number;
+  hidden?: boolean;
+  rotation?: number;
+}
+
+export interface DetectionResult {
+  confidence: number; // 0-1, higher = more confident
+  drawing: DetectedDrawing;
+  error: number; // Average fitting error
+  metadata?: DetectionMetadata;
+}
+
+export interface DetectedDrawing {
   type: 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'parabola' | 'arrow' | 'star';
   boundingBox: BoundingBox;
   points?: Point[]; // Key points (e.g., triangle vertices, line endpoints)
   center?: Point;
   orientation?: number; // Rotation angle in radians
   filled?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  properties?: Record<string, any>; // Shape-specific properties
+  properties?: DetectedDrawingProperties;
 }
 
-export interface ShapeDetector {
+export interface DrawingDetector {
   detect(stroke: ProcessedStroke, thresholds: DetectionThresholds): DetectionResult | null;
-  readonly shapeType: string;
+  readonly drawingType: string;
   readonly priority: number; // Higher priority shapes are tested first
 }
 
@@ -95,11 +108,11 @@ export const DEFAULT_THRESHOLDS: DetectionThresholds = {
 };
 
 // Helper function to create a DetectedShape
-export function createDetectedShape(
-  type: DetectedShape['type'],
+export function createDetectedDrawing(
+  type: DetectedDrawing['type'],
   boundingBox: BoundingBox,
-  options: Partial<Omit<DetectedShape, 'type' | 'boundingBox'>> = {},
-): DetectedShape {
+  options: Partial<Omit<DetectedDrawing, 'type' | 'boundingBox'>> = {},
+): DetectedDrawing {
   return {
     type,
     boundingBox,

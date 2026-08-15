@@ -5,18 +5,20 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { logger } from '../utils/logger.js';
 import { env, isDev, isProd } from '../config/env.js';
 
+/* eslint-disable no-var -- Global declarations require `var` in TypeScript. */
+declare global {
+  var __sketchflowPrisma: InstanceType<typeof PrismaClient> | undefined;
+  var __sketchflowPool: Pool | undefined;
+}
+/* eslint-enable no-var */
+
 // PrismaClient is attached to the `global` object in development to prevent
 // exhausting your database connection limit.
 // Learn more: https://pris.ly/d/help/next-js-best-practices
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: InstanceType<typeof PrismaClient> | undefined;
-  pool: Pool | undefined;
-};
-
 // Create pg Pool and adapter for Prisma 7
 const pool =
-  globalForPrisma.pool ??
+  globalThis.__sketchflowPool ??
   new Pool({
     connectionString: env.DATABASE_URL,
     // Connection pool settings for production
@@ -28,7 +30,7 @@ const pool =
 const adapter = new PrismaPg(pool);
 
 export const prisma =
-  globalForPrisma.prisma ??
+  globalThis.__sketchflowPrisma ??
   new PrismaClient({
     adapter: adapter,
     log: isDev ? ['query', 'error', 'warn'] : ['error'],
@@ -36,8 +38,8 @@ export const prisma =
 
 // Cache in dev to prevent connection exhaustion during hot reload
 if (!isProd) {
-  globalForPrisma.prisma = prisma;
-  globalForPrisma.pool = pool;
+  globalThis.__sketchflowPrisma = prisma;
+  globalThis.__sketchflowPool = pool;
 }
 
 /**

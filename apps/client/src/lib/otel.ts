@@ -14,6 +14,11 @@ export interface BrowserTelemetryTracer {
   startSpan(name: string): BrowserTelemetrySpan;
 }
 
+export interface BrowserTraceContext {
+  traceId?: string;
+  spanId?: string;
+}
+
 export function initOtel(): void {
   if (import.meta.env.DEV) {
     console.debug(
@@ -22,7 +27,7 @@ export function initOtel(): void {
   }
 }
 
-export function getTraceContext(): { traceId?: string; spanId?: string } {
+export function getTraceContext(): BrowserTraceContext {
   return {};
 }
 

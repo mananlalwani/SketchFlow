@@ -11,6 +11,8 @@ interface ClientEnv {
   RELEASE_ID: string;
   SENTRY_DSN: string;
   SENTRY_ENVIRONMENT: string;
+  SERVER_PORT: string;
+  SOCKET_URL: string;
 }
 
 function getClientEnv(): ClientEnv {
@@ -37,6 +39,8 @@ function getClientEnv(): ClientEnv {
     SENTRY_DSN: import.meta.env.VITE_SENTRY_DSN || '',
     SENTRY_ENVIRONMENT:
       import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || 'development',
+    SERVER_PORT: import.meta.env.VITE_SERVER_PORT || '3000',
+    SOCKET_URL: import.meta.env.VITE_SOCKET_BASE_URL || '',
   };
 }
 

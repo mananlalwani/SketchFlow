@@ -27,7 +27,7 @@ const eagerDeferredChunk = [...visited].find((file) =>
 );
 const precache = readFileSync(join(dist, 'sw.js'), 'utf8');
 const precacheFiles = new Set(
-  [...precache.matchAll(/url:"([^"?]+)(?:\?[^\"]*)?"/g)].map((match) => match[1]),
+  [...precache.matchAll(/url:"([^"?]+)(?:\?[^"]*)?"/g)].map((match) => match[1]),
 );
 const precacheBytes = [...precacheFiles].reduce((total, file) => {
   const path = join(dist, file);

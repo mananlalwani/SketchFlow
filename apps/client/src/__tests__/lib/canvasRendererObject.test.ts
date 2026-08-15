@@ -33,7 +33,7 @@ describe('drawingObjectsToRendererScene', () => {
     ]);
 
     expect(scene.strokes).toHaveLength(0);
-    expect(scene.shapes).toEqual([
+    expect(scene.drawings).toEqual([
       expect.objectContaining({
         id: 'stroke-1',
         type: 'stroke',
@@ -78,7 +78,10 @@ describe('drawingObjectsToRendererScene', () => {
       },
     ]);
 
-    expect(scene.shapes.map((shape) => shape.id)).toEqual(['visually-bottom', 'visually-top']);
+    expect(scene.drawings.map((drawing) => drawing.id)).toEqual([
+      'visually-bottom',
+      'visually-top',
+    ]);
   });
 
   it('keeps fitted triangle vertices so auto-detected triangles are not redrawn as presets', () => {
@@ -101,6 +104,6 @@ describe('drawingObjectsToRendererScene', () => {
       },
     ]);
 
-    expect(scene.shapes[0]?.points).toEqual(fittedVertices);
+    expect(scene.drawings[0]?.points).toEqual(fittedVertices);
   });
 });

@@ -1,5 +1,8 @@
 import { localProjectsService } from './localProjects';
 import { NetworkError, ValidationError, parseHttpError } from './errorHandling';
+import { clientEnv } from '@/config/env';
+import type { JsonValue } from '@sketchflow/shared';
+import { z } from 'zod';
 
 export interface ProjectListItem {
   id: string;
@@ -16,7 +19,7 @@ export interface ProjectListItem {
   revision?: number;
 }
 
-export interface ProjectRecord<T = unknown> extends ProjectListItem {
+export interface ProjectRecord<T extends JsonValue = JsonValue> extends ProjectListItem {
   data: T;
 }
 
@@ -31,33 +34,51 @@ export interface FolderRecord {
   projectCount?: number;
 }
 
-type Env = {
-  env?: {
-    DEV?: boolean;
-    VITE_API_BASE_URL?: string;
-    VITE_SERVER_PORT?: string;
-    VITE_API_URL?: string;
-  };
-};
-const apiEnv = import.meta as unknown as Env;
+const projectListItemSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  title: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  shared: z.boolean().optional(),
+  shareToken: z.string().optional(),
+  folderId: z.string().nullable().optional(),
+  role: z.enum(['owner', 'editor', 'viewer']).optional(),
+  collaborators: z.array(z.object({ userId: z.string(), role: z.string() })).optional(),
+  thumbnail: z.string().optional(),
+  revision: z.number().optional(),
+});
+
+const projectRecordSchema = projectListItemSchema.extend({ data: z.json() });
+const folderRecordSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  name: z.string(),
+  color: z.string(),
+  parentId: z.string().nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  projectCount: z.number().optional(),
+});
+const collaboratorRecordSchema = z.object({
+  userId: z.string(),
+  email: z.string().optional(),
+  role: z.string(),
+  addedAt: z.number(),
+});
+const shareResultSchema = z.object({ shareToken: z.string(), shareUrl: z.string() });
+const emptyResponseSchema = z.unknown().transform(() => undefined);
 
 const resolveApiBase = () => {
-  // Prefer VITE_API_URL, then VITE_API_BASE_URL, then fallback
-  // Use optional chaining and fallback for VITE_API_URL
-  const envApiUrl = import.meta.env?.VITE_API_URL || apiEnv.env?.VITE_API_URL;
+  const envApiUrl = clientEnv.API_URL;
   if (envApiUrl) return envApiUrl.replace(/\/$/, '');
 
-  const override = apiEnv.env?.VITE_API_BASE_URL;
-  if (override) return override.replace(/\/$/, '');
-
-  const fallbackPort = apiEnv.env?.VITE_SERVER_PORT || '3000';
-
-  if (typeof window === 'undefined') {
-    return `http://localhost:${fallbackPort}`;
+  if (globalThis.window === undefined) {
+    return `http://localhost:${clientEnv.SERVER_PORT}`;
   }
 
   const currentOrigin = window.location.origin.replace(/\/$/, '');
-  const desiredPort = apiEnv.env?.VITE_SERVER_PORT;
+  const desiredPort = clientEnv.SERVER_PORT;
 
   if (desiredPort && desiredPort !== window.location.port) {
     return `${window.location.protocol}//${window.location.hostname}:${desiredPort}`;
@@ -76,7 +97,12 @@ async function getAuthHeadersWithToken(token: string | null): Promise<HeadersIni
   return headers;
 }
 
-async function http<T>(path: string, init?: RequestInit, token?: string | null): Promise<T> {
+async function http<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+  token?: string | null,
+): Promise<T> {
   try {
     const headers = await getAuthHeadersWithToken(token || null);
     const res = await fetch(API_BASE + path, {
@@ -89,7 +115,7 @@ async function http<T>(path: string, init?: RequestInit, token?: string | null):
       throw await parseHttpError(res);
     }
 
-    return res.json() as Promise<T>;
+    return schema.parse(await res.json());
   } catch (error) {
     // Re-throw NetworkError as-is
     if (error instanceof NetworkError) {
@@ -107,16 +133,17 @@ async function http<T>(path: string, init?: RequestInit, token?: string | null):
 
 async function httpWithRetry<T>(
   path: string,
+  schema: z.ZodType<T>,
   init: RequestInit | undefined,
   token?: string | null,
   attempts = 3,
 ): Promise<T> {
-  let lastError: unknown = null;
+  let lastError = new Error('Request failed');
   for (let i = 0; i < attempts; i++) {
     try {
-      return await http<T>(path, init, token);
+      return await http(path, schema, init, token);
     } catch (e) {
-      lastError = e;
+      lastError = e instanceof Error ? e : new Error(String(e));
       // Client errors (including validation and revision conflicts) are deterministic.
       // Retrying them only delays conflict recovery and can repeat a stale write.
       if (e instanceof NetworkError && e.statusCode !== undefined && e.statusCode < 500) break;
@@ -125,7 +152,7 @@ async function httpWithRetry<T>(
       await new Promise((r) => setTimeout(r, delay));
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('Request failed');
+  throw lastError;
 }
 
 // Helper to get token from Clerk context
@@ -140,31 +167,29 @@ export async function listProjects(token?: string | null): Promise<ProjectListIt
   if (!token) {
     return localProjectsService.list();
   }
-  return httpWithRetry<ProjectListItem[]>('/api/projects', undefined, token);
+  return httpWithRetry('/api/projects', z.array(projectListItemSchema), undefined, token);
 }
 
-export async function getProject<T = unknown>(
-  id: string,
-  token?: string | null,
-): Promise<ProjectRecord<T>> {
+export async function getProject(id: string, token?: string | null): Promise<ProjectRecord> {
   if (!token) {
     const project = await localProjectsService.get(id);
     if (!project) throw new Error('Project not found');
-    return project as ProjectRecord<T>;
+    return project;
   }
-  return httpWithRetry<ProjectRecord<T>>(`/api/projects/${id}`, undefined, token);
+  return httpWithRetry(`/api/projects/${id}`, projectRecordSchema, undefined, token);
 }
 
-export async function createProjectOnce<T = unknown>(
+export async function createProjectOnce(
   title: string,
-  data: T,
+  data: JsonValue,
   token?: string | null,
-): Promise<ProjectRecord<T>> {
+): Promise<ProjectRecord> {
   if (!token) {
-    return localProjectsService.create(title, data) as Promise<ProjectRecord<T>>;
+    return localProjectsService.create(title, data);
   }
-  return http<ProjectRecord<T>>(
+  return http(
     '/api/projects',
+    projectRecordSchema,
     {
       method: 'POST',
       body: JSON.stringify({ title, data }),
@@ -173,20 +198,21 @@ export async function createProjectOnce<T = unknown>(
   );
 }
 
-export async function createProject<T = unknown>(
+export async function createProject(
   title: string,
-  data: T,
+  data: JsonValue,
   token?: string | null,
   _thumbnail?: string | null,
   _expectedRevision?: number,
-): Promise<ProjectRecord<T>> {
+): Promise<ProjectRecord> {
   void _thumbnail;
   void _expectedRevision;
   if (!token) {
-    return localProjectsService.create(title, data) as Promise<ProjectRecord<T>>;
+    return localProjectsService.create(title, data);
   }
-  return httpWithRetry<ProjectRecord<T>>(
+  return httpWithRetry(
     '/api/projects',
+    projectRecordSchema,
     {
       method: 'POST',
       body: JSON.stringify({ title, data }),
@@ -195,23 +221,24 @@ export async function createProject<T = unknown>(
   );
 }
 
-export async function updateProjectOnce<T = unknown>(
+export async function updateProjectOnce(
   id: string,
   title: string,
-  data: T,
+  data: JsonValue,
   token?: string | null,
   expectedRevision?: number,
-): Promise<ProjectRecord<T>> {
+): Promise<ProjectRecord> {
   if (!token) {
-    return localProjectsService.save(id, title, data) as Promise<ProjectRecord<T>>;
+    return localProjectsService.save(id, title, data);
   }
   if (expectedRevision === undefined) {
     throw new ValidationError(
       'A project revision is required to save cloud work. Reload the project and try again.',
     );
   }
-  return http<ProjectRecord<T>>(
+  return http(
     `/api/projects/${id}`,
+    projectRecordSchema,
     {
       method: 'PUT',
       body: JSON.stringify({ title, data, expectedRevision }),
@@ -220,24 +247,25 @@ export async function updateProjectOnce<T = unknown>(
   );
 }
 
-export async function updateProject<T = unknown>(
+export async function updateProject(
   id: string,
   title: string,
-  data: T,
+  data: JsonValue,
   token?: string | null,
   _thumbnail?: string | null,
   expectedRevision?: number,
-): Promise<ProjectRecord<T>> {
+): Promise<ProjectRecord> {
   if (!token) {
-    return localProjectsService.save(id, title, data) as Promise<ProjectRecord<T>>;
+    return localProjectsService.save(id, title, data);
   }
   if (expectedRevision === undefined) {
     throw new ValidationError(
       'A project revision is required to save cloud work. Reload the project and try again.',
     );
   }
-  return httpWithRetry<ProjectRecord<T>>(
+  return httpWithRetry(
     `/api/projects/${id}`,
+    projectRecordSchema,
     {
       method: 'PUT',
       body: JSON.stringify({ title, data, expectedRevision }),
@@ -251,8 +279,9 @@ export async function deleteProject(id: string, token?: string | null): Promise<
     await localProjectsService.delete(id);
     return;
   }
-  return httpWithRetry<void>(
+  return httpWithRetry(
     `/api/projects/${id}`,
+    emptyResponseSchema,
     {
       method: 'DELETE',
     },
@@ -267,8 +296,9 @@ export async function shareProject(
   if (!token) {
     throw new Error('Sharing is not available in guest mode. Please sign in to share projects.');
   }
-  return httpWithRetry<{ shareToken: string; shareUrl: string }>(
+  return httpWithRetry(
     `/api/projects/${id}/share`,
+    shareResultSchema,
     {
       method: 'POST',
     },
@@ -280,8 +310,9 @@ export async function unshareProject(id: string, token?: string | null): Promise
   if (!token) {
     throw new Error('Sharing is not available in guest mode. Please sign in to share projects.');
   }
-  return httpWithRetry<void>(
+  return httpWithRetry(
     `/api/projects/${id}/unshare`,
+    emptyResponseSchema,
     {
       method: 'POST',
     },
@@ -289,14 +320,14 @@ export async function unshareProject(id: string, token?: string | null): Promise
   );
 }
 
-export async function getSharedProject<T = unknown>(shareToken: string): Promise<ProjectRecord<T>> {
+export async function getSharedProject(shareToken: string): Promise<ProjectRecord> {
   // This endpoint doesn't require authentication
   const res = await fetch(API_BASE + `/api/projects/shared/${shareToken}`, {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<ProjectRecord<T>>;
+  return projectRecordSchema.parse(await res.json());
 }
 
 export interface CollaboratorRecord {
@@ -313,8 +344,9 @@ export async function getCollaborators(
   if (!token) {
     throw new Error('Collaboration is not available in guest mode. Please sign in to collaborate.');
   }
-  return httpWithRetry<CollaboratorRecord[]>(
+  return httpWithRetry(
     `/api/projects/${projectId}/collaborators`,
+    z.array(collaboratorRecordSchema),
     undefined,
     token,
   );
@@ -329,8 +361,9 @@ export async function addCollaboratorByEmail(
   if (!token) {
     throw new Error('Collaboration is not available in guest mode. Please sign in to collaborate.');
   }
-  return httpWithRetry<void>(
+  return httpWithRetry(
     `/api/projects/${projectId}/collaborators`,
+    emptyResponseSchema,
     {
       method: 'POST',
       body: JSON.stringify({ email, role }),
@@ -347,8 +380,9 @@ export async function removeCollaborator(
   if (!token) {
     throw new Error('Collaboration is not available in guest mode. Please sign in to collaborate.');
   }
-  return httpWithRetry<void>(
+  return httpWithRetry(
     `/api/projects/${projectId}/collaborators/${collaboratorUserId}`,
+    emptyResponseSchema,
     {
       method: 'DELETE',
     },
@@ -362,7 +396,7 @@ export async function listFolders(token?: string | null): Promise<FolderRecord[]
     // Guests don't have folders
     return [];
   }
-  return httpWithRetry<FolderRecord[]>('/api/folders', undefined, token);
+  return httpWithRetry('/api/folders', z.array(folderRecordSchema), undefined, token);
 }
 
 export async function createFolder(
@@ -376,8 +410,9 @@ export async function createFolder(
       'Folders are not available in guest mode. Please sign in to organize projects.',
     );
   }
-  return httpWithRetry<FolderRecord>(
+  return httpWithRetry(
     '/api/folders',
+    folderRecordSchema,
     {
       method: 'POST',
       body: JSON.stringify({ name, color, parentId }),
@@ -398,8 +433,9 @@ export async function updateFolder(
       'Folders are not available in guest mode. Please sign in to organize projects.',
     );
   }
-  return httpWithRetry<FolderRecord>(
+  return httpWithRetry(
     `/api/folders/${id}`,
+    folderRecordSchema,
     {
       method: 'PUT',
       body: JSON.stringify({ name, color, parentId }),
@@ -414,8 +450,9 @@ export async function deleteFolder(id: string, token?: string | null): Promise<v
       'Folders are not available in guest mode. Please sign in to organize projects.',
     );
   }
-  return httpWithRetry<void>(
+  return httpWithRetry(
     `/api/folders/${id}`,
+    emptyResponseSchema,
     {
       method: 'DELETE',
     },
@@ -433,8 +470,9 @@ export async function moveProjectToFolder(
       'Folders are not available in guest mode. Please sign in to organize projects.',
     );
   }
-  return httpWithRetry<void>(
+  return httpWithRetry(
     `/api/projects/${projectId}/move`,
+    emptyResponseSchema,
     {
       method: 'POST',
       body: JSON.stringify({ folderId }),

@@ -11,6 +11,21 @@ const sentryUploadEnabled = Boolean(
     process.env.VITE_RELEASE_ID,
 );
 
+const aliases = {
+  '@': path.resolve(__dirname, './src'),
+  '@/components': path.resolve(__dirname, './src/components'),
+  '@/lib': path.resolve(__dirname, './src/lib'),
+  '@/hooks': path.resolve(__dirname, './src/hooks'),
+  '@/store': path.resolve(__dirname, './src/store'),
+  '@/types': path.resolve(__dirname, './src/types'),
+};
+
+if (process.env.VITE_E2E === 'true') {
+  Object.assign(aliases, {
+    '@clerk/clerk-react': path.resolve(__dirname, './src/test/clerkE2E.tsx'),
+  });
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -79,19 +94,7 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      ...(process.env.VITE_E2E === 'true'
-        ? {
-            '@clerk/clerk-react': path.resolve(__dirname, './src/test/clerkE2E.tsx'),
-          }
-        : {}),
-      '@': path.resolve(__dirname, './src'),
-      '@/components': path.resolve(__dirname, './src/components'),
-      '@/lib': path.resolve(__dirname, './src/lib'),
-      '@/hooks': path.resolve(__dirname, './src/hooks'),
-      '@/store': path.resolve(__dirname, './src/store'),
-      '@/types': path.resolve(__dirname, './src/types'),
-    },
+    alias: aliases,
   },
   server: {
     port: 5173,

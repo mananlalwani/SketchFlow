@@ -5,29 +5,39 @@ const MAX_OBJECTS = 10_000;
 const MAX_DEPTH = 20;
 const MAX_TEXT_CHARS = 100_000;
 const MAX_IMAGE_DATA_CHARS = 7 * 1024 * 1024;
+const jsonValueSchema = z.json();
+const projectObjectsSchema = z
+  .object({ objects: z.array(z.unknown()).max(MAX_OBJECTS).optional() })
+  .loose();
 
-function hasSafeDepthAndFields(value: unknown, depth = 0): boolean {
+function hasSafeDepthAndFields(value: z.output<typeof jsonValueSchema>, depth = 0): boolean {
   if (depth > MAX_DEPTH) return false;
-  if (typeof value !== 'object' || value === null) return true;
+  if (!(value instanceof Object)) return true;
   if (Array.isArray(value)) return value.every((item) => hasSafeDepthAndFields(item, depth + 1));
   for (const [key, child] of Object.entries(value)) {
-    if (key === 'text' && typeof child === 'string' && child.length > MAX_TEXT_CHARS) return false;
-    if (key === 'imageData' && typeof child === 'string' && child.length > MAX_IMAGE_DATA_CHARS)
+    const childText = z.string().safeParse(child);
+    if (key === 'text' && childText.success && childText.data.length > MAX_TEXT_CHARS) return false;
+    if (key === 'imageData' && childText.success && childText.data.length > MAX_IMAGE_DATA_CHARS) {
       return false;
+    }
     if (!hasSafeDepthAndFields(child, depth + 1)) return false;
   }
   return true;
 }
 
-export function isBoundedProjectData(value: unknown): boolean {
+export function isBoundedProjectData(value: z.input<typeof jsonValueSchema>): boolean {
   try {
     const encoded = JSON.stringify(value);
     if (!encoded || Buffer.byteLength(encoded, 'utf8') > MAX_PROJECT_BYTES) return false;
-    if (typeof value === 'object' && value !== null && 'objects' in value) {
-      const objects = (value as { objects?: unknown }).objects;
-      if (Array.isArray(objects) && objects.length > MAX_OBJECTS) return false;
+    const projectObjects = projectObjectsSchema.safeParse(value);
+    if (
+      !projectObjects.success &&
+      projectObjects.error.issues.some((issue) => issue.path[0] === 'objects')
+    ) {
+      return false;
     }
-    return hasSafeDepthAndFields(value);
+    const jsonValue = jsonValueSchema.safeParse(value);
+    return jsonValue.success && hasSafeDepthAndFields(jsonValue.data);
   } catch {
     return false;
   }
@@ -36,7 +46,7 @@ export function isBoundedProjectData(value: unknown): boolean {
 export const projectInputSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
-    data: z.unknown().refine(isBoundedProjectData, 'Project data exceeds safety limits'),
+    data: jsonValueSchema.refine(isBoundedProjectData, 'Project data exceeds safety limits'),
     expectedRevision: z.number().int().positive().optional(),
   })
   .strict();
@@ -52,7 +62,7 @@ export const collaborationCommitSchema = z
       .regex(/^[A-Za-z0-9_-]+$/),
     expectedRevision: z.number().int().positive(),
     kind: z.enum(['replace-project', 'upsert-object', 'delete-object', 'batch']),
-    data: z.unknown().refine(isBoundedProjectData, 'Project data exceeds safety limits'),
+    data: jsonValueSchema.refine(isBoundedProjectData, 'Project data exceeds safety limits'),
   })
   .strict();
 

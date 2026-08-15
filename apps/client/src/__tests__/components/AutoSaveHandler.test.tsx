@@ -1,7 +1,11 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AutoSaveHandler, type AutoSaveRuntime } from '@/components/AutoSaveHandler';
+import type { DrawingObject } from '@/store/drawingStore';
 
-const mocks = vi.hoisted(() => ({
+const emptyObjects: DrawingObject[] = [];
+
+const mocks = {
   updateProject: vi.fn(),
   enqueueProjectWrite: vi.fn(),
   resumeProjectWrites: vi.fn(),
@@ -19,57 +23,53 @@ const mocks = vi.hoisted(() => ({
     projectRevision: 2,
     projectRole: 'owner' as const,
     documentVersion: 1,
-    objects: [] as unknown[],
+    objects: emptyObjects,
     projectTitle: 'Board',
   },
-}));
+};
 
-vi.mock('@clerk/clerk-react', () => ({
-  useAuth: () => ({ userId: 'user-1', getToken: vi.fn(async () => 'token') }),
-}));
-vi.mock('@/store/authStore', () => ({ useAuthStore: () => ({ isGuest: false }) }));
-vi.mock('@/store/drawingStore', () => {
-  const useDrawingStore = () => ({
-    ...mocks.drawingState,
-    markSaved: mocks.markSaved,
-    setProjectRevision: mocks.setProjectRevision,
-    setSaveStatus: mocks.setSaveStatus,
-  });
-  useDrawingStore.getState = () => ({
-    ...mocks.drawingState,
-    markSaved: mocks.markSaved,
-    setProjectRevision: mocks.setProjectRevision,
-    setSaveStatus: mocks.setSaveStatus,
-  });
-  return { useDrawingStore };
-});
-vi.mock('@/lib/api', () => ({ updateProject: mocks.enqueueProjectWrite }));
-vi.mock('@/lib/projectWriteCoordinator', () => ({
-  activeProjectWriteCoordinator: {
-    enqueue: mocks.enqueueProjectWrite,
-    resume: mocks.resumeProjectWrites,
-  },
-  ProjectWriteResetError: class ProjectWriteResetError extends Error {},
-}));
-vi.mock('@/lib/offlineQueue', () => ({
-  enqueueOfflineSave: vi.fn(),
-  getOfflineSaveQueue: mocks.getOfflineSaveQueue,
-  removeOfflineSave: mocks.removeOfflineSave,
-  markOfflineSaveAttempt: mocks.markOfflineSaveAttempt,
-}));
-vi.mock('@/lib/emergencyBackup', () => ({
-  getEmergencyBackup: vi.fn(),
-  removeEmergencyBackup: mocks.removeEmergencyBackup,
-  saveEmergencyBackup: mocks.saveEmergencyBackup,
-}));
-vi.mock('@/lib/thumbnailGenerator', () => ({ generateThumbnail: vi.fn() }));
-vi.mock('@/lib/utils', () => ({
-  serializeProject: vi.fn(() => ({ objects: [] })),
-  deserializeProject: vi.fn(),
-}));
-vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
+function createRuntime(): AutoSaveRuntime {
+  const useDrawingStore = Object.assign(
+    () => ({
+      ...mocks.drawingState,
+      markSaved: mocks.markSaved,
+      requestFullRedraw: vi.fn(),
+      setObjects: vi.fn(),
+      setProjectRevision: mocks.setProjectRevision,
+      setSaveStatus: mocks.setSaveStatus,
+    }),
+    {
+      getState: () => ({
+        ...mocks.drawingState,
+        markSaved: mocks.markSaved,
+        requestFullRedraw: vi.fn(),
+        setObjects: vi.fn(),
+        setProjectRevision: mocks.setProjectRevision,
+        setSaveStatus: mocks.setSaveStatus,
+      }),
+    },
+  );
 
-import { AutoSaveHandler } from '@/components/AutoSaveHandler';
+  return {
+    useDrawingStore,
+    useAuth: () => ({ userId: 'user-1', getToken: vi.fn(async () => 'token') }),
+    useAuthStore: () => ({ isGuest: false }),
+    writeCoordinator: { enqueue: mocks.enqueueProjectWrite, resume: mocks.resumeProjectWrites },
+    ProjectWriteResetError: class ProjectWriteResetError extends Error {},
+    serializeProject: () => '{"objects":[]}',
+    deserializeProject: () => [],
+    getEmergencyBackup: vi.fn(),
+    removeEmergencyBackup: mocks.removeEmergencyBackup,
+    saveEmergencyBackup: mocks.saveEmergencyBackup,
+    enqueueOfflineSave: vi.fn(),
+    getOfflineSaveQueue: mocks.getOfflineSaveQueue,
+    removeOfflineSave: mocks.removeOfflineSave,
+    markOfflineSaveAttempt: mocks.markOfflineSaveAttempt,
+    useToast: () => ({ toast: vi.fn() }),
+  };
+}
+
+const runtime = createRuntime();
 
 describe('AutoSaveHandler offline replay', () => {
   beforeEach(() => {
@@ -80,7 +80,7 @@ describe('AutoSaveHandler offline replay', () => {
       projectRevision: 2,
       projectRole: 'owner',
       documentVersion: 1,
-      objects: [] as unknown[],
+      objects: emptyObjects,
       projectTitle: 'Board',
     });
     mocks.getOfflineSaveQueue.mockResolvedValue([
@@ -103,8 +103,9 @@ describe('AutoSaveHandler offline replay', () => {
   });
 
   it('replays queued saves in revision order when the browser reconnects', async () => {
-    render(<AutoSaveHandler />);
+    render(<AutoSaveHandler runtime={runtime} />);
     act(() => window.dispatchEvent(new Event('online')));
+    await waitFor(() => expect(mocks.getOfflineSaveQueue).toHaveBeenCalled());
     await waitFor(() =>
       expect(mocks.enqueueProjectWrite).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -129,7 +130,7 @@ describe('AutoSaveHandler offline replay', () => {
       documentVersion: 4,
     });
 
-    render(<AutoSaveHandler />);
+    render(<AutoSaveHandler runtime={runtime} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
@@ -142,7 +143,7 @@ describe('AutoSaveHandler offline replay', () => {
     vi.useFakeTimers();
     Object.assign(mocks.drawingState, { unsavedChanges: true, documentVersion: 4 });
 
-    render(<AutoSaveHandler />);
+    render(<AutoSaveHandler runtime={runtime} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
@@ -151,7 +152,7 @@ describe('AutoSaveHandler offline replay', () => {
     expect(mocks.markSaved).toHaveBeenCalledWith(4);
     expect(mocks.removeEmergencyBackup).toHaveBeenCalledWith('project-1', {
       title: 'Board',
-      data: { objects: [] },
+      data: '{"objects":[]}',
     });
   });
 
@@ -160,7 +161,7 @@ describe('AutoSaveHandler offline replay', () => {
     Object.assign(mocks.drawingState, {
       unsavedChanges: true,
       documentVersion: 4,
-      objects: [{ id: 'saved-object' }],
+      objects: emptyObjects,
     });
     let resolveSave: (value: { revision: number }) => void;
     mocks.enqueueProjectWrite.mockImplementation(
@@ -170,7 +171,7 @@ describe('AutoSaveHandler offline replay', () => {
         }),
     );
 
-    render(<AutoSaveHandler />);
+    render(<AutoSaveHandler runtime={runtime} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
@@ -197,7 +198,7 @@ describe('AutoSaveHandler offline replay', () => {
         }),
     );
 
-    render(<AutoSaveHandler />);
+    render(<AutoSaveHandler runtime={runtime} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });

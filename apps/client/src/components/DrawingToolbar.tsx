@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
+import { z } from 'zod';
 import { useDrawingStore, type Tool } from '@/store/drawingStore';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
@@ -15,6 +16,7 @@ import {
   Palette,
   Hand,
   MousePointer2,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -34,6 +36,14 @@ import {
 } from '@/lib/api';
 import { announceToScreenReader } from '@/hooks/useAccessibility';
 import { FEATURES } from '@/config/features';
+
+type ToolOption = {
+  id: Tool;
+  icon: LucideIcon;
+  label: string;
+  shortcut: string;
+  ariaLabel: string;
+};
 
 const tools = [
   { id: 'hand', icon: Hand, label: 'Hand', shortcut: 'H', ariaLabel: 'Pan tool (H)' },
@@ -64,7 +74,15 @@ const tools = [
   },
   { id: 'star', icon: Star, label: 'Star', shortcut: 'S', ariaLabel: 'Star tool (S)' },
   { id: 'text', icon: Type, label: 'Text', shortcut: 'X', ariaLabel: 'Text tool (X)' },
-] as const;
+] as const satisfies readonly ToolOption[];
+
+const offlineProjectSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  data: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
 
 import { useProjectPermissions } from '@/hooks/useProjectPermissions';
 
@@ -75,10 +93,10 @@ export function DrawingToolbar() {
     brushSize,
     textFontSize,
     brushOpacity,
-    shapeFilled,
+    drawingFilled,
     triangleMode,
-    autoShape,
-    autoShapeThresholds,
+    autoDrawing,
+    autoDrawingThresholds,
     projectTitle,
     unsavedChanges,
     eraserMode,
@@ -89,10 +107,10 @@ export function DrawingToolbar() {
     setBrushSize,
     setTextFontSize,
     setBrushOpacity,
-    setShapeFilled,
+    setDrawingFilled,
     setTriangleMode,
-    setAutoShape,
-    setAutoShapeThresholds,
+    setAutoDrawing,
+    setAutoDrawingThresholds,
 
     clearCanvas,
     toggleToolbar,
@@ -102,16 +120,16 @@ export function DrawingToolbar() {
   } = useDrawingStore();
 
   const safeT = {
-    closureFactor: autoShapeThresholds?.closureFactor ?? 0.3,
-    rectCornerMin: autoShapeThresholds?.rectCornerMin ?? 2,
-    rectStraightRatio: autoShapeThresholds?.rectStraightRatio ?? 0.55,
-    ellipseError: autoShapeThresholds?.ellipseError ?? 0.5,
-    parabolaError: autoShapeThresholds?.parabolaError ?? 0.4,
-    lineError: autoShapeThresholds?.lineError ?? 0.25,
-    winnerMargin: autoShapeThresholds?.winnerMargin ?? 0.1,
-    minSizePx: autoShapeThresholds?.minSizePx ?? 10,
-    resampleStep: autoShapeThresholds?.resampleStep ?? 2,
-    minParabolaCurvature: autoShapeThresholds?.minParabolaCurvature ?? 1.4,
+    closureFactor: autoDrawingThresholds?.closureFactor ?? 0.3,
+    rectCornerMin: autoDrawingThresholds?.rectCornerMin ?? 2,
+    rectStraightRatio: autoDrawingThresholds?.rectStraightRatio ?? 0.55,
+    ellipseError: autoDrawingThresholds?.ellipseError ?? 0.5,
+    parabolaError: autoDrawingThresholds?.parabolaError ?? 0.4,
+    lineError: autoDrawingThresholds?.lineError ?? 0.25,
+    winnerMargin: autoDrawingThresholds?.winnerMargin ?? 0.1,
+    minSizePx: autoDrawingThresholds?.minSizePx ?? 10,
+    resampleStep: autoDrawingThresholds?.resampleStep ?? 2,
+    minParabolaCurvature: autoDrawingThresholds?.minParabolaCurvature ?? 1.4,
   } as const;
 
   const { toast } = useToast();
@@ -185,7 +203,7 @@ export function DrawingToolbar() {
     const id = prompt('Enter Project ID');
     if (!id) return;
     try {
-      const record = await getProject<ReturnType<typeof serializeProject>>(id);
+      const record = await getProject(id);
       const objects = deserializeProject(record.data);
       const { setObjects, replaceHistory, requestFullRedraw } = useDrawingStore.getState();
       setObjects(objects);
@@ -197,9 +215,7 @@ export function DrawingToolbar() {
       toast({ title: 'Project loaded', description: 'Loaded from server.' });
     } catch {
       console.warn('Server load failed, trying offline cache');
-      const cached = await loadEncryptedOffline<
-        import('@/lib/api').ProjectRecord<ReturnType<typeof serializeProject>>
-      >(`project:${id}`);
+      const cached = await loadEncryptedOffline(`project:${id}`, offlineProjectSchema);
       if (cached && cached.data) {
         const objects = deserializeProject(cached.data);
         const { setObjects, replaceHistory, requestFullRedraw } = useDrawingStore.getState();
@@ -246,7 +262,7 @@ export function DrawingToolbar() {
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement).contentEditable === 'true'
+        (e.target instanceof HTMLElement && e.target.contentEditable === 'true')
       ) {
         return;
       }
@@ -257,20 +273,39 @@ export function DrawingToolbar() {
       }
 
       const key = e.key.toLowerCase();
-      const toolMap: Record<string, Tool> = {
-        h: 'hand',
-        v: 'select',
-        p: 'pen',
-        e: 'eraser',
-        l: 'line',
-        r: 'rectangle',
-        o: 'ellipse',
-        t: 'triangle',
-        s: 'star',
-        x: 'text',
-      };
-
-      const tool = toolMap[key];
+      let tool: Tool | undefined;
+      switch (key) {
+        case 'h':
+          tool = 'hand';
+          break;
+        case 'v':
+          tool = 'select';
+          break;
+        case 'p':
+          tool = 'pen';
+          break;
+        case 'e':
+          tool = 'eraser';
+          break;
+        case 'l':
+          tool = 'line';
+          break;
+        case 'r':
+          tool = 'rectangle';
+          break;
+        case 'o':
+          tool = 'ellipse';
+          break;
+        case 't':
+          tool = 'triangle';
+          break;
+        case 's':
+          tool = 'star';
+          break;
+        case 'x':
+          tool = 'text';
+          break;
+      }
       if (tool && canDraw) {
         e.preventDefault();
         setTool(tool);
@@ -299,8 +334,8 @@ export function DrawingToolbar() {
     const menuRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
       const onDocClick = (e: MouseEvent) => {
-        if (!menuRef.current) return;
-        if (!menuRef.current.contains(e.target as Node)) setOpen(false);
+        if (!menuRef.current || !(e.target instanceof Node)) return;
+        if (!menuRef.current.contains(e.target)) setOpen(false);
       };
       const onKey = (e: KeyboardEvent) => {
         if (e.key === 'Escape') setOpen(false);
@@ -464,7 +499,7 @@ export function DrawingToolbar() {
                       )
                         return;
                       if (item.source === 'server') {
-                        const rec = await getProject<ReturnType<typeof serializeProject>>(item.id);
+                        const rec = await getProject(item.id);
                         const objects = deserializeProject(rec.data);
                         const { setObjects, replaceHistory, requestFullRedraw } =
                           useDrawingStore.getState();
@@ -476,9 +511,10 @@ export function DrawingToolbar() {
                         markSaved();
                         toast({ title: 'Project loaded', description: 'Loaded from server.' });
                       } else {
-                        const cached = await loadEncryptedOffline<
-                          import('@/lib/api').ProjectRecord<ReturnType<typeof serializeProject>>
-                        >(`project:${item.id}`);
+                        const cached = await loadEncryptedOffline(
+                          `project:${item.id}`,
+                          offlineProjectSchema,
+                        );
                         if (cached && cached.data) {
                           const objects = deserializeProject(cached.data);
                           const { setObjects, replaceHistory, requestFullRedraw } =
@@ -557,7 +593,7 @@ export function DrawingToolbar() {
             <Button
               key={id}
               onClick={() => {
-                setTool(id as Tool);
+                setTool(id);
                 announceToScreenReader(`${label} tool selected`);
               }}
               variant={currentTool === id ? 'default' : 'ghost'}
@@ -730,17 +766,17 @@ export function DrawingToolbar() {
             Fill:
           </label>
           <Button
-            onClick={() => setShapeFilled(!shapeFilled)}
-            variant={shapeFilled ? 'default' : 'ghost'}
+            onClick={() => setDrawingFilled(!drawingFilled)}
+            variant={drawingFilled ? 'default' : 'ghost'}
             size="sm"
-            title={shapeFilled ? 'Filled shapes' : 'Outlined shapes'}
+            title={drawingFilled ? 'Filled shapes' : 'Outlined shapes'}
           >
-            {shapeFilled ? 'On' : 'Off'}
+            {drawingFilled ? 'On' : 'Off'}
           </Button>
         </div>
 
         {/* Auto Shape toggle + settings - Hidden when feature is disabled */}
-        {FEATURES.AUTO_SHAPE && (
+        {FEATURES.AUTO_DRAWING && (
           <div className="flex items-center gap-2">
             <label className="flex min-w-[36px] items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-gray-300">
               Auto Shape
@@ -749,12 +785,12 @@ export function DrawingToolbar() {
               </span>
             </label>
             <Button
-              onClick={() => setAutoShape(!autoShape)}
-              variant={autoShape ? 'default' : 'ghost'}
+              onClick={() => setAutoDrawing(!autoDrawing)}
+              variant={autoDrawing ? 'default' : 'ghost'}
               size="sm"
-              title={autoShape ? 'Auto-convert closed pen loops' : 'Draw normal strokes'}
+              title={autoDrawing ? 'Auto-convert closed pen loops' : 'Draw normal strokes'}
             >
-              {autoShape ? 'On' : 'Off'}
+              {autoDrawing ? 'On' : 'Off'}
             </Button>
             <details className="ml-1">
               <summary className="cursor-pointer text-xs text-slate-500 dark:text-gray-400">
@@ -766,7 +802,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[Math.round(safeT.closureFactor * 100)]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ closureFactor: v / 100 })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ closureFactor: v / 100 })}
                   min={5}
                   max={60}
                   step={1}
@@ -777,7 +813,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[Math.round(safeT.rectStraightRatio * 100)]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ rectStraightRatio: v / 100 })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ rectStraightRatio: v / 100 })}
                   min={30}
                   max={90}
                   step={1}
@@ -788,7 +824,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[safeT.rectCornerMin]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ rectCornerMin: v })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ rectCornerMin: v })}
                   min={1}
                   max={4}
                   step={1}
@@ -799,7 +835,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[Math.round(safeT.ellipseError * 100)]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ ellipseError: v / 100 })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ ellipseError: v / 100 })}
                   min={10}
                   max={90}
                   step={1}
@@ -810,7 +846,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[Math.round(safeT.parabolaError * 100)]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ parabolaError: v / 100 })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ parabolaError: v / 100 })}
                   min={10}
                   max={90}
                   step={1}
@@ -821,7 +857,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[Math.round(safeT.lineError * 100)]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ lineError: v / 100 })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ lineError: v / 100 })}
                   min={5}
                   max={60}
                   step={1}
@@ -831,7 +867,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[Math.round(safeT.winnerMargin * 100)]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ winnerMargin: v / 100 })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ winnerMargin: v / 100 })}
                   min={0}
                   max={30}
                   step={1}
@@ -842,7 +878,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[safeT.minSizePx]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ minSizePx: v })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ minSizePx: v })}
                   min={6}
                   max={40}
                   step={1}
@@ -853,7 +889,7 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[safeT.resampleStep]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ resampleStep: v })}
+                  onValueChange={([v]) => setAutoDrawingThresholds({ resampleStep: v })}
                   min={1}
                   max={8}
                   step={1}
@@ -864,7 +900,9 @@ export function DrawingToolbar() {
                 </div>
                 <Slider
                   value={[Math.round(safeT.minParabolaCurvature * 100)]}
-                  onValueChange={([v]) => setAutoShapeThresholds({ minParabolaCurvature: v / 100 })}
+                  onValueChange={([v]) =>
+                    setAutoDrawingThresholds({ minParabolaCurvature: v / 100 })
+                  }
                   min={50}
                   max={300}
                   step={5}
