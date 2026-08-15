@@ -10,12 +10,9 @@ export type CanvasToolShortcut =
   | 'triangle';
 
 export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
-  const element = target as HTMLElement | null;
   return Boolean(
-    element &&
-      (element.tagName === 'INPUT' ||
-        element.tagName === 'TEXTAREA' ||
-        (element as { isContentEditable?: boolean }).isContentEditable),
+    target instanceof HTMLElement &&
+      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable),
   );
 }
 

@@ -22,7 +22,7 @@ export function distancePointToSegment(
   return Math.hypot(pointX - (startX + progress * deltaX), pointY - (startY + progress * deltaY));
 }
 
-function inverseRotatePoint(x: number, y: number, object: DrawingObject): { x: number; y: number } {
+function inverseRotatePoint(x: number, y: number, object: DrawingObject) {
   if (
     !object.rotation ||
     object.x === undefined ||

@@ -1,15 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionRegistry } from '../../services/ConnectionRegistry.js';
 
-vi.mock('../../utils/logger.js', () => ({
-  logger: { warn: vi.fn() },
-}));
-
 describe('ConnectionRegistry', () => {
   let registry: ConnectionRegistry;
 
   beforeEach(() => {
-    registry = new ConnectionRegistry(2);
+    registry = new ConnectionRegistry(2, { warn: vi.fn() });
   });
 
   it('tracks unique active connections', () => {

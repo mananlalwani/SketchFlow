@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+type SidebarTool = Tool;
+
 const tools = [
   { id: 'hand', icon: Hand, label: 'Pan' },
   { id: 'select', icon: MousePointer2, label: 'Select (V)' },
@@ -29,17 +31,16 @@ const tools = [
   { id: 'star', icon: Star, label: 'Star' },
   { id: 'text', icon: Type, label: 'Text' },
   { id: 'image', icon: ImageIcon, label: 'Image' },
-] as const;
+] as const satisfies readonly { id: SidebarTool; icon: typeof Hand; label: string }[];
 
 export function Sidebar() {
   const { currentTool, setTool } = useDrawingStore();
 
-  const handleToolClick = (id: string) => {
+  const handleToolClick = (id: SidebarTool) => {
     if (id === 'image') {
-      const fileInput = document.getElementById('image-upload-input') as HTMLInputElement;
-      fileInput?.click();
+      document.querySelector<HTMLInputElement>('#image-upload-input')?.click();
     } else {
-      setTool(id as Tool);
+      setTool(id);
     }
   };
 

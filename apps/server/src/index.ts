@@ -1,6 +1,7 @@
 // Load environment variables in development only (gracefully skip if dotenv missing in production image)
 import fs from 'fs';
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 
 if (process.env.NODE_ENV !== 'production') {
   const dotenvPath = process.cwd() + '/node_modules/dotenv';
@@ -49,6 +50,27 @@ import {
   resourceIdSchema,
   shareTokenSchema,
 } from './validation/project.js';
+
+const socketCredentialSchema = z.string().trim().min(1);
+const sessionClaimsSchema = z.object({ exp: z.number().optional() }).nullable();
+const cursorSchema = z.object({
+  clientId: z.string().optional(),
+  userId: z.string(),
+  username: z.string(),
+  x: z.number(),
+  y: z.number(),
+  color: z.string(),
+  timestamp: z.number().optional(),
+});
+const selectionSchema = z.object({
+  clientId: z.string().optional(),
+  userId: z.string(),
+  username: z.string(),
+  objectIds: z.array(z.string().min(1).max(200)).max(100),
+  color: z.string(),
+  timestamp: z.number().optional(),
+});
+const projectConflictSchema = z.object({ currentRevision: z.number().optional() });
 import {
   requestIdMiddleware,
   requestLoggingMiddleware,
@@ -90,8 +112,8 @@ export class SketchFlowServer {
   private isShuttingDown = false;
   private clientDistPath =
     process.env.CLIENT_DIST_PATH || path.join(__dirname, '../../client/dist');
-  private redisPublisher: { quit: () => Promise<unknown> } | null = null;
-  private redisSubscriber: { quit: () => Promise<unknown> } | null = null;
+  private redisPublisher: { quit: () => Promise<string> } | null = null;
+  private redisSubscriber: { quit: () => Promise<string> } | null = null;
   private redisSetup: Promise<void> = Promise.resolve();
 
   constructor() {
@@ -432,12 +454,10 @@ export class SketchFlowServer {
                 : error instanceof Error && error.name === 'ProjectNotFoundError'
                   ? 404
                   : 500;
+          const conflict = projectConflictSchema.safeParse(error);
           res.status(status).json({
             error: message,
-            ...(error instanceof Error &&
-              error.name === 'ProjectConflictError' && {
-                currentRevision: (error as Error & { currentRevision?: number }).currentRevision,
-              }),
+            currentRevision: conflict.success ? conflict.data.currentRevision : undefined,
           });
         }
       },
@@ -738,17 +758,19 @@ export class SketchFlowServer {
       const token = socket.handshake.auth.token;
       const shareToken = socket.handshake.auth.shareToken;
 
-      if (typeof token !== 'string' || token.length === 0) {
-        if (typeof shareToken !== 'string' || !shareTokenSchema.safeParse(shareToken).success) {
+      const credential = socketCredentialSchema.safeParse(token);
+      if (!credential.success) {
+        const publicCredential = shareTokenSchema.safeParse(shareToken);
+        if (!publicCredential.success) {
           return next(new Error('Authentication required'));
         }
         try {
           // Public links are a deliberately narrow credential: they can only
           // watch the single live board that the token currently exposes.
-          const project = await this.projectService.getByShareToken(shareToken);
+          const project = await this.projectService.getByShareToken(publicCredential.data);
           if (!project) return next(new Error('Invalid share token'));
           socket.data.sharedProjectId = project.id;
-          socket.data.shareToken = shareToken;
+          socket.data.shareToken = publicCredential.data;
           return next();
         } catch {
           return next(new Error('Invalid share token'));
@@ -757,13 +779,15 @@ export class SketchFlowServer {
 
       try {
         const request = new Request('http://localhost/socket.io', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${credential.data}` },
         });
         const auth = (await clerkClient.authenticateRequest(request)).toAuth();
         if (!auth?.userId) return next(new Error('Invalid authentication token'));
         socket.data.userId = auth.userId;
-        const exp = (auth.sessionClaims as { exp?: number } | null)?.exp;
-        if (typeof exp === 'number') socket.data.sessionExpiresAt = exp * 1000;
+        const claims = sessionClaimsSchema.safeParse(auth.sessionClaims);
+        if (claims.success && claims.data?.exp !== undefined) {
+          socket.data.sessionExpiresAt = claims.data.exp * 1000;
+        }
         next();
       } catch (error) {
         logger.warn('Socket authentication failed', {
@@ -876,7 +900,7 @@ export class SketchFlowServer {
           commit: CollaborationCommit,
           acknowledge: (result: CollaborationCommitResult) => void,
         ) => {
-          if (!commit || commit.protocolVersion !== 1 || typeof acknowledge !== 'function') return;
+          if (!commit || commit.protocolVersion !== 1) return;
 
           const room = await getEditableRoom();
           if (!room || room !== commit.projectId || !currentUserId) {
@@ -910,7 +934,7 @@ export class SketchFlowServer {
             logger.error(`Canonical collaboration commit failed for ${clientId}`, error);
             acknowledge({
               status: 'unavailable',
-              operationId: typeof commit.operationId === 'string' ? commit.operationId : '',
+              operationId: commit.operationId,
             });
           }
         },
@@ -919,21 +943,18 @@ export class SketchFlowServer {
       // Handle room join
       socket.on('room:join', async (projectId: string) => {
         const joinGeneration = ++roomGeneration;
-        if (typeof projectId !== 'string' || !resourceIdSchema.safeParse(projectId).success) {
+        if (!resourceIdSchema.safeParse(projectId).success) {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
         }
         const sharedViewer =
-          socket.data.sharedProjectId === projectId && typeof socket.data.shareToken === 'string';
+          socket.data.sharedProjectId === projectId && socket.data.shareToken !== undefined;
         const canView = currentUserId
           ? await this.projectService.checkPermission(projectId, currentUserId, 'view')
           : sharedViewer
             ? (await this.projectService.getByShareToken(socket.data.shareToken!))?.id === projectId
             : false;
-        if (
-          !canView ||
-          joinGeneration !== roomGeneration
-        ) {
+        if (!canView || joinGeneration !== roomGeneration) {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
         }
@@ -1024,14 +1045,9 @@ export class SketchFlowServer {
         if (!currentRoom) return;
 
         // Validate cursor data
-        if (
-          !cursor ||
-          typeof cursor.userId !== 'string' ||
-          typeof cursor.x !== 'number' ||
-          typeof cursor.y !== 'number'
-        ) {
-          return;
-        }
+        const parsedCursor = cursorSchema.safeParse(cursor);
+        if (!parsedCursor.success) return;
+        cursor = parsedCursor.data;
 
         // The client may choose a display name, but never its identity.
         if (!currentUserId || cursor.userId !== currentUserId) return;
@@ -1065,15 +1081,9 @@ export class SketchFlowServer {
       socket.on('selection:change', (selection: SelectionPresence) => {
         if (!currentRoom || !currentUserId || !selection || selection.userId !== currentUserId)
           return;
-        if (
-          !Array.isArray(selection.objectIds) ||
-          selection.objectIds.length > 100 ||
-          selection.objectIds.some(
-            (id) => typeof id !== 'string' || id.length === 0 || id.length > 200,
-          )
-        ) {
-          return;
-        }
+        const parsedSelection = selectionSchema.safeParse(selection);
+        if (!parsedSelection.success) return;
+        selection = parsedSelection.data;
         const selections = roomSelections.get(currentRoom);
         if (!selections) return;
         if (selection.objectIds.length === 0) {
@@ -1084,8 +1094,7 @@ export class SketchFlowServer {
         const normalizedSelection: SelectionPresence = {
           clientId,
           userId: currentUserId,
-          username:
-            typeof selection.username === 'string' ? selection.username.slice(0, 100) : 'Guest',
+          username: selection.username.slice(0, 100),
           objectIds: [...new Set(selection.objectIds)],
           color: getUserColor(currentUserId),
           timestamp: Date.now(),

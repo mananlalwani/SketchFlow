@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { trackToolSelection, trackObjectCreated, trackFeatureUsage } from '../lib/analytics';
 import { FEATURES } from '../config/features';
-import type { StrokePoint } from '@sketchflow/shared';
+import type { DrawingObject } from '../lib/drawingObjectSchema';
+
+export type { DrawingObject } from '../lib/drawingObjectSchema';
 
 export type Tool =
   | 'pen'
@@ -32,50 +34,7 @@ export interface StrokeData {
   timestamp?: number;
 }
 
-export interface DrawingObject {
-  id: string;
-  type:
-    | 'stroke'
-    | 'line'
-    | 'rectangle'
-    | 'ellipse'
-    | 'circle'
-    | 'triangle'
-    | 'parabola'
-    | 'text'
-    | 'image'
-    | 'arrow'
-    | 'star';
-  points?: StrokePoint[];
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  color: string;
-  size: number;
-  alpha?: number;
-  text?: string;
-  fontSize?: number;
-  /** Clockwise object rotation in degrees around its visual center. */
-  rotation?: number;
-  hidden?: boolean;
-  locked?: boolean;
-  name?: string;
-  groupId?: string;
-  /** Persistent stacking order. Higher values render above lower values. */
-  zIndex?: number;
-  filled?: boolean;
-  orientation?: 'up' | 'down' | 'left' | 'right';
-  imageData?: string; // Base64 data URL for images
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  properties?: Record<string, any>; // Shape-specific properties (e.g., arrow direction, star point count)
-  createdBy?: string; // User ID who created this object
-  createdAt?: number; // Timestamp when created
-  lastModifiedBy?: string; // User ID who last modified
-  lastModifiedAt?: number; // Timestamp of last modification
-}
-
-interface DrawingState {
+export interface DrawingState {
   // Canvas state
   objects: DrawingObject[];
   currentTool: Tool;
@@ -101,11 +60,11 @@ interface DrawingState {
   isConnected: boolean;
   showToolbar: boolean;
   viewMode: 'draw' | 'view';
-  shapeFilled: boolean;
+  drawingFilled: boolean;
   triangleMode: 'custom' | 'right' | '45-45-90' | '30-60-90';
   starPoints: 5 | 6 | 8;
-  autoShape: boolean;
-  autoShapeThresholds: {
+  autoDrawing: boolean;
+  autoDrawingThresholds: {
     closureFactor: number; // 0-1 factor of diag for closure tolerance
     rectCornerMin: number; // integer corners threshold
     rectStraightRatio: number; // 0-1
@@ -183,11 +142,11 @@ interface DrawingState {
   setConnectionStatus: (connected: boolean) => void;
   toggleToolbar: () => void;
   setViewMode: (mode: 'draw' | 'view') => void;
-  setShapeFilled: (filled: boolean) => void;
+  setDrawingFilled: (filled: boolean) => void;
   setTriangleMode: (mode: 'custom' | 'right' | '45-45-90' | '30-60-90') => void;
   setStarPoints: (points: 5 | 6 | 8) => void;
-  setAutoShape: (enabled: boolean) => void;
-  setAutoShapeThresholds: (t: Partial<DrawingState['autoShapeThresholds']>) => void;
+  setAutoDrawing: (enabled: boolean) => void;
+  setAutoDrawingThresholds: (t: Partial<DrawingState['autoDrawingThresholds']>) => void;
 
   updatePerformanceStats: (fps: number) => void;
 
@@ -245,12 +204,12 @@ export const useDrawingStore = create<DrawingState>()(
         isConnected: false,
         showToolbar: true,
         viewMode: 'draw',
-        shapeFilled: false,
+        drawingFilled: false,
         triangleMode: 'custom',
         starPoints: 5,
         // Keep freehand drawing predictable until the person explicitly opts in.
-        autoShape: false,
-        autoShapeThresholds: {
+        autoDrawing: false,
+        autoDrawingThresholds: {
           closureFactor: 0.15,
           rectCornerMin: 2,
           rectStraightRatio: 0.65,
@@ -381,12 +340,14 @@ export const useDrawingStore = create<DrawingState>()(
           localStorage.removeItem('lastProjectId');
         },
         setCurrentProject: (id) =>
-          set((state) => ({
-            currentProjectId: id,
-            ...(state.currentProjectId !== id
-              ? { projectRevision: undefined, documentVersion: state.documentVersion + 1 }
-              : {}),
-          })),
+          set((state) => {
+            if (state.currentProjectId === id) return { currentProjectId: id };
+            return {
+              currentProjectId: id,
+              projectRevision: undefined,
+              documentVersion: state.documentVersion + 1,
+            };
+          }),
         setProjectRevision: (revision) => set({ projectRevision: revision }),
         setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(100, size)) }),
         setTextFontSize: (size) =>
@@ -422,7 +383,7 @@ export const useDrawingStore = create<DrawingState>()(
             // Track object creation with current tool
             trackObjectCreated(object.type, state.currentTool, {
               hasText: !!object.text,
-              filled: object.filled,
+              filled: object.filled ?? false,
             });
             const newObjects = [...state.objects, object];
             return {
@@ -467,12 +428,12 @@ export const useDrawingStore = create<DrawingState>()(
         setConnectionStatus: (connected) => set({ isConnected: connected }),
         toggleToolbar: () => set((state) => ({ showToolbar: !state.showToolbar })),
         setViewMode: (mode) => set({ viewMode: mode }),
-        setShapeFilled: (filled) => set({ shapeFilled: filled }),
+        setDrawingFilled: (filled) => set({ drawingFilled: filled }),
         setTriangleMode: (mode) => set({ triangleMode: mode }),
         setStarPoints: (points) => set({ starPoints: points }),
-        setAutoShape: (enabled) => set({ autoShape: enabled }),
-        setAutoShapeThresholds: (t) =>
-          set((s) => ({ autoShapeThresholds: { ...s.autoShapeThresholds, ...t } })),
+        setAutoDrawing: (enabled) => set({ autoDrawing: enabled }),
+        setAutoDrawingThresholds: (t) =>
+          set((s) => ({ autoDrawingThresholds: { ...s.autoDrawingThresholds, ...t } })),
 
         updatePerformanceStats: (fps) => set({ fps }),
 
@@ -574,15 +535,15 @@ export const useDrawingStore = create<DrawingState>()(
             currentTool: state.currentTool,
             eraserMode: state.eraserMode,
             projectTitle: state.projectTitle,
-            shapeFilled: state.shapeFilled,
+            drawingFilled: state.drawingFilled,
           };
 
           // Only persist autoShape settings if feature is enabled
-          if (FEATURES.AUTO_SHAPE) {
+          if (FEATURES.AUTO_DRAWING) {
             return {
               ...base,
-              autoShape: state.autoShape,
-              autoShapeThresholds: state.autoShapeThresholds,
+              autoDrawing: state.autoDrawing,
+              autoDrawingThresholds: state.autoDrawingThresholds,
             };
           }
 

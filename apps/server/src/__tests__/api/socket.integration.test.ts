@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NextFunction, Request as ExpressRequest, Response } from 'express';
 import { io, type Socket } from 'socket.io-client';
 
 const mocks = vi.hoisted(() => ({
@@ -36,8 +37,8 @@ vi.mock('../../services/ProjectService.js', () => ({
   },
 }));
 vi.mock('@clerk/express', () => ({
-  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  requireAuth: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  clerkMiddleware: () => (_req: ExpressRequest, _res: Response, next: NextFunction) => next(),
+  requireAuth: () => (_req: ExpressRequest, _res: Response, next: NextFunction) => next(),
   getAuth: () => ({ userId: null }),
   clerkClient: {
     authenticateRequest: vi.fn(async (request: Request) => ({
@@ -68,8 +69,7 @@ describe('Socket.IO boundary', () => {
     await sketchServer.waitForInfrastructure();
     await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     const address = httpServer.address();
-    if (!address || typeof address === 'string')
-      throw new Error('Test server did not bind a TCP port');
+    if (!address || !('port' in address)) throw new Error('Test server did not bind a TCP port');
     url = `http://127.0.0.1:${address.port}`;
   });
 
@@ -590,7 +590,7 @@ describe('Socket.IO boundary', () => {
         await otherServer.waitForInfrastructure();
         await new Promise<void>((resolve) => otherHttp.listen(0, '127.0.0.1', resolve));
         const address = otherHttp.address();
-        if (!address || typeof address === 'string') throw new Error('Second server did not bind');
+        if (!address || !('port' in address)) throw new Error('Second server did not bind');
         const otherUrl = `http://127.0.0.1:${address.port}`;
         const first = await connect('valid-token');
         const second = await connect('valid-token', otherUrl);

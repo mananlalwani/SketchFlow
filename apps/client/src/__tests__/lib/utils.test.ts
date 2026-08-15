@@ -26,10 +26,6 @@ describe('utils', () => {
       expect(id1).not.toBe(id2);
     });
 
-    it('should return a string', () => {
-      expect(typeof generateId()).toBe('string');
-    });
-
     it('should generate non-empty ids', () => {
       expect(generateId().length).toBeGreaterThan(0);
     });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createDetectionPipeline, detectShapes, resetDefaultPipeline } from '@/lib/shapeDetectors';
+import {
+  createDetectionPipeline,
+  detectDrawings,
+  resetDefaultPipeline,
+} from '@/lib/shapeDetectors';
 import type { Point } from '@/lib/geometry';
 
 const horizontalStroke: Point[] = Array.from({ length: 13 }, (_, index) => ({
@@ -38,24 +42,24 @@ const parabolaStroke: Point[] = Array.from({ length: 25 }, (_, index) => {
 
 describe('shape detection pipeline', () => {
   it('returns no candidate for an empty stroke', () => {
-    const result = detectShapes([]);
+    const result = detectDrawings([]);
 
-    expect(result.detectedShape).toBeNull();
+    expect(result.detectedDrawing).toBeNull();
     expect(result.allCandidates).toEqual([]);
     expect(result.processedStroke.totalLength).toBe(0);
   });
 
   it('recognizes a straight pen stroke as a line', () => {
     const pipeline = createDetectionPipeline({ enabledDetectors: ['line'] });
-    const result = pipeline.detectShape(horizontalStroke, { returnAllCandidates: true });
+    const result = pipeline.detectDrawing(horizontalStroke, { returnAllCandidates: true });
 
-    expect(result.detectedShape?.shape.type).toBe('line');
-    expect(result.detectedShape?.confidence).toBeGreaterThanOrEqual(0.6);
+    expect(result.detectedDrawing?.drawing.type).toBe('line');
+    expect(result.detectedDrawing?.confidence).toBeGreaterThanOrEqual(0.6);
     expect(result.allCandidates).toHaveLength(1);
   });
 
   it('recognizes closed rectangles and keeps the editable corner points', () => {
-    const result = detectShapes(
+    const result = detectDrawings(
       closedPolygon([
         { x: 20, y: 20 },
         { x: 160, y: 20 },
@@ -65,8 +69,8 @@ describe('shape detection pipeline', () => {
       { enabledDetectors: ['rectangle'] },
     );
 
-    expect(result.detectedShape?.shape.type).toBe('rectangle');
-    expect(result.detectedShape?.shape.points).toHaveLength(4);
+    expect(result.detectedDrawing?.drawing.type).toBe('rectangle');
+    expect(result.detectedDrawing?.drawing.points).toHaveLength(4);
   });
 
   it('accepts a lightly jittered rectangle instead of requiring perfect pointer samples', () => {
@@ -82,12 +86,12 @@ describe('shape detection pipeline', () => {
     points[points.length - 1] = points[0];
 
     expect(
-      detectShapes(points, { enabledDetectors: ['rectangle'] }).detectedShape?.shape.type,
+      detectDrawings(points, { enabledDetectors: ['rectangle'] }).detectedDrawing?.drawing.type,
     ).toBe('rectangle');
   });
 
   it('recognizes rectangles with the same processing settings used by the canvas', () => {
-    const result = detectShapes(
+    const result = detectDrawings(
       closedPolygon([
         { x: 20, y: 20 },
         { x: 160, y: 20 },
@@ -105,7 +109,7 @@ describe('shape detection pipeline', () => {
       },
     );
 
-    expect(result.detectedShape?.shape.type).toBe('rectangle');
+    expect(result.detectedDrawing?.drawing.type).toBe('rectangle');
   });
 
   it('fits a rectangle with rounded, uneven hand-drawn corners', () => {
@@ -125,16 +129,16 @@ describe('shape detection pipeline', () => {
       { x: 26, y: 22 },
     ];
 
-    const result = detectShapes(roughRectangle, {
+    const result = detectDrawings(roughRectangle, {
       strokeProcessingOptions: { minSize: 15, resampleStep: 2, simplificationTolerance: 0.5 },
     });
 
-    expect(result.detectedShape?.shape.type).toBe('rectangle');
-    expect(result.detectedShape?.shape.points).toHaveLength(4);
+    expect(result.detectedDrawing?.drawing.type).toBe('rectangle');
+    expect(result.detectedDrawing?.drawing.points).toHaveLength(4);
   });
 
   it('distinguishes triangles from rectangles', () => {
-    const result = detectShapes(
+    const result = detectDrawings(
       closedPolygon([
         { x: 40, y: 140 },
         { x: 100, y: 20 },
@@ -143,8 +147,8 @@ describe('shape detection pipeline', () => {
       undefined,
     );
 
-    expect(result.detectedShape?.shape.type).toBe('triangle');
-    expect(result.detectedShape?.shape.points).toHaveLength(3);
+    expect(result.detectedDrawing?.drawing.type).toBe('triangle');
+    expect(result.detectedDrawing?.drawing.points).toHaveLength(3);
   });
 
   it('fits a rough triangle with rounded corners under the default detector set', () => {
@@ -163,12 +167,12 @@ describe('shape detection pipeline', () => {
       { x: 42, y: 144 },
     ];
 
-    const result = detectShapes(roughTriangle, {
+    const result = detectDrawings(roughTriangle, {
       strokeProcessingOptions: { minSize: 15, resampleStep: 2, simplificationTolerance: 0.5 },
     });
 
-    expect(result.detectedShape?.shape.type).toBe('triangle');
-    expect(result.detectedShape?.shape.points).toHaveLength(3);
+    expect(result.detectedDrawing?.drawing.type).toBe('triangle');
+    expect(result.detectedDrawing?.drawing.points).toHaveLength(3);
   });
 
   it('recognizes a triangle when the final pen point lands near its start', () => {
@@ -183,32 +187,32 @@ describe('shape detection pipeline', () => {
       { x: 72, y: 143 },
     ];
 
-    expect(detectShapes(nearClosedTriangle).detectedShape?.shape.type).toBe('triangle');
+    expect(detectDrawings(nearClosedTriangle).detectedDrawing?.drawing.type).toBe('triangle');
   });
 
   it('classifies a closed radial stroke as an ellipse', () => {
-    const result = detectShapes(ellipseStroke, { enabledDetectors: ['ellipse', 'circle'] });
+    const result = detectDrawings(ellipseStroke, { enabledDetectors: ['ellipse', 'circle'] });
 
-    expect(result.detectedShape?.shape.type).toBe('ellipse');
-    expect(result.detectedShape?.error).toBeLessThan(0.1);
+    expect(result.detectedDrawing?.drawing.type).toBe('ellipse');
+    expect(result.detectedDrawing?.error).toBeLessThan(0.1);
   });
 
   it('distinguishes circles from ellipses using their axis ratio', () => {
-    const result = detectShapes(circleStroke, { enabledDetectors: ['ellipse', 'circle'] });
+    const result = detectDrawings(circleStroke, { enabledDetectors: ['ellipse', 'circle'] });
 
-    expect(result.detectedShape?.shape.type).toBe('circle');
+    expect(result.detectedDrawing?.drawing.type).toBe('circle');
   });
 
   it('fits an open quadratic stroke and exposes its editable orientation', () => {
-    const result = detectShapes(parabolaStroke, { enabledDetectors: ['parabola'] });
+    const result = detectDrawings(parabolaStroke, { enabledDetectors: ['parabola'] });
 
-    expect(result.detectedShape?.shape.type).toBe('parabola');
-    expect(result.detectedShape?.shape.properties?.orientation).toBe('down');
-    expect(result.detectedShape?.shape.points).toHaveLength(33);
-    expect(result.detectedShape?.shape.points?.[16]?.y).toBeLessThan(
-      result.detectedShape?.shape.points?.[0]?.y ?? Infinity,
+    expect(result.detectedDrawing?.drawing.type).toBe('parabola');
+    expect(result.detectedDrawing?.drawing.properties?.orientation).toBe('down');
+    expect(result.detectedDrawing?.drawing.points).toHaveLength(33);
+    expect(result.detectedDrawing?.drawing.points?.[16]?.y).toBeLessThan(
+      result.detectedDrawing?.drawing.points?.[0]?.y ?? Infinity,
     );
-    expect(result.detectedShape?.error).toBeLessThan(0.05);
+    expect(result.detectedDrawing?.error).toBeLessThan(0.05);
   });
 
   it('does not convert a jagged freehand stroke into a supported shape', () => {
@@ -221,33 +225,33 @@ describe('shape detection pipeline', () => {
       { x: 150, y: 125 },
     ];
 
-    expect(detectShapes(scribble).detectedShape).toBeNull();
+    expect(detectDrawings(scribble).detectedDrawing).toBeNull();
   });
 
   it('returns candidates only when requested so normal drawing stays lightweight', () => {
     const pipeline = createDetectionPipeline({ enabledDetectors: ['line'] });
 
-    expect(pipeline.detectShape(horizontalStroke).allCandidates).toEqual([]);
+    expect(pipeline.detectDrawing(horizontalStroke).allCandidates).toEqual([]);
     expect(
-      pipeline.detectShape(horizontalStroke, { returnAllCandidates: true }).allCandidates,
+      pipeline.detectDrawing(horizontalStroke, { returnAllCandidates: true }).allCandidates,
     ).toHaveLength(1);
   });
 
   it('honors a caller confidence threshold before converting a stroke', () => {
-    const result = detectShapes(horizontalStroke, {
+    const result = detectDrawings(horizontalStroke, {
       enabledDetectors: ['line'],
       thresholds: { minConfidence: 1.01 },
     });
 
-    expect(result.detectedShape).toBeNull();
+    expect(result.detectedDrawing).toBeNull();
   });
 
   it('honors enabled-detector filtering and keeps its default pipeline resettable', () => {
     resetDefaultPipeline();
     const pipeline = createDetectionPipeline({ enabledDetectors: ['triangle'] });
-    const result = pipeline.detectShape(horizontalStroke, { returnAllCandidates: true });
+    const result = pipeline.detectDrawing(horizontalStroke, { returnAllCandidates: true });
 
-    expect(result.detectedShape).toBeNull();
+    expect(result.detectedDrawing).toBeNull();
     expect(result.allCandidates).toEqual([]);
 
     resetDefaultPipeline();

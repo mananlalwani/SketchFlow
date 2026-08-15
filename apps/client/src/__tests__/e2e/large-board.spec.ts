@@ -7,6 +7,13 @@ import {
   LARGE_BOARD_OBJECT_COUNT,
 } from '../../test/largeBoardFixture';
 
+declare global {
+  interface Window {
+    __SKETCHFLOW_FRAME_SAMPLES__?: number[];
+    __SKETCHFLOW_FRAME_SAMPLING__?: boolean;
+  }
+}
+
 const boardObjects = createLargeBoardObjects();
 
 // Route interception must see the benchmark fixture request rather than an E2E
@@ -37,9 +44,9 @@ test('10,000-object board remains interactive without uncaught errors', async ({
   );
   const navigationStarted = Date.now();
   await page.goto('/draw?share=benchmark-token');
-  const responseData = (await projectResponse).json() as Promise<{
+  const responseData: {
     data?: { objects?: unknown[] };
-  }>;
+  } = await (await projectResponse).json();
   await expect
     .poll(async () => (await responseData).data?.objects?.length)
     .toBe(LARGE_BOARD_OBJECT_COUNT);
@@ -47,10 +54,7 @@ test('10,000-object board remains interactive without uncaught errors', async ({
   await expect(canvas).toBeVisible();
   await expect(canvas).toHaveAttribute('data-object-count', String(LARGE_BOARD_OBJECT_COUNT));
   await page.waitForFunction((expectedCount) => {
-    const benchmarkWindow = window as Window & {
-      __SKETCHFLOW_RENDERER_EVENTS__?: Array<{ type?: string; retainedObjectCount?: number }>;
-    };
-    return benchmarkWindow.__SKETCHFLOW_RENDERER_EVENTS__?.some(
+    return window.__SKETCHFLOW_RENDERER_EVENTS__?.some(
       (event) => event.type === 'frame-rendered' && event.retainedObjectCount === expectedCount,
     );
   }, LARGE_BOARD_OBJECT_COUNT);
@@ -59,16 +63,12 @@ test('10,000-object board remains interactive without uncaught errors', async ({
   const box = await canvas.boundingBox();
   if (!box) throw new Error('Canvas did not render');
   await page.evaluate(() => {
-    const benchmarkWindow = window as Window & {
-      __SKETCHFLOW_FRAME_SAMPLES__?: number[];
-      __SKETCHFLOW_FRAME_SAMPLING__?: boolean;
-    };
-    benchmarkWindow.__SKETCHFLOW_FRAME_SAMPLES__ = [];
-    benchmarkWindow.__SKETCHFLOW_FRAME_SAMPLING__ = true;
+    window.__SKETCHFLOW_FRAME_SAMPLES__ = [];
+    window.__SKETCHFLOW_FRAME_SAMPLING__ = true;
     let previous = performance.now();
     const sample = (timestamp: number) => {
-      if (!benchmarkWindow.__SKETCHFLOW_FRAME_SAMPLING__) return;
-      benchmarkWindow.__SKETCHFLOW_FRAME_SAMPLES__?.push(timestamp - previous);
+      if (!window.__SKETCHFLOW_FRAME_SAMPLING__) return;
+      window.__SKETCHFLOW_FRAME_SAMPLES__?.push(timestamp - previous);
       previous = timestamp;
       requestAnimationFrame(sample);
     };
@@ -87,38 +87,21 @@ test('10,000-object board remains interactive without uncaught errors', async ({
   await page.waitForTimeout(100);
   const panZoomMs = performance.now() - panStarted;
   const frameIntervals = await page.evaluate(() => {
-    const benchmarkWindow = window as Window & {
-      __SKETCHFLOW_FRAME_SAMPLES__?: number[];
-      __SKETCHFLOW_FRAME_SAMPLING__?: boolean;
-    };
-    benchmarkWindow.__SKETCHFLOW_FRAME_SAMPLING__ = false;
-    return benchmarkWindow.__SKETCHFLOW_FRAME_SAMPLES__ ?? [];
+    window.__SKETCHFLOW_FRAME_SAMPLING__ = false;
+    return window.__SKETCHFLOW_FRAME_SAMPLES__ ?? [];
   });
 
   const clientMetrics = await page.evaluate(() => {
-    const memory = performance as Performance & {
-      memory?: { usedJSHeapSize: number; totalJSHeapSize: number };
-    };
+    const memory = performance;
     const canvas = document.querySelector('canvas');
     const rect = canvas?.getBoundingClientRect();
-    const benchmarkWindow = window as Window & {
-      __SKETCHFLOW_RENDERER_EVENTS__?: Array<{
-        type?: string;
-        ingestionMs?: number;
-        retainedObjectCount?: number;
-        visibleObjectCount?: number;
-        culledObjectCount?: number;
-        renderMs?: number;
-      }>;
-    };
-    const rendererEvents = benchmarkWindow.__SKETCHFLOW_RENDERER_EVENTS__ ?? [];
+    const rendererEvents = window.__SKETCHFLOW_RENDERER_EVENTS__ ?? [];
     const sceneApplied = rendererEvents.find((event) => event.type === 'scene-applied');
     const latestFrame = [...rendererEvents]
       .reverse()
       .find((event) => event.type === 'frame-rendered');
     return {
       heapUsedBytes: memory.memory?.usedJSHeapSize ?? null,
-      heapTotalBytes: memory.memory?.totalJSHeapSize ?? null,
       canvasWidth: rect?.width ?? 0,
       canvasHeight: rect?.height ?? 0,
       renderer: {

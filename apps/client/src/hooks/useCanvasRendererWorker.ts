@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
+
+declare global {
+  interface Window {
+    __SKETCHFLOW_RENDERER_EVENTS__?: RendererWorkerEvent[];
+  }
+}
 import { postRendererViewport } from '@/lib/canvasRendererViewport';
-import { isRendererWorkerEvent } from '@/lib/rendererWorkerProtocol';
+import { isRendererWorkerEvent, type RendererWorkerEvent } from '@/lib/rendererWorkerProtocol';
 import { WORLD_HEIGHT, WORLD_WIDTH } from '@/lib/canvasViewport';
 
 interface RendererViewport {
@@ -101,11 +107,8 @@ export function useCanvasRendererWorker(
         dispose();
       }
       if (!import.meta.env.VITE_E2E) return;
-      const benchmarkWindow = window as Window & {
-        __SKETCHFLOW_RENDERER_EVENTS__?: unknown[];
-      };
-      benchmarkWindow.__SKETCHFLOW_RENDERER_EVENTS__ ??= [];
-      benchmarkWindow.__SKETCHFLOW_RENDERER_EVENTS__.push(event.data);
+      window.__SKETCHFLOW_RENDERER_EVENTS__ ??= [];
+      window.__SKETCHFLOW_RENDERER_EVENTS__.push(event.data);
     };
 
     try {

@@ -59,14 +59,14 @@ export function MobilePropertiesDrawer({
     currentTool,
     eraserMode,
     setEraserMode,
-    shapeFilled,
-    setShapeFilled,
+    drawingFilled,
+    setDrawingFilled,
     triangleMode,
     setTriangleMode,
     starPoints,
     setStarPoints,
-    autoShape,
-    setAutoShape,
+    autoDrawing,
+    setAutoDrawing,
     projectTitle,
     setProjectTitle,
     saveStatus,
@@ -213,7 +213,7 @@ export function MobilePropertiesDrawer({
                 </div>
               )}
 
-              {FEATURES.AUTO_SHAPE && currentTool === 'pen' && (
+              {FEATURES.AUTO_DRAWING && currentTool === 'pen' && (
                 <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-white/10">
                   <div className="flex items-center justify-between gap-4">
                     <div>
@@ -228,12 +228,12 @@ export function MobilePropertiesDrawer({
                       </p>
                     </div>
                     <Button
-                      variant={autoShape ? 'default' : 'secondary'}
+                      variant={autoDrawing ? 'default' : 'secondary'}
                       size="sm"
-                      aria-pressed={autoShape}
-                      onClick={() => setAutoShape(!autoShape)}
+                      aria-pressed={autoDrawing}
+                      onClick={() => setAutoDrawing(!autoDrawing)}
                     >
-                      {autoShape ? 'On' : 'Off'}
+                      {autoDrawing ? 'On' : 'Off'}
                     </Button>
                   </div>
                 </div>
@@ -279,17 +279,20 @@ export function MobilePropertiesDrawer({
                 </div>
               )}
 
-              {(['rectangle', 'ellipse', 'triangle', 'star'] as string[]).includes(currentTool) && (
+              {(currentTool === 'rectangle' ||
+                currentTool === 'ellipse' ||
+                currentTool === 'triangle' ||
+                currentTool === 'star') && (
                 <div className="flex items-center justify-between border-t border-slate-200 pt-4 dark:border-white/10">
                   <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
                     Fill shape
                   </span>
                   <Button
-                    variant={shapeFilled ? 'default' : 'secondary'}
+                    variant={drawingFilled ? 'default' : 'secondary'}
                     size="sm"
-                    onClick={() => setShapeFilled(!shapeFilled)}
+                    onClick={() => setDrawingFilled(!drawingFilled)}
                   >
-                    {shapeFilled ? 'On' : 'Off'}
+                    {drawingFilled ? 'On' : 'Off'}
                   </Button>
                 </div>
               )}

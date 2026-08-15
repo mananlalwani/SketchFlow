@@ -80,14 +80,16 @@ describe('cloud project API', () => {
 
     const [createUrl, createRequest] = fetchMock.mock.calls[0];
     expect(createUrl).toMatch(/\/api\/projects$/);
-    expect(JSON.parse((createRequest as RequestInit).body as string)).toEqual({
+    const createBody = await new Request(createUrl, createRequest).text();
+    expect(JSON.parse(createBody)).toEqual({
       title: 'Board',
       data: { objects: [] },
     });
 
     const [updateUrl, updateRequest] = fetchMock.mock.calls[1];
     expect(updateUrl).toMatch(/\/api\/projects\/project-1$/);
-    expect(JSON.parse((updateRequest as RequestInit).body as string)).toEqual({
+    const updateBody = await new Request(updateUrl, updateRequest).text();
+    expect(JSON.parse(updateBody)).toEqual({
       title: 'Renamed board',
       data: { objects: [] },
       expectedRevision: 1,

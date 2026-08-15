@@ -4,11 +4,14 @@ import { logger } from '../utils/logger.js';
 export class ConnectionRegistry {
   private connections = new Set<string>();
 
-  public constructor(private readonly maxConnections = 50) {}
+  public constructor(
+    private readonly maxConnections = 50,
+    private readonly log: Pick<typeof logger, 'warn'> = logger,
+  ) {}
 
   public add(clientId: string): boolean {
     if (this.connections.size >= this.maxConnections) {
-      logger.warn(`Max connections reached, rejecting ${clientId}`);
+      this.log.warn(`Max connections reached, rejecting ${clientId}`);
       return false;
     }
 

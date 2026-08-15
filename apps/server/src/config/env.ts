@@ -105,7 +105,6 @@ const envSchema = z
         message: 'REDIS_URL is required when SOCKET_INSTANCE_COUNT is greater than 1',
       });
     }
-
   });
 
 export type Env = z.infer<typeof envSchema>;

@@ -10,7 +10,9 @@
     "test": "pnpm --filter @sketchflow/client test && pnpm --filter @sketchflow/server test",
     "test:coverage": "pnpm --filter @sketchflow/client test:coverage && pnpm --filter @sketchflow/server test:coverage",
     "test:infrastructure": "sh scripts/test-infrastructure.sh",
-    "lint": "pnpm --filter @sketchflow/client lint && pnpm --filter @sketchflow/server lint",
+    "lint": "pnpm lint:eslint && pnpm lint:anti-slop",
+    "lint:eslint": "pnpm --filter @sketchflow/client lint && pnpm --filter @sketchflow/server lint",
+    "lint:anti-slop": "oxlint .",
     "format:check": "prettier --check \"**/*.{js,mjs,cjs,ts,tsx,json,md,yml,yaml}\"",
     "type-check": "pnpm --filter @sketchflow/client type-check && pnpm --filter @sketchflow/server build",
     "check:release-hygiene": "node scripts/check-release-hygiene.mjs",
@@ -18,11 +20,22 @@
     "check:client-budgets": "pnpm --filter @sketchflow/client build && node scripts/check-client-budgets.mjs"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.78.0",
     "concurrently": "^8.2.2",
+    "oxlint": "1.78.0",
     "prettier": "3.6.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@clerk/shared", "@prisma/engines", "@sentry/cli", "@swc/core", "core-js", "esbuild", "prisma", "protobufjs"],
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "@prisma/engines",
+      "@sentry/cli",
+      "@swc/core",
+      "core-js",
+      "esbuild",
+      "prisma",
+      "protobufjs"
+    ],
     "overrides": {
       "@grpc/grpc-js": "1.14.4",
       "@hono/node-server": "1.19.13",

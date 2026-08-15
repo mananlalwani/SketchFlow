@@ -162,8 +162,7 @@ export function exportAsSVG(
  * Download a file
  */
 export function downloadFile(data: Blob | string, filename: string, mimeType?: string): void {
-  const blob =
-    typeof data === 'string' ? new Blob([data], { type: mimeType || 'text/plain' }) : data;
+  const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType || 'text/plain' });
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -474,8 +473,7 @@ function renderStarToPDF(
   const cy = offsetY + (obj.y + obj.height / 2) * scale;
   const outerRadius = (Math.min(obj.width, obj.height) / 2) * scale;
   const innerRadius = outerRadius * 0.38; // Standard 5-pointed star ratio
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const points = (obj as any).properties?.pointCount || 5;
+  const points = obj.properties?.pointCount || 5;
 
   // Generate star vertices
   const vertices: { x: number; y: number }[] = [];
@@ -751,19 +749,17 @@ function objectToSVG(obj: DrawingObject): string | null {
       }
       break;
 
-    case 'triangle':
-      {
-        const vertices = triangleVertices(obj);
-        if (!vertices) break;
-        const points = vertices.map((point) => `${point.x},${point.y}`).join(' ');
+    case 'triangle': {
+      const vertices = triangleVertices(obj);
+      if (!vertices) break;
+      const points = vertices.map((point) => `${point.x},${point.y}`).join(' ');
 
-        if (obj.filled) {
-          return `<polygon points="${points}" fill="${obj.color}"${opacity}/>`;
-        } else {
-          return `<polygon points="${points}" stroke="${obj.color}" stroke-width="${obj.size}" fill="none"${opacity}/>`;
-        }
+      if (obj.filled) {
+        return `<polygon points="${points}" fill="${obj.color}"${opacity}/>`;
+      } else {
+        return `<polygon points="${points}" stroke="${obj.color}" stroke-width="${obj.size}" fill="none"${opacity}/>`;
       }
-      break;
+    }
 
     case 'text':
       if (obj.x !== undefined && obj.y !== undefined && obj.text) {

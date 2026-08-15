@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listProjects, type ProjectListItem, getProject, getSharedProject } from '@/lib/api';
 import { useDrawingStore } from '@/store/drawingStore';
-import { deserializeProject, serializeProject } from '@/lib/utils';
+import { deserializeProject } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -46,7 +46,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
     async (shareToken: string) => {
       setLoadingProject(shareToken);
       try {
-        const record = await getSharedProject<string>(shareToken);
+        const record = await getSharedProject(shareToken);
         // Data is a serialized string, so we deserialize it to count objects
         const projectData = deserializeProject(record.data);
         console.log(
@@ -149,7 +149,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
       setLoadingProject(project.id);
       try {
         const token = await getToken();
-        const record = await getProject<ReturnType<typeof serializeProject>>(project.id, token);
+        const record = await getProject(project.id, token);
         console.log('Loaded project:', record.id, record.title);
         const objects = deserializeProject(record.data);
         setObjects(objects);
@@ -232,9 +232,7 @@ export function SharedProjectBrowser({ onProjectLoad }: SharedProjectBrowserProp
             variant="default"
             className="bg-emerald-600 hover:bg-emerald-500"
             onClick={() => {
-              const input = document.querySelector(
-                'input[placeholder*="share"]',
-              ) as HTMLInputElement;
+              const input = document.querySelector<HTMLInputElement>('input[placeholder*="share"]');
               if (input?.value) {
                 const match = input.value.match(/[?&]share=([^&]+)/);
                 const token = match ? match[1] : input.value.trim();

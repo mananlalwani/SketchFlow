@@ -77,7 +77,8 @@ export function useCanvasImageInput({
       }
       const reader = new FileReader();
       reader.onload = () => {
-        const dataUrl = reader.result as string;
+        if (!reader.result || reader.result instanceof ArrayBuffer) return;
+        const dataUrl = reader.result;
         const image = new Image();
         image.onload = async () => {
           const finalImage =

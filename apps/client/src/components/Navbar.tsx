@@ -21,7 +21,7 @@ export function Navbar() {
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      const toolbarEls = Array.from(document.querySelectorAll('[data-toolbar]')) as HTMLElement[];
+      const toolbarEls = Array.from(document.querySelectorAll<HTMLElement>('[data-toolbar]'));
       for (const el of toolbarEls) {
         const r = el.getBoundingClientRect();
         const over =

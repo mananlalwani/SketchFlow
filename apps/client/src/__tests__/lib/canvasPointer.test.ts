@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildStrokePoints,
-  constrainShapeEnd,
+  constrainDrawingEnd,
   getPointerSamples,
   screenPointToWorld,
 } from '@/lib/canvasPointer';
@@ -15,15 +15,15 @@ describe('canvas pointer helpers', () => {
   });
 
   it('constrains rectangles and ellipses to a square when requested', () => {
-    expect(constrainShapeEnd({ x: 10, y: 10 }, { x: 40, y: 20 }, 'rectangle', true)).toEqual({
+    expect(constrainDrawingEnd({ x: 10, y: 10 }, { x: 40, y: 20 }, 'rectangle', true)).toEqual({
       x: 20,
       y: 20,
     });
-    expect(constrainShapeEnd({ x: 10, y: 10 }, { x: 4, y: 30 }, 'ellipse', true)).toEqual({
+    expect(constrainDrawingEnd({ x: 10, y: 10 }, { x: 4, y: 30 }, 'ellipse', true)).toEqual({
       x: 4,
       y: 16,
     });
-    expect(constrainShapeEnd({ x: 10, y: 10 }, { x: 40, y: 20 }, 'line', true)).toEqual({
+    expect(constrainDrawingEnd({ x: 10, y: 10 }, { x: 40, y: 20 }, 'line', true)).toEqual({
       x: 40,
       y: 20,
     });
@@ -65,7 +65,18 @@ describe('canvas pointer helpers', () => {
   });
 
   it('uses coalesced pointer samples when a browser provides them', () => {
-    const samples = [{ clientX: 10 }, { clientX: 20 }] as PointerEvent[];
-    expect(getPointerSamples({ getCoalescedEvents: () => samples } as PointerEvent)).toBe(samples);
+    const samples = [
+      { clientX: 10, clientY: 10, pointerType: 'pen', pressure: 0.5 },
+      { clientX: 20, clientY: 20, pointerType: 'pen', pressure: 0.5 },
+    ];
+    expect(
+      getPointerSamples({
+        clientX: 0,
+        clientY: 0,
+        pointerType: 'pen',
+        pressure: 0.5,
+        getCoalescedEvents: () => samples,
+      }),
+    ).toBe(samples);
   });
 });

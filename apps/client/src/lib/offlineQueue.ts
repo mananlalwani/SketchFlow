@@ -1,4 +1,5 @@
-import { openDB } from 'idb';
+import { openDB, type DBSchema } from 'idb';
+import type { JsonValue } from '@sketchflow/shared';
 
 const DATABASE = 'sketchflow-offline-queue';
 const STORE = 'operations';
@@ -10,7 +11,7 @@ export interface OfflineSaveOperation {
   id?: number;
   projectId: string;
   title: string;
-  data: unknown;
+  data: JsonValue;
   // Optional only while reading entries created before revision-guarded saves.
   revision?: number;
   createdAt: number;
@@ -27,7 +28,7 @@ export interface OfflineCollaborationOperation {
   projectId: string;
   expectedRevision: number;
   kind: 'upsert-object' | 'delete-object' | 'batch';
-  data: unknown;
+  data: JsonValue;
   title?: string;
   createdAt: number;
   attempts: number;
@@ -35,8 +36,32 @@ export interface OfflineCollaborationOperation {
 
 export type NewOfflineCollaborationOperation = Omit<OfflineCollaborationOperation, 'attempts'>;
 
-async function db() {
-  return openDB(DATABASE, 2, {
+interface OfflineQueueDB extends DBSchema {
+  operations: {
+    key: number;
+    value: OfflineSaveOperation;
+    indexes: { createdAt: number };
+  };
+  'collaboration-operations': {
+    key: string;
+    value: OfflineCollaborationOperation;
+    indexes: { createdAt: number; projectId: string };
+  };
+}
+
+export interface OfflineQueueStorage {
+  addSave(operation: OfflineSaveOperation): Promise<number>;
+  getSave(id: number): Promise<OfflineSaveOperation | undefined>;
+  getSaves(): Promise<OfflineSaveOperation[]>;
+  putSave(operation: OfflineSaveOperation): Promise<void>;
+  removeSave(id: number): Promise<void>;
+  getCollaborationOperations(projectId?: string): Promise<OfflineCollaborationOperation[]>;
+  putCollaborationOperation(operation: OfflineCollaborationOperation): Promise<void>;
+  removeCollaborationOperation(operationId: string): Promise<void>;
+}
+
+async function createIndexedDbStorage(): Promise<OfflineQueueStorage> {
+  const database = await openDB<OfflineQueueDB>(DATABASE, 2, {
     upgrade(database) {
       if (!database.objectStoreNames.contains(STORE)) {
         const store = database.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
@@ -49,63 +74,98 @@ async function db() {
       }
     },
   });
+
+  return {
+    addSave: (operation) => database.add(STORE, operation),
+    getSave: (id) => database.get(STORE, id),
+    getSaves: () => database.getAllFromIndex(STORE, 'createdAt'),
+    putSave: async (operation) => {
+      await database.put(STORE, operation);
+    },
+    removeSave: async (id) => {
+      await database.delete(STORE, id);
+    },
+    getCollaborationOperations: (projectId) =>
+      projectId
+        ? database.getAllFromIndex(COLLABORATION_STORE, 'projectId', projectId)
+        : database.getAllFromIndex(COLLABORATION_STORE, 'createdAt'),
+    putCollaborationOperation: async (operation) => {
+      await database.put(COLLABORATION_STORE, operation);
+    },
+    removeCollaborationOperation: async (operationId) => {
+      await database.delete(COLLABORATION_STORE, operationId);
+    },
+  };
 }
 
-export async function enqueueOfflineSave(operation: NewOfflineSaveOperation) {
-  if (new Blob([JSON.stringify(operation.data)]).size > MAX_BYTES) {
-    throw new Error('Offline save exceeds the 10 MB queue limit');
-  }
-  const database = await db();
-  const existing = await database.getAllFromIndex(STORE, 'createdAt');
-  while (existing.length >= MAX_OPERATIONS) {
-    const oldest = existing.shift();
-    if (oldest?.id !== undefined) await database.delete(STORE, oldest.id);
-  }
-  return database.add(STORE, { ...operation, attempts: 0 });
+export function createOfflineQueue(openStorage = createIndexedDbStorage) {
+  return {
+    async enqueueOfflineSave(operation: NewOfflineSaveOperation) {
+      if (new Blob([JSON.stringify(operation.data)]).size > MAX_BYTES) {
+        throw new Error('Offline save exceeds the 10 MB queue limit');
+      }
+      const storage = await openStorage();
+      const existing = await storage.getSaves();
+      while (existing.length >= MAX_OPERATIONS) {
+        const oldest = existing.shift();
+        if (oldest?.id !== undefined) await storage.removeSave(oldest.id);
+      }
+      return storage.addSave({ ...operation, attempts: 0 });
+    },
+
+    async getOfflineSaveQueue(): Promise<OfflineSaveOperation[]> {
+      return (await openStorage()).getSaves();
+    },
+
+    async removeOfflineSave(id: number) {
+      await (await openStorage()).removeSave(id);
+    },
+
+    async markOfflineSaveAttempt(id: number) {
+      const storage = await openStorage();
+      const operation = await storage.getSave(id);
+      if (operation) await storage.putSave({ ...operation, attempts: operation.attempts + 1 });
+    },
+
+    async enqueueCollaborationOperation(operation: NewOfflineCollaborationOperation) {
+      if (new Blob([JSON.stringify(operation.data)]).size > MAX_BYTES) {
+        throw new Error('Offline collaboration operation exceeds the 10 MB queue limit');
+      }
+      const storage = await openStorage();
+      const existing = await storage.getCollaborationOperations();
+      if (existing.length >= MAX_OPERATIONS) throw new Error('Offline collaboration queue is full');
+      await storage.putCollaborationOperation({ ...operation, attempts: 0 });
+    },
+
+    async getCollaborationOperations(projectId?: string) {
+      const operations = await (await openStorage()).getCollaborationOperations(projectId);
+      return operations.sort((a, b) => a.createdAt - b.createdAt);
+    },
+
+    async removeCollaborationOperation(operationId: string) {
+      await (await openStorage()).removeCollaborationOperation(operationId);
+    },
+
+    async markCollaborationOperationAttempt(operationId: string) {
+      const storage = await openStorage();
+      const operation = (await storage.getCollaborationOperations()).find(
+        (entry) => entry.operationId === operationId,
+      );
+      if (operation)
+        await storage.putCollaborationOperation({ ...operation, attempts: operation.attempts + 1 });
+    },
+  };
 }
 
-export async function getOfflineSaveQueue(): Promise<OfflineSaveOperation[]> {
-  return (await (await db()).getAllFromIndex(STORE, 'createdAt')) as OfflineSaveOperation[];
-}
+const offlineQueue = createOfflineQueue();
 
-export async function removeOfflineSave(id: number) {
-  await (await db()).delete(STORE, id);
-}
-
-export async function markOfflineSaveAttempt(id: number) {
-  const database = await db();
-  const operation = (await database.get(STORE, id)) as OfflineSaveOperation | undefined;
-  if (operation) await database.put(STORE, { ...operation, attempts: operation.attempts + 1 });
-}
-
-export async function enqueueCollaborationOperation(operation: NewOfflineCollaborationOperation) {
-  if (new Blob([JSON.stringify(operation.data)]).size > MAX_BYTES) {
-    throw new Error('Offline collaboration operation exceeds the 10 MB queue limit');
-  }
-  const database = await db();
-  const existing = await database.getAllFromIndex(COLLABORATION_STORE, 'createdAt');
-  // Never silently evict a user's unsynced edit. The caller surfaces this as a save failure.
-  if (existing.length >= MAX_OPERATIONS) throw new Error('Offline collaboration queue is full');
-  await database.put(COLLABORATION_STORE, { ...operation, attempts: 0 });
-}
-
-export async function getCollaborationOperations(projectId?: string) {
-  const database = await db();
-  const operations = projectId
-    ? await database.getAllFromIndex(COLLABORATION_STORE, 'projectId', projectId)
-    : await database.getAllFromIndex(COLLABORATION_STORE, 'createdAt');
-  return (operations as OfflineCollaborationOperation[]).sort((a, b) => a.createdAt - b.createdAt);
-}
-
-export async function removeCollaborationOperation(operationId: string) {
-  await (await db()).delete(COLLABORATION_STORE, operationId);
-}
-
-export async function markCollaborationOperationAttempt(operationId: string) {
-  const database = await db();
-  const operation = (await database.get(
-    COLLABORATION_STORE,
-    operationId,
-  )) as OfflineCollaborationOperation | undefined;
-  if (operation) await database.put(COLLABORATION_STORE, { ...operation, attempts: operation.attempts + 1 });
-}
+export const {
+  enqueueOfflineSave,
+  getOfflineSaveQueue,
+  removeOfflineSave,
+  markOfflineSaveAttempt,
+  enqueueCollaborationOperation,
+  getCollaborationOperations,
+  removeCollaborationOperation,
+  markCollaborationOperationAttempt,
+} = offlineQueue;

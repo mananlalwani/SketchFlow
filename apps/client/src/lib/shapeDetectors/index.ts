@@ -5,39 +5,44 @@
  */
 
 // Main pipeline
-export { ShapeDetectionPipeline } from './ShapeDetectionPipeline';
-export type { ShapeDetectionResult, DetectionOptions } from './ShapeDetectionPipeline';
+export { DrawingDetectionPipeline } from './ShapeDetectionPipeline';
+export type { DrawingDetectionResult, DetectionOptions } from './ShapeDetectionPipeline';
 
 // Types
-export type { DetectionResult, DetectedShape, ShapeDetector, DetectionThresholds } from './types';
-export { DEFAULT_THRESHOLDS, createDetectedShape } from './types';
+export type {
+  DetectionResult,
+  DetectedDrawing,
+  DrawingDetector,
+  DetectionThresholds,
+} from './types';
+export { DEFAULT_THRESHOLDS, createDetectedDrawing } from './types';
 
 // Convenience function for quick shape detection
-import { ShapeDetectionPipeline } from './ShapeDetectionPipeline';
+import { DrawingDetectionPipeline } from './ShapeDetectionPipeline';
 import type { Point } from '../geometry';
-import type { DetectionOptions, ShapeDetectionResult } from './ShapeDetectionPipeline';
+import type { DetectionOptions, DrawingDetectionResult } from './ShapeDetectionPipeline';
 
-let defaultPipeline: ShapeDetectionPipeline | null = null;
+let defaultPipeline: DrawingDetectionPipeline | null = null;
 
 /**
  * Detect shapes from a stroke using the default pipeline
  */
-export function detectShapes(
+export function detectDrawings(
   points: Point[],
   options: DetectionOptions = {},
-): ShapeDetectionResult {
+): DrawingDetectionResult {
   if (!defaultPipeline) {
-    defaultPipeline = new ShapeDetectionPipeline();
+    defaultPipeline = new DrawingDetectionPipeline();
   }
 
-  return defaultPipeline.detectShape(points, options);
+  return defaultPipeline.detectDrawing(points, options);
 }
 
 /**
  * Create a new detection pipeline with custom configuration
  */
-export function createDetectionPipeline(options: DetectionOptions = {}): ShapeDetectionPipeline {
-  return new ShapeDetectionPipeline(options);
+export function createDetectionPipeline(options: DetectionOptions = {}): DrawingDetectionPipeline {
+  return new DrawingDetectionPipeline(options);
 }
 
 /**

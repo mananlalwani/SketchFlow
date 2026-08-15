@@ -43,7 +43,7 @@ const tools = [
   { id: 'star', icon: Star, label: 'Star' },
   { id: 'text', icon: Type, label: 'Text' },
   { id: 'image', icon: ImageIcon, label: 'Image' },
-] as const;
+] as const satisfies readonly { id: Tool; icon: typeof Hand; label: string }[];
 
 export function MobileToolbar() {
   const {
@@ -117,13 +117,12 @@ export function MobileToolbar() {
   // Find current tool icon
   const CurrentIcon = tools.find((t) => t.id === currentTool)?.icon || Pen;
 
-  const handleToolClick = (id: string) => {
+  const handleToolClick = (id: Tool) => {
     if (id === 'image') {
       // For image tool, trigger the file input in DrawingCanvas
-      const fileInput = document.getElementById('image-upload-input') as HTMLInputElement;
-      fileInput?.click();
+      document.querySelector<HTMLInputElement>('#image-upload-input')?.click();
     } else {
-      setTool(id as Tool);
+      setTool(id);
     }
     setIsExpanded(false);
   };

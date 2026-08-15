@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createCanvasImage, toImageShapeData } from '@/lib/canvasImage';
+import { createCanvasImage, toImageDrawingData } from '@/lib/canvasImage';
 
 describe('canvas image helpers', () => {
   it('centers an image in world coordinates and creates its renderer payload', () => {
@@ -12,6 +12,6 @@ describe('canvas image helpers', () => {
       dataUrl: 'data:image/png;base64,abc',
     });
     expect(image).toMatchObject({ x: 80, y: 70, width: 40, height: 20 });
-    expect(toImageShapeData(image)).toMatchObject({ type: 'image', x: 80, y: 70 });
+    expect(toImageDrawingData(image)).toMatchObject({ type: 'image', x: 80, y: 70 });
   });
 });

@@ -2,23 +2,14 @@ import * as Sentry from '@sentry/node';
 
 import { env } from './config/env.js';
 
-const SENSITIVE_KEY =
-  /(authorization|cookie|token|secret|password|email|image|canvas|object|payload|data|query)/i;
 const SHARE_PATH = /\/shared\/[^/?#]+|[?&]share=[^&#]+/gi;
 
-function redact(value: unknown, depth = 0): unknown {
-  if (depth > 4) return '[truncated]';
-  if (typeof value === 'string') return value.replace(SHARE_PATH, '/shared/[redacted]');
-  if (Array.isArray(value)) return value.slice(0, 20).map((entry) => redact(entry, depth + 1));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [
-        key,
-        SENSITIVE_KEY.test(key) ? '[redacted]' : redact(entry, depth + 1),
-      ]),
-    );
-  }
-  return value;
+interface ServerExceptionContext extends Record<string, string | number | undefined> {
+  method: string;
+  route: string;
+  status: number;
+  traceId?: string;
+  spanId?: string;
 }
 
 export function initSentry(): void {
@@ -40,27 +31,24 @@ export function initSentry(): void {
         delete event.request.cookies;
         delete event.request.headers;
       }
-      event.contexts = redact(event.contexts) as typeof event.contexts;
-      event.extra = redact(event.extra) as typeof event.extra;
+      event.contexts = {};
+      event.extra = {};
       event.user = undefined;
       return event;
     },
     beforeBreadcrumb(breadcrumb) {
       return {
         ...breadcrumb,
-        data: redact(breadcrumb.data) as typeof breadcrumb.data,
+        data: undefined,
         message: breadcrumb.message?.replace(SHARE_PATH, '/shared/[redacted]'),
       };
     },
   });
 }
 
-export function captureServerException(
-  error: unknown,
-  context: Record<string, unknown> = {},
-): void {
+export function captureServerException(error: Error, context: ServerExceptionContext): void {
   Sentry.captureException(error, {
-    contexts: { sketchflow: redact(context) as Record<string, unknown> },
+    contexts: { sketchflow: context },
   });
 }
 
@@ -77,6 +65,6 @@ export function captureServerSignal(
   Sentry.captureMessage(signal, {
     level: 'warning',
     tags: { signal },
-    extra: redact(details) as Record<string, unknown>,
+    extra: details,
   });
 }

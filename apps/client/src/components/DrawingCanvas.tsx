@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useGesture } from '@use-gesture/react';
+import { z } from 'zod';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useDrawingSocket } from '@/hooks/useSocket';
 import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
@@ -10,8 +11,8 @@ import { Square, Circle, Triangle, ZoomIn, ZoomOut, RotateCcw } from 'lucide-rea
 
 import { generateId } from '@/lib/utils';
 import type { DrawingObject } from '@/store/drawingStore';
-import type { StrokeData, ShapeData } from '@/types/socket';
-import { detectShapes } from '@/lib/shapeDetectors';
+import type { StrokeData, DrawingData } from '@/types/socket';
+import { detectDrawings } from '@/lib/shapeDetectors';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { LiveCursors } from './LiveCursors';
 import { useLiveCursors } from '@/hooks/useLiveCursors';
@@ -29,7 +30,7 @@ import { useCanvasImageInput } from '@/hooks/useCanvasImageInput';
 import { findCanvasObjectIdAt } from '@/lib/canvasSelection';
 import {
   buildStrokePoints,
-  constrainShapeEnd,
+  constrainDrawingEnd,
   getPointerSamples,
   screenPointToWorld,
 } from '@/lib/canvasPointer';
@@ -53,6 +54,7 @@ import {
 import {
   calculateTriangleVertices,
   panViewportBy,
+  type TriangleMode,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   zoomViewportAtPoint,
@@ -63,7 +65,14 @@ const BG_COLORS = {
   light: '#e0e0e0',
 } as const;
 
-function pressureAdjustedSize(baseSize: number, event: PointerEvent): number {
+function isTriangleMode(value: string): value is TriangleMode {
+  return value === 'right' || value === '45-45-90' || value === '30-60-90';
+}
+
+function pressureAdjustedSize(
+  baseSize: number,
+  event: Pick<PointerEvent, 'pointerType' | 'pressure'>,
+): number {
   // Mouse/touch report a synthetic pressure of 0 or 0.5; only a pen should
   // alter the selected brush width. Preserve a usable minimum at light touch.
   if (event.pointerType !== 'pen' || event.pressure <= 0) return baseSize;
@@ -180,7 +189,7 @@ export function DrawingCanvas() {
     setZoom,
     setView,
     resetView,
-    autoShape,
+    autoDrawing,
     objectCount,
     selectedObjectId,
     setSelectedObject,
@@ -272,7 +281,7 @@ export function DrawingCanvas() {
   const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentStroke, setCurrentStroke] = useState<StrokeData[]>([]);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
-  const [previewShape, setPreviewShape] = useState<{
+  const [previewDrawing, setPreviewDrawing] = useState<{
     type: string;
     startX: number;
     startY: number;
@@ -388,10 +397,7 @@ export function DrawingCanvas() {
     collaborationCommitInFlightRef.current = true;
     collaborationObjectsRef.current = objects;
     setSaveStatus('syncing');
-    const operationId =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `operation-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+    const operationId = crypto.randomUUID();
 
     const commit = {
       protocolVersion: 1 as const,
@@ -399,7 +405,7 @@ export function DrawingCanvas() {
       operationId,
       expectedRevision: projectRevision,
       kind: operation.kind,
-      data: operation.data,
+      data: z.json().parse(operation.data),
       title: projectTitle,
     };
     // IndexedDB is the source of truth for unsent edits: a tab close or
@@ -678,7 +684,7 @@ export function DrawingCanvas() {
     requestFullRedraw,
   });
 
-  const detectShapeFromStroke = useCallback(
+  const detectDrawingFromStroke = useCallback(
     (
       points: { x: number; y: number }[],
     ):
@@ -703,10 +709,10 @@ export function DrawingCanvas() {
       | null => {
       if (!points || points.length < 3) return null;
 
-      const oldThresholds = useDrawingStore.getState().autoShapeThresholds;
+      const oldThresholds = useDrawingStore.getState().autoDrawingThresholds;
 
       try {
-        const result = detectShapes(points, {
+        const result = detectDrawings(points, {
           // Shape recognition is intentionally silent during drawing. The pipeline
           // returns a candidate only when it clears its confidence threshold.
           debugMode: false,
@@ -739,36 +745,48 @@ export function DrawingCanvas() {
           },
         });
 
-        if (result.detectedShape) {
-          const shape = result.detectedShape.shape;
-          const bbox = shape.boundingBox;
+        if (result.detectedDrawing) {
+          const drawing = result.detectedDrawing.drawing;
+          const bbox = drawing.boundingBox;
 
-          if (shape.type === 'parabola' && shape.properties?.orientation) {
-            return {
+          if (drawing.type === 'parabola' && drawing.properties?.orientation) {
+            const parabola = {
               kind: 'parabola' as const,
               x: bbox.minX,
               y: bbox.minY,
               width: bbox.width,
               height: bbox.height,
-              orientation: shape.properties.orientation as 'up' | 'down' | 'left' | 'right',
-              ...(shape.points?.length
-                ? { points: shape.points.map(({ x, y }) => ({ x, y })) }
-                : {}),
+              orientation: drawing.properties.orientation,
+            };
+            if (!drawing.points?.length) return parabola;
+            return {
+              ...parabola,
+              points: drawing.points.map(({ x, y }) => ({ x, y })),
             };
           } else {
-            const shapeObj = {
-              kind: shape.type as 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'line',
+            if (
+              drawing.type !== 'rectangle' &&
+              drawing.type !== 'ellipse' &&
+              drawing.type !== 'circle' &&
+              drawing.type !== 'triangle' &&
+              drawing.type !== 'line'
+            ) {
+              return null;
+            }
+            const drawingObj = {
+              kind: drawing.type,
               x: bbox.minX,
               y: bbox.minY,
               width: bbox.width,
               height: bbox.height,
-              // The renderer uses these three vertices for a custom triangle. Without
-              // them every recognized triangle becomes the generic centered preset.
-              ...(shape.type === 'triangle' && shape.points?.length === 3
-                ? { points: shape.points.map(({ x, y }) => ({ x, y })) }
-                : {}),
             };
-            return shapeObj;
+            // The renderer uses these three vertices for a custom triangle. Without
+            // them every recognized triangle becomes the generic centered preset.
+            if (drawing.type !== 'triangle' || drawing.points?.length !== 3) return drawingObj;
+            return {
+              ...drawingObj,
+              points: drawing.points.map(({ x, y }) => ({ x, y })),
+            };
           }
         }
       } catch (error) {
@@ -877,7 +895,7 @@ export function DrawingCanvas() {
   };
 
   const startDrawing = useCallback(
-    (e: React.PointerEvent) => {
+    (e: React.PointerEvent | React.MouseEvent | PointerEvent) => {
       if (!canDraw && currentTool !== 'hand' && currentTool !== 'select') {
         toast({
           title: 'View Only',
@@ -890,14 +908,14 @@ export function DrawingCanvas() {
       if (textInputPos) return;
 
       const worldPos = screenToWorld(e.clientX, e.clientY);
-      try {
-        (
-          e.currentTarget as Element & {
-            setPointerCapture?: (id: number) => void;
+      if ('pointerId' in e) {
+        try {
+          if (e.currentTarget instanceof Element) {
+            e.currentTarget.setPointerCapture(e.pointerId);
           }
-        ).setPointerCapture?.(e.pointerId);
-      } catch {
-        // ignore
+        } catch {
+          // ignore
+        }
       }
 
       if (currentTool === 'select' || currentTool === 'move') {
@@ -929,7 +947,9 @@ export function DrawingCanvas() {
             if (!selectedObjectIds.includes(hitId) || ids.length !== selectedObjectIds.length) {
               setSelectedObjects(ids);
             }
-            if (e.pointerType === 'touch' && 'vibrate' in navigator) navigator.vibrate(12);
+            if ('pointerType' in e && e.pointerType === 'touch' && 'vibrate' in navigator) {
+              navigator.vibrate(12);
+            }
             // Selection is intentionally non-destructive. It can activate
             // resize/rotate handles, but only the Move tool starts a drag.
             if (currentTool === 'select') {
@@ -970,7 +990,7 @@ export function DrawingCanvas() {
         return;
       }
 
-      if ((e as unknown as MouseEvent).button === 2) {
+      if (e.button === 2) {
         return;
       }
 
@@ -1123,7 +1143,7 @@ export function DrawingCanvas() {
                 obj.width !== undefined &&
                 obj.height !== undefined
               ) {
-                const shape: ShapeData = {
+                const drawing: DrawingData = {
                   id: obj.id,
                   type: obj.type,
                   x: obj.x,
@@ -1135,11 +1155,10 @@ export function DrawingCanvas() {
                   alpha: obj.alpha ?? 1,
                   filled: obj.filled,
                   points: obj.points,
-                  orientation: (obj as { orientation?: 'up' | 'down' | 'left' | 'right' })
-                    .orientation,
+                  orientation: obj.orientation,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: 'shape', data: shape });
+                workerRef.current?.postMessage({ type: 'shape', data: drawing });
               } else if (
                 obj.type === 'text' &&
                 obj.x !== undefined &&
@@ -1147,7 +1166,7 @@ export function DrawingCanvas() {
                 obj.width !== undefined &&
                 obj.height !== undefined
               ) {
-                const shape: ShapeData = {
+                const drawing: DrawingData = {
                   id: obj.id,
                   type: obj.type,
                   x: obj.x,
@@ -1161,7 +1180,7 @@ export function DrawingCanvas() {
                   fontSize: obj.fontSize,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: 'shape', data: shape });
+                workerRef.current?.postMessage({ type: 'shape', data: drawing });
               } else if (
                 obj.type === 'image' &&
                 obj.x !== undefined &&
@@ -1169,7 +1188,7 @@ export function DrawingCanvas() {
                 obj.width !== undefined &&
                 obj.height !== undefined
               ) {
-                const shape: ShapeData = {
+                const drawing: DrawingData = {
                   id: obj.id,
                   type: obj.type,
                   x: obj.x,
@@ -1182,7 +1201,7 @@ export function DrawingCanvas() {
                   imageData: obj.imageData,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: 'shape', data: shape });
+                workerRef.current?.postMessage({ type: 'shape', data: drawing });
               }
             }
           }
@@ -1237,7 +1256,7 @@ export function DrawingCanvas() {
               color: brushColor,
               size: brushSize,
               alpha: brushOpacity,
-              filled: useDrawingStore.getState().shapeFilled,
+              filled: useDrawingStore.getState().drawingFilled,
             };
 
             saveHistory();
@@ -1285,7 +1304,7 @@ export function DrawingCanvas() {
   );
 
   const draw = useCallback(
-    (e: React.PointerEvent) => {
+    (e: React.PointerEvent | PointerEvent) => {
       if (canvasRef.current) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
         emitCursor(worldPos.x, worldPos.y);
@@ -1392,7 +1411,7 @@ export function DrawingCanvas() {
                       // full redraw. Updating that entry by id is atomic for
                       // the next blit; removing/rebuilding a raster stroke
                       // exposed an empty frame and caused visible flicker.
-                      const stroke: ShapeData = {
+                      const stroke: DrawingData = {
                         id: updatedObj.id,
                         type: 'stroke',
                         x: 0,
@@ -1421,7 +1440,7 @@ export function DrawingCanvas() {
                       updatedObj.x !== undefined &&
                       updatedObj.y !== undefined
                     ) {
-                      const shape: ShapeData = {
+                      const drawing: DrawingData = {
                         id: updatedObj.id,
                         type: updatedObj.type,
                         x: updatedObj.x,
@@ -1432,11 +1451,7 @@ export function DrawingCanvas() {
                         size: updatedObj.size,
                         alpha: updatedObj.alpha ?? 1,
                         filled: updatedObj.filled,
-                        orientation: (
-                          updatedObj as {
-                            orientation?: 'up' | 'down' | 'left' | 'right';
-                          }
-                        ).orientation,
+                        orientation: updatedObj.orientation,
                         text: updatedObj.text,
                         fontSize: updatedObj.fontSize,
                         imageData: updatedObj.imageData,
@@ -1454,7 +1469,7 @@ export function DrawingCanvas() {
                       };
                       workerRef.current?.postMessage({
                         type: 'shape',
-                        data: shape,
+                        data: drawing,
                       });
                     }
                   }
@@ -1466,15 +1481,7 @@ export function DrawingCanvas() {
         return;
       }
       if (!isDrawing) return;
-      // use-gesture supplies a native PointerEvent, while React handlers supply
-      // a SyntheticEvent. Support both so drawing does not crash in browsers
-      // that dispatch native events through the gesture handler.
-      const native = ('nativeEvent' in e && e.nativeEvent
-        ? e.nativeEvent
-        : e) as unknown as PointerEvent & {
-        getCoalescedEvents?: () => PointerEvent[];
-      };
-      const events = getPointerSamples(native);
+      const events = getPointerSamples(e instanceof PointerEvent ? e : e.nativeEvent);
 
       if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
         let lp = lastPoint;
@@ -1512,7 +1519,7 @@ export function DrawingCanvas() {
       } else if (['line', 'rectangle', 'ellipse', 'star'].includes(currentTool) && startPoint) {
         const lastEv = events[events.length - 1];
         const endPos = screenToWorld(lastEv.clientX, lastEv.clientY);
-        const constrainedEnd = constrainShapeEnd(
+        const constrainedEnd = constrainDrawingEnd(
           startPoint,
           endPos,
           currentTool,
@@ -1520,7 +1527,7 @@ export function DrawingCanvas() {
         );
         const { x: endX, y: endY } = constrainedEnd;
 
-        setPreviewShape({
+        setPreviewDrawing({
           type: currentTool,
           startX: startPoint.x,
           startY: startPoint.y,
@@ -1534,7 +1541,7 @@ export function DrawingCanvas() {
         const lastEv = events[events.length - 1];
         const endPos = screenToWorld(lastEv.clientX, lastEv.clientY);
 
-        setPreviewShape({
+        setPreviewDrawing({
           type: 'triangle',
           startX: startPoint.x,
           startY: startPoint.y,
@@ -1575,7 +1582,7 @@ export function DrawingCanvas() {
   const handleCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
       if (currentTool !== 'triangle' || triangleMode !== 'custom') return;
-      startDrawing(event as unknown as React.PointerEvent<HTMLCanvasElement>);
+      startDrawing(event);
     },
     [currentTool, startDrawing, triangleMode],
   );
@@ -1639,14 +1646,14 @@ export function DrawingCanvas() {
 
     if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
       if (currentStroke.length > 0) {
-        if (FEATURES.AUTO_SHAPE && autoShape && currentTool === 'pen') {
+        if (FEATURES.AUTO_DRAWING && autoDrawing && currentTool === 'pen') {
           const pathPoints: { x: number; y: number }[] = [];
           const firstSeg = currentStroke[0];
           pathPoints.push({ x: firstSeg.x0, y: firstSeg.y0 });
           for (let i = 0; i < currentStroke.length; i++)
             pathPoints.push({ x: currentStroke[i].x1, y: currentStroke[i].y1 });
-          const shape = detectShapeFromStroke(pathPoints);
-          if (shape) {
+          const drawing = detectDrawingFromStroke(pathPoints);
+          if (drawing) {
             if (strokeGroupRef.current) {
               workerRef.current?.postMessage({
                 type: 'remove-group',
@@ -1654,33 +1661,32 @@ export function DrawingCanvas() {
               });
             }
 
-            const clearShapePayload = {
+            const clearDrawingPayload = {
               id: 'temp',
               type:
-                shape.kind === 'line'
+                drawing.kind === 'line'
                   ? 'line'
-                  : shape.kind === 'parabola'
+                  : drawing.kind === 'parabola'
                     ? 'parabola'
-                    : shape.kind,
-              x: Math.min(shape.x, shape.x + shape.width),
-              y: Math.min(shape.y, shape.y + shape.height),
-              width: Math.abs(shape.width),
-              height: Math.abs(shape.height),
+                    : drawing.kind,
+              x: Math.min(drawing.x, drawing.x + drawing.width),
+              y: Math.min(drawing.y, drawing.y + drawing.height),
+              width: Math.abs(drawing.width),
+              height: Math.abs(drawing.height),
               color: BG_COLORS[theme],
               size: Math.max(brushSize, 1),
               alpha: brushOpacity,
-              orientation: (shape as { orientation?: 'up' | 'down' | 'left' | 'right' })
-                .orientation,
-            } as const;
+              orientation: drawing.kind === 'parabola' ? drawing.orientation : undefined,
+            };
             workerRef.current?.postMessage({
               type: 'clear-shape',
-              data: clearShapePayload,
+              data: clearDrawingPayload,
             });
 
-            const normX = Math.min(shape.x, shape.x + shape.width);
-            const normY = Math.min(shape.y, shape.y + shape.height);
-            const normW = Math.abs(shape.width);
-            const normH = Math.abs(shape.height);
+            const normX = Math.min(drawing.x, drawing.x + drawing.width);
+            const normY = Math.min(drawing.y, drawing.y + drawing.height);
+            const normW = Math.abs(drawing.width);
+            const normH = Math.abs(drawing.height);
             const common = {
               id: generateId(),
               x: normX,
@@ -1690,46 +1696,33 @@ export function DrawingCanvas() {
               color: brushColor,
               size: committedStrokeSize(currentStroke, brushSize),
               alpha: brushOpacity,
-            } as const;
-            let shapeObject: {
-              id: string;
-              type: 'parabola' | 'line' | 'rectangle' | 'ellipse' | 'circle' | 'triangle';
-              x: number;
-              y: number;
-              width: number;
-              height: number;
-              color: string;
-              size: number;
-              alpha: number;
-              filled?: boolean;
-              orientation?: 'up' | 'down' | 'left' | 'right';
-              points?: { x: number; y: number }[];
             };
-            if (shape.kind === 'parabola') {
-              shapeObject = {
+            let drawingObject: DrawingData;
+            if (drawing.kind === 'parabola') {
+              drawingObject = {
                 ...common,
-                type: 'parabola' as const,
-                orientation: shape.orientation,
-                ...(shape.points?.length ? { points: shape.points } : {}),
+                type: 'parabola',
+                orientation: drawing.orientation,
               };
-            } else if (shape.kind === 'line') {
-              shapeObject = { ...common, type: 'line' as const };
+              if (drawing.points?.length) drawingObject.points = drawing.points;
+            } else if (drawing.kind === 'line') {
+              drawingObject = { ...common, type: 'line' };
             } else {
-              shapeObject = {
+              drawingObject = {
                 ...common,
-                type: shape.kind as 'rectangle' | 'ellipse' | 'circle' | 'triangle',
-                filled: useDrawingStore.getState().shapeFilled,
-                ...(shape.kind === 'triangle' && shape.points?.length === 3
-                  ? { points: shape.points }
-                  : {}),
+                type: drawing.kind,
+                filled: useDrawingStore.getState().drawingFilled,
               };
+              if (drawing.kind === 'triangle' && drawing.points?.length === 3) {
+                drawingObject.points = drawing.points;
+              }
             }
 
-            addObject(shapeObject);
+            addObject(drawingObject);
             saveHistory();
             workerRef.current?.postMessage({
               type: 'shape',
-              data: shapeObject,
+              data: drawingObject,
             });
           } else {
             const drawingObject = {
@@ -1757,47 +1750,47 @@ export function DrawingCanvas() {
         }
       }
     } else if (
-      ['line', 'rectangle', 'ellipse'].includes(currentTool) &&
+      (currentTool === 'line' || currentTool === 'rectangle' || currentTool === 'ellipse') &&
       startPoint &&
-      previewShape
+      previewDrawing
     ) {
-      let shapeObject;
+      let drawingObject;
       if (currentTool === 'line') {
-        shapeObject = {
+        drawingObject = {
           id: generateId(),
-          type: currentTool as 'line' | 'rectangle' | 'ellipse',
+          type: currentTool,
           x: startPoint.x,
           y: startPoint.y,
-          width: previewShape.endX - startPoint.x,
-          height: previewShape.endY - startPoint.y,
+          width: previewDrawing.endX - startPoint.x,
+          height: previewDrawing.endY - startPoint.y,
           color: brushColor,
           size: brushSize,
           alpha: brushOpacity,
         };
       } else {
-        shapeObject = {
+        drawingObject = {
           id: generateId(),
-          type: currentTool as 'line' | 'rectangle' | 'ellipse',
-          x: Math.min(startPoint.x, previewShape.endX),
-          y: Math.min(startPoint.y, previewShape.endY),
-          width: Math.abs(previewShape.endX - startPoint.x),
-          height: Math.abs(previewShape.endY - startPoint.y),
+          type: currentTool,
+          x: Math.min(startPoint.x, previewDrawing.endX),
+          y: Math.min(startPoint.y, previewDrawing.endY),
+          width: Math.abs(previewDrawing.endX - startPoint.x),
+          height: Math.abs(previewDrawing.endY - startPoint.y),
           color: brushColor,
           size: brushSize,
           alpha: brushOpacity,
-          filled: useDrawingStore.getState().shapeFilled,
+          filled: useDrawingStore.getState().drawingFilled,
         };
       }
 
-      addObject(shapeObject);
+      addObject(drawingObject);
 
       workerRef.current?.postMessage({
         type: 'shape',
-        data: shapeObject,
+        data: drawingObject,
       });
-    } else if (currentTool === 'star' && startPoint && previewShape) {
-      const dx = previewShape.endX - startPoint.x;
-      const dy = previewShape.endY - startPoint.y;
+    } else if (currentTool === 'star' && startPoint && previewDrawing) {
+      const dx = previewDrawing.endX - startPoint.x;
+      const dy = previewDrawing.endY - startPoint.y;
       const outerRadius = Math.sqrt(dx * dx + dy * dy);
 
       const x = startPoint.x - outerRadius;
@@ -1815,7 +1808,7 @@ export function DrawingCanvas() {
         color: brushColor,
         size: brushSize,
         alpha: brushOpacity,
-        filled: useDrawingStore.getState().shapeFilled,
+        filled: useDrawingStore.getState().drawingFilled,
         properties: {
           pointCount: starPoints,
         },
@@ -1831,14 +1824,15 @@ export function DrawingCanvas() {
       currentTool === 'triangle' &&
       triangleMode !== 'custom' &&
       startPoint &&
-      previewShape
+      previewDrawing
     ) {
+      if (!isTriangleMode(triangleMode)) return;
       const vertices = calculateTriangleVertices(
         startPoint.x,
         startPoint.y,
-        previewShape.endX,
-        previewShape.endY,
-        triangleMode as 'right' | '45-45-90' | '30-60-90',
+        previewDrawing.endX,
+        previewDrawing.endY,
+        triangleMode,
       );
 
       const xs = vertices.map((v) => v.x);
@@ -1859,7 +1853,7 @@ export function DrawingCanvas() {
         color: brushColor,
         size: brushSize,
         alpha: brushOpacity,
-        filled: useDrawingStore.getState().shapeFilled,
+        filled: useDrawingStore.getState().drawingFilled,
       };
 
       addObject(triangleObject);
@@ -1875,7 +1869,7 @@ export function DrawingCanvas() {
     setCurrentStroke([]);
     strokeGroupRef.current = null;
     setStartPoint(null);
-    setPreviewShape(null);
+    setPreviewDrawing(null);
   }, [
     isDrawing,
     currentStroke,
@@ -1887,10 +1881,10 @@ export function DrawingCanvas() {
     addObject,
     saveHistory,
     startPoint,
-    previewShape,
+    previewDrawing,
     flushWorkerStrokes,
-    autoShape,
-    detectShapeFromStroke,
+    autoDrawing,
+    detectDrawingFromStroke,
     triangleMode,
     draggedObject,
     isPanning,
@@ -2015,11 +2009,10 @@ export function DrawingCanvas() {
           return;
         }
 
-        // Draw logic (Single touch, not hand mode)
-        // Delegate to existing handlers for now, but wrapped
-        const nativeEvent = event as unknown as React.PointerEvent;
-        // Mock properties if missing or just pass what we can
-        // We might need to manually call startDrawing / draw / stopDrawing logic here
+        // Draw logic (Single touch, not hand mode). use-gesture supplies a
+        // native pointer event here; ignore other event families defensively.
+        if (!(event instanceof PointerEvent)) return;
+        const nativeEvent = event;
 
         // Move deliberately does not set `isDrawing`: it is an object transform,
         // not a new canvas mark. Prefer the ref here so every subsequent pointer
@@ -2096,11 +2089,11 @@ export function DrawingCanvas() {
 
           const canvas = canvasRef.current;
           if (!canvas) return;
+          if (!(event instanceof WheelEvent)) return;
 
           const rect = canvas.getBoundingClientRect();
-          const pointerEvent = event as unknown as { clientX: number; clientY: number };
-          const mouseX = pointerEvent.clientX - rect.left;
-          const mouseY = pointerEvent.clientY - rect.top;
+          const mouseX = event.clientX - rect.left;
+          const mouseY = event.clientY - rect.top;
 
           const viewport = zoomViewportAtPoint({
             zoom,
@@ -2421,15 +2414,15 @@ export function DrawingCanvas() {
         </Button>
       </div>
       {/* Shape preview overlay */}
-      {previewShape && (
+      {previewDrawing && (
         <>
-          {previewShape.type === 'line' ? (
+          {previewDrawing.type === 'line' ? (
             <svg className="absolute pointer-events-none w-full h-full">
               <line
-                x1={(previewShape.startX - viewX) * zoom}
-                y1={(previewShape.startY - viewY) * zoom}
-                x2={(previewShape.endX - viewX) * zoom}
-                y2={(previewShape.endY - viewY) * zoom}
+                x1={(previewDrawing.startX - viewX) * zoom}
+                y1={(previewDrawing.startY - viewY) * zoom}
+                x2={(previewDrawing.endX - viewX) * zoom}
+                y2={(previewDrawing.endY - viewY) * zoom}
                 stroke="#60a5fa"
                 strokeWidth="2"
                 strokeDasharray="8,4"
@@ -2439,11 +2432,11 @@ export function DrawingCanvas() {
           ) : (
             <svg className="absolute pointer-events-none w-full h-full">
               {(() => {
-                const x = (Math.min(previewShape.startX, previewShape.endX) - viewX) * zoom;
-                const y = (Math.min(previewShape.startY, previewShape.endY) - viewY) * zoom;
-                const w = Math.abs(previewShape.endX - previewShape.startX) * zoom;
-                const h = Math.abs(previewShape.endY - previewShape.startY) * zoom;
-                if (previewShape.type === 'ellipse') {
+                const x = (Math.min(previewDrawing.startX, previewDrawing.endX) - viewX) * zoom;
+                const y = (Math.min(previewDrawing.startY, previewDrawing.endY) - viewY) * zoom;
+                const w = Math.abs(previewDrawing.endX - previewDrawing.startX) * zoom;
+                const h = Math.abs(previewDrawing.endY - previewDrawing.startY) * zoom;
+                if (previewDrawing.type === 'ellipse') {
                   const cx = x + w / 2;
                   const cy = y + h / 2;
                   const rx = w / 2;
@@ -2462,13 +2455,14 @@ export function DrawingCanvas() {
                     />
                   );
                 }
-                if (previewShape.type === 'triangle') {
+                if (previewDrawing.type === 'triangle') {
+                  if (!isTriangleMode(triangleMode)) return null;
                   const vertices = calculateTriangleVertices(
-                    previewShape.startX,
-                    previewShape.startY,
-                    previewShape.endX,
-                    previewShape.endY,
-                    triangleMode as 'right' | '45-45-90' | '30-60-90',
+                    previewDrawing.startX,
+                    previewDrawing.startY,
+                    previewDrawing.endX,
+                    previewDrawing.endY,
+                    triangleMode,
                   );
 
                   if (vertices.length === 3) {
@@ -2490,11 +2484,11 @@ export function DrawingCanvas() {
                     );
                   }
                 }
-                if (previewShape.type === 'star') {
-                  const centerX = (previewShape.startX - viewX) * zoom;
-                  const centerY = (previewShape.startY - viewY) * zoom;
-                  const dx = (previewShape.endX - previewShape.startX) * zoom;
-                  const dy = (previewShape.endY - previewShape.startY) * zoom;
+                if (previewDrawing.type === 'star') {
+                  const centerX = (previewDrawing.startX - viewX) * zoom;
+                  const centerY = (previewDrawing.startY - viewY) * zoom;
+                  const dx = (previewDrawing.endX - previewDrawing.startX) * zoom;
+                  const dy = (previewDrawing.endY - previewDrawing.startY) * zoom;
                   const outerRadius = Math.sqrt(dx * dx + dy * dy);
                   const innerRadius = outerRadius * 0.38;
                   const pointCount = starPoints;

@@ -3,14 +3,15 @@
  */
 import { useCallback } from 'react';
 import { useToast } from './use-toast';
-import { handleError } from '@/lib/errorHandling';
+import { handleError, type ErrorInput } from '@/lib/errorHandling';
 import { Button } from '@/components/ui/button';
+import type { ErrorContext } from '@/lib/errorReporting';
 
 interface UseErrorHandlerOptions {
   /** Default title for error toasts */
   defaultTitle?: string;
   /** Context to include in error reports */
-  context?: Record<string, unknown>;
+  context?: ErrorContext;
 }
 
 export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
@@ -18,7 +19,7 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
   const { defaultTitle = 'Error', context = {} } = options;
 
   const showError = useCallback(
-    (error: unknown, customTitle?: string, onRetry?: () => void) => {
+    (error: ErrorInput, customTitle?: string, onRetry?: () => void) => {
       const { message, suggestion } = handleError(error, {
         context,
       });
@@ -58,7 +59,7 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
       asyncFn: () => Promise<T>,
       options?: {
         onSuccess?: (result: T) => void;
-        onError?: (error: unknown) => void;
+        onError?: (error: ErrorInput) => void;
         errorTitle?: string;
         successTitle?: string;
         successDescription?: string;
@@ -75,9 +76,10 @@ export function useErrorHandler(options: UseErrorHandlerOptions = {}) {
           return result;
         })
         .catch((error) => {
-          showError(error, options?.errorTitle);
+          const failure: ErrorInput = error instanceof Error ? error : String(error);
+          showError(failure, options?.errorTitle);
           if (options?.onError) {
-            options.onError(error);
+            options.onError(failure);
           }
           return undefined;
         });

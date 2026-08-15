@@ -20,8 +20,8 @@ describe('drawingStore', () => {
       isConnected: false,
       showToolbar: true,
       viewMode: 'draw',
-      shapeFilled: false,
-      autoShape: false,
+      drawingFilled: false,
+      autoDrawing: false,
       history: [[]],
       historyIndex: 0,
       zoom: 1,
@@ -44,11 +44,11 @@ describe('drawingStore', () => {
 
   describe('auto shape', () => {
     it('starts disabled and remains user-toggleable', () => {
-      const { setAutoShape } = useDrawingStore.getState();
+      const { setAutoDrawing } = useDrawingStore.getState();
 
-      expect(useDrawingStore.getState().autoShape).toBe(false);
-      setAutoShape(true);
-      expect(useDrawingStore.getState().autoShape).toBe(true);
+      expect(useDrawingStore.getState().autoDrawing).toBe(false);
+      setAutoDrawing(true);
+      expect(useDrawingStore.getState().autoDrawing).toBe(true);
     });
   });
 
@@ -526,10 +526,10 @@ describe('drawingStore', () => {
     });
 
     it('should set shape filled', () => {
-      const { setShapeFilled } = useDrawingStore.getState();
+      const { setDrawingFilled } = useDrawingStore.getState();
 
-      setShapeFilled(true);
-      expect(useDrawingStore.getState().shapeFilled).toBe(true);
+      setDrawingFilled(true);
+      expect(useDrawingStore.getState().drawingFilled).toBe(true);
     });
 
     it('should set eraser mode', () => {

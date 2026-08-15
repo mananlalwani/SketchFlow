@@ -1,5 +1,11 @@
 import { useState, useCallback } from 'react';
 
+declare global {
+  interface Performance {
+    memory?: { usedJSHeapSize: number };
+  }
+}
+
 interface PerformanceMetrics {
   fps: number;
   frameTime: number;
@@ -38,9 +44,8 @@ export const usePerformanceMonitor = () => {
 
           // Get memory usage if available
           let memoryUsage = 0;
-          const perfAny = performance as unknown as { memory?: { usedJSHeapSize: number } };
-          if (perfAny.memory && typeof perfAny.memory.usedJSHeapSize === 'number') {
-            memoryUsage = Math.round(perfAny.memory.usedJSHeapSize / (1024 * 1024)); // MB
+          if (performance.memory) {
+            memoryUsage = Math.round(performance.memory.usedJSHeapSize / (1024 * 1024)); // MB
           }
 
           // Adaptive quality based on performance

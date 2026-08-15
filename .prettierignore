@@ -5,3 +5,15 @@ playwright-report
 test-results
 generated
 pnpm-lock.yaml
+.agent
+.agents
+.claude
+.codex
+.continue
+.cursor
+.gemini
+.opencode
+.pi
+.roo
+.windsurf
+tools/oxlint/anti-slop

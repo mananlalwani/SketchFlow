@@ -1,5 +1,5 @@
 import type { DrawingObject } from '@/store/drawingStore';
-import type { ShapeData } from '@/types/socket';
+import type { DrawingData } from '@/types/socket';
 
 interface CanvasImageInput {
   id: string;
@@ -25,7 +25,7 @@ export function createCanvasImage(input: CanvasImageInput): DrawingObject {
   };
 }
 
-export function toImageShapeData(image: DrawingObject): ShapeData {
+export function toImageDrawingData(image: DrawingObject): DrawingData {
   if (
     image.type !== 'image' ||
     image.x === undefined ||

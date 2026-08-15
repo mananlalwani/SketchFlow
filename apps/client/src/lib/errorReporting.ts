@@ -6,11 +6,12 @@
  * like Sentry, LogRocket, etc.
  */
 import { getTraceContext, recordError, getTracer } from './otel';
-import { captureException, setSentryUser } from './sentry';
+import { captureException, setSentryUser, type ErrorTelemetryContext } from './sentry';
 
-interface ErrorContext {
+type BreadcrumbData = Record<string, string | number | boolean>;
+
+export interface ErrorContext extends ErrorTelemetryContext {
   componentStack?: string;
-  [key: string]: unknown;
 }
 
 // Store current user for context
@@ -89,11 +90,7 @@ export function setErrorUser(userId: string | null): void {
  * Add breadcrumb for error tracking
  * Creates an OTel span event for trace correlation
  */
-export function addBreadcrumb(
-  message: string,
-  category?: string,
-  data?: Record<string, unknown>,
-): void {
+export function addBreadcrumb(message: string, category?: string, data?: BreadcrumbData): void {
   const traceContext = getTraceContext();
   const tracer = getTracer();
 
@@ -104,9 +101,7 @@ export function addBreadcrumb(
     span.setAttribute('breadcrumb.category', category || 'general');
     if (data) {
       Object.entries(data).forEach(([key, value]) => {
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-          span.setAttribute(`breadcrumb.data.${key}`, value);
-        }
+        span.setAttribute(`breadcrumb.data.${key}`, value);
       });
     }
     span.end();

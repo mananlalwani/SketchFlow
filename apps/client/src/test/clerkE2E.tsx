@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react';
 
 const isAuthenticatedForE2E = () =>
-  typeof window !== 'undefined' && window.localStorage.getItem('e2e-authenticated') === 'true';
+  globalThis.window !== undefined && window.localStorage.getItem('e2e-authenticated') === 'true';
 
 export function ClerkProvider({ children }: { children: ReactNode }) {
   return <>{children}</>;

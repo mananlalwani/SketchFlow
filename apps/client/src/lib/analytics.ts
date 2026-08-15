@@ -4,6 +4,18 @@
  */
 import { getTracer, getTraceContext } from './otel';
 
+export type TelemetryMetadata = Record<string, string | number | boolean>;
+
+declare global {
+  interface Window {
+    toolStats: {
+      get: typeof getToolStats;
+      summary: typeof getStatsSummary;
+      log: typeof logStatsSummary;
+    };
+  }
+}
+
 export interface ToolUsageStats {
   selections: Record<string, number>; // How many times each tool was selected
   objectsCreated: Record<string, number>; // How many objects created with each tool
@@ -56,7 +68,7 @@ export function trackToolSelection(tool: string, previousTool?: string): void {
 export function trackObjectCreated(
   objectType: string,
   tool: string,
-  metadata?: Record<string, unknown>,
+  metadata?: TelemetryMetadata,
 ): void {
   stats.objectsCreated[tool] = (stats.objectsCreated[tool] || 0) + 1;
   stats.lastActivity = Date.now();
@@ -71,9 +83,7 @@ export function trackObjectCreated(
     span.setAttribute('tool.total_objects', stats.objectsCreated[tool]);
     if (metadata) {
       Object.entries(metadata).forEach(([key, value]) => {
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-          span.setAttribute(`object.${key}`, value);
-        }
+        span.setAttribute(`object.${key}`, value);
       });
     }
     span.end();
@@ -91,16 +101,14 @@ export function trackObjectCreated(
 /**
  * Track feature usage (undo, redo, clear, etc.)
  */
-export function trackFeatureUsage(feature: string, metadata?: Record<string, unknown>): void {
+export function trackFeatureUsage(feature: string, metadata?: TelemetryMetadata): void {
   const tracer = getTracer('tool-analytics');
   if (tracer) {
     const span = tracer.startSpan('feature.used');
     span.setAttribute('feature.name', feature);
     if (metadata) {
       Object.entries(metadata).forEach(([key, value]) => {
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-          span.setAttribute(`feature.${key}`, value);
-        }
+        span.setAttribute(`feature.${key}`, value);
       });
     }
     span.end();
@@ -204,7 +212,7 @@ export function startAnalyticsLogging(intervalMs = 60000): void {
   }, intervalMs);
 
   // Log on page unload
-  if (typeof window !== 'undefined') {
+  if (globalThis.window !== undefined) {
     window.addEventListener('beforeunload', () => {
       logStatsSummary();
     });
@@ -222,8 +230,8 @@ export function stopAnalyticsLogging(): void {
 }
 
 // Export stats for debugging in console
-if (typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).toolStats = {
+if (globalThis.window !== undefined) {
+  window.toolStats = {
     get: getToolStats,
     summary: getStatsSummary,
     log: logStatsSummary,

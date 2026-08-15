@@ -35,7 +35,11 @@ export async function blobToImage(blob: Blob): Promise<PastedImage> {
     const reader = new FileReader();
 
     reader.onload = () => {
-      const dataUrl = reader.result as string;
+      if (!reader.result || reader.result instanceof ArrayBuffer) {
+        reject(new Error('Unable to read image data'));
+        return;
+      }
+      const dataUrl = reader.result;
 
       // Get dimensions
       const img = new Image();

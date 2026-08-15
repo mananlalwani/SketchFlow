@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NextFunction, Request as ExpressRequest, Response } from 'express';
 import request from 'supertest';
+
+type TestAuthRequest = { headers: { 'x-test-user'?: string } };
 
 const mocks = vi.hoisted(() => ({
   projectService: {
@@ -47,9 +50,9 @@ vi.mock('../../services/ProjectService.js', () => ({
   },
 }));
 vi.mock('@clerk/express', () => ({
-  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  requireAuth: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  getAuth: (req: { headers: Record<string, string | undefined> }) => ({
+  clerkMiddleware: () => (_req: ExpressRequest, _res: Response, next: NextFunction) => next(),
+  requireAuth: () => (_req: ExpressRequest, _res: Response, next: NextFunction) => next(),
+  getAuth: (req: TestAuthRequest) => ({
     userId: req.headers['x-test-user'] ?? null,
   }),
   clerkClient: { users: { getUser: vi.fn(), getUserList: vi.fn() } },

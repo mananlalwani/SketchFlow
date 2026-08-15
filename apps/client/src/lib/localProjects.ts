@@ -1,4 +1,17 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { z } from 'zod';
+import type { JsonValue } from '@sketchflow/shared';
+
+const localProjectSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  data: z.json(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  thumbnail: z.string().optional(),
+});
+
+type LocalProject = Omit<z.infer<typeof localProjectSchema>, 'data'> & { data: JsonValue };
 
 export interface ProjectRecord {
   id: string;
@@ -6,7 +19,7 @@ export interface ProjectRecord {
   title: string;
   updatedAt: number;
   createdAt: number;
-  data: unknown;
+  data: JsonValue;
   shared?: boolean;
   shareToken?: string;
   folderId?: string | null;
@@ -18,14 +31,8 @@ export interface ProjectRecord {
 interface LocalProjectsDB extends DBSchema {
   projects: {
     key: string;
-    value: {
-      id: string;
-      title: string;
-      data: unknown;
-      createdAt: number;
-      updatedAt: number;
-      thumbnail?: string;
-    };
+    value: LocalProject;
+    indexes: { updatedAt: number };
   };
 }
 
@@ -45,8 +52,7 @@ class LocalProjectsService {
       upgrade(db) {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (store as any).createIndex('updatedAt', 'updatedAt');
+          store.createIndex('updatedAt', 'updatedAt');
         }
       },
     });
@@ -58,28 +64,19 @@ class LocalProjectsService {
   async list(): Promise<Omit<ProjectRecord, 'data'>[]> {
     try {
       const db = await this.initDB();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const projects = await (db as any).getAllFromIndex(STORE_NAME, 'updatedAt');
+      const projects = await db.getAllFromIndex(STORE_NAME, 'updatedAt');
 
       return projects
-        .map(
-          (p: {
-            id: string;
-            title: string;
-            updatedAt: number;
-            createdAt: number;
-            thumbnail?: string;
-          }) => ({
-            id: p.id,
-            userId: 'guest',
-            title: p.title,
-            updatedAt: p.updatedAt,
-            createdAt: p.createdAt,
-            shared: false,
-            role: 'owner' as const,
-            thumbnail: p.thumbnail,
-          }),
-        )
+        .map((p) => ({
+          id: p.id,
+          userId: 'guest',
+          title: p.title,
+          updatedAt: p.updatedAt,
+          createdAt: p.createdAt,
+          shared: false,
+          role: 'owner' as const,
+          thumbnail: p.thumbnail,
+        }))
         .sort((a: { updatedAt: number }, b: { updatedAt: number }) => b.updatedAt - a.updatedAt);
     } catch (error) {
       console.error('Failed to list local projects from IndexedDB:', error);
@@ -117,7 +114,12 @@ class LocalProjectsService {
     }
   }
 
-  async save(id: string, title: string, data: unknown, thumbnail?: string): Promise<ProjectRecord> {
+  async save(
+    id: string,
+    title: string,
+    data: JsonValue,
+    thumbnail?: string,
+  ): Promise<ProjectRecord> {
     try {
       const db = await this.initDB();
       const existing = await db.get(STORE_NAME, id);
@@ -150,7 +152,7 @@ class LocalProjectsService {
     }
   }
 
-  async create(title: string, data: unknown): Promise<ProjectRecord> {
+  async create(title: string, data: JsonValue): Promise<ProjectRecord> {
     const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     return this.save(id, title, data);
   }
@@ -180,7 +182,7 @@ class LocalProjectsService {
         try {
           const data = localStorage.getItem(key);
           if (data) {
-            const project = JSON.parse(data);
+            const project = localProjectSchema.parse(JSON.parse(data));
             projects.push({
               id: project.id,
               userId: 'guest',
@@ -206,7 +208,7 @@ class LocalProjectsService {
       const data = localStorage.getItem(this.getLocalStorageKey(id));
       if (!data) return null;
 
-      const project = JSON.parse(data);
+      const project = localProjectSchema.parse(JSON.parse(data));
       return {
         id: project.id,
         userId: 'guest',
@@ -227,7 +229,7 @@ class LocalProjectsService {
   private saveToLocalStorage(
     id: string,
     title: string,
-    data: unknown,
+    data: JsonValue,
     thumbnail?: string,
   ): ProjectRecord {
     const existing = this.getFromLocalStorage(id);
@@ -299,11 +301,13 @@ class LocalProjectsService {
 
       reader.onload = async (e) => {
         try {
-          const content = e.target?.result as string;
-          const imported = JSON.parse(content);
+          const content = z.string().parse(e.target?.result);
+          const imported = z
+            .object({ meta: z.object({ title: z.string().optional() }).optional(), data: z.json() })
+            .parse(JSON.parse(content));
 
           const title = imported.meta?.title || file.name.replace('.draw', '');
-          const data = imported.data || {};
+          const data = imported.data;
 
           const project = await this.create(title, data);
           resolve(project);

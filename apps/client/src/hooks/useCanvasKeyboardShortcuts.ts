@@ -2,11 +2,14 @@ import { useEffect, type MutableRefObject, type RefObject } from 'react';
 import { useDrawingStore } from '@/store/drawingStore';
 import { getCanvasToolShortcut, isEditableKeyboardTarget } from '@/lib/canvasKeyboard';
 import { postRendererViewport } from '@/lib/canvasRendererViewport';
+import type { RendererWorkerPort } from '@/lib/canvasRendererViewport';
 import { zoomViewportAtPoint } from '@/lib/canvasViewport';
+
+export type { RendererWorkerPort } from '@/lib/canvasRendererViewport';
 
 interface CanvasKeyboardShortcutOptions {
   canvasRef: RefObject<HTMLCanvasElement | null>;
-  workerRef: MutableRefObject<Worker | null>;
+  workerRef: MutableRefObject<RendererWorkerPort | null>;
   setIsShiftPressed: (isPressed: boolean) => void;
   onSpacePanStart: () => void;
   onSpacePanEnd: () => void;

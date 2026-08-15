@@ -15,10 +15,10 @@ export function PropertiesPanel() {
     setTextFontSize,
     brushOpacity,
     setBrushOpacity,
-    shapeFilled,
-    setShapeFilled,
-    autoShape,
-    setAutoShape,
+    drawingFilled,
+    setDrawingFilled,
+    autoDrawing,
+    setAutoDrawing,
     currentTool,
     eraserMode,
     setEraserMode,
@@ -232,19 +232,19 @@ export function PropertiesPanel() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-stone-700 dark:text-stone-200">Fill Shapes</span>
                   <Button
-                    variant={shapeFilled ? 'default' : 'secondary'}
+                    variant={drawingFilled ? 'default' : 'secondary'}
                     size="sm"
-                    onClick={() => setShapeFilled(!shapeFilled)}
+                    onClick={() => setDrawingFilled(!drawingFilled)}
                     className={cn(
                       'w-16',
-                      shapeFilled && 'bg-amber-300 text-stone-950 hover:bg-amber-200',
+                      drawingFilled && 'bg-amber-300 text-stone-950 hover:bg-amber-200',
                     )}
                   >
-                    {shapeFilled ? 'On' : 'Off'}
+                    {drawingFilled ? 'On' : 'Off'}
                   </Button>
                 </div>
 
-                {FEATURES.AUTO_SHAPE && (
+                {FEATURES.AUTO_DRAWING && (
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-sm text-stone-700 dark:text-stone-200">
                       Auto Shape
@@ -253,15 +253,15 @@ export function PropertiesPanel() {
                       </span>
                     </span>
                     <Button
-                      variant={autoShape ? 'default' : 'secondary'}
+                      variant={autoDrawing ? 'default' : 'secondary'}
                       size="sm"
-                      onClick={() => setAutoShape(!autoShape)}
+                      onClick={() => setAutoDrawing(!autoDrawing)}
                       className={cn(
                         'w-16',
-                        autoShape && 'bg-amber-300 text-stone-950 hover:bg-amber-200',
+                        autoDrawing && 'bg-amber-300 text-stone-950 hover:bg-amber-200',
                       )}
                     >
-                      {autoShape ? 'On' : 'Off'}
+                      {autoDrawing ? 'On' : 'Off'}
                     </Button>
                   </div>
                 )}

@@ -2,15 +2,22 @@ import { createHash, randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { collaborationCommitSchema } from '../validation/project.js';
+import type { JsonObject, JsonValue } from '@sketchflow/shared';
+import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
-export type CollaborationCommitKind = 'replace-project' | 'upsert-object' | 'delete-object' | 'batch';
+export type CollaborationCommitKind =
+  | 'replace-project'
+  | 'upsert-object'
+  | 'delete-object'
+  | 'batch';
 
 export interface CollaborationCommitInput {
   projectId: string;
   userId: string;
   operationId: string;
   expectedRevision: number;
-  data: unknown;
+  data: JsonValue;
   title?: string;
   kind: CollaborationCommitKind;
 }
@@ -20,7 +27,7 @@ export type CollaborationCommitResult =
       status: 'applied';
       operationId: string;
       revision: number;
-      data: unknown;
+      data: JsonValue;
       title: string;
     }
   | {
@@ -35,14 +42,17 @@ export type CollaborationCommitResult =
     }
   | { status: 'forbidden' | 'not_found' | 'invalid'; operationId: string };
 
-function stableSerialize(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+const jsonPrimitiveSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+function stableSerialize(value: JsonValue): string {
+  const primitive = jsonPrimitiveSchema.safeParse(value);
+  if (primitive.success) return JSON.stringify(primitive.data);
   if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
 
-  const record = value as Record<string, unknown>;
+  const record = jsonObjectSchema.parse(value);
   return `{${Object.keys(record)
     .sort()
-    .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
+    .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key] ?? null)}`)
     .join(',')}}`;
 }
 
@@ -68,7 +78,7 @@ export interface ProjectRecord {
   title: string;
   updatedAt: number;
   createdAt: number;
-  data: unknown;
+  data: JsonValue;
   revision?: number;
   shared?: boolean;
   shareToken?: string;
@@ -89,39 +99,53 @@ export interface FolderRecord {
   projectCount?: number;
 }
 
-type CanonicalDocument = Record<string, unknown> & { objects: Array<Record<string, unknown>> };
+type CanonicalDocument = JsonObject & { objects: JsonObject[] };
 
-function asCanonicalDocument(data: unknown): CanonicalDocument | null {
-  if (typeof data === 'string') {
+const jsonObjectSchema = z.record(z.string(), z.json());
+const canonicalDocumentSchema = z.object({ objects: z.array(jsonObjectSchema) }).catchall(z.json());
+const upsertObjectPayloadSchema = z.object({
+  object: z.object({ id: z.string().min(1).max(200) }).catchall(z.json()),
+});
+const deleteObjectPayloadSchema = z.object({ id: z.string().min(1).max(200) });
+const batchPayloadSchema = z.object({
+  operations: z
+    .array(
+      z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('upsert-object'), data: upsertObjectPayloadSchema }),
+        z.object({ kind: z.literal('delete-object'), data: deleteObjectPayloadSchema }),
+      ]),
+    )
+    .min(1)
+    .max(100),
+});
+
+function asCanonicalDocument(data: JsonValue): CanonicalDocument | null {
+  let candidate = data;
+  const serialized = z.string().safeParse(candidate);
+  if (serialized.success) {
     try {
-      data = JSON.parse(data);
+      candidate = JSON.parse(serialized.data);
     } catch {
       return null;
     }
   }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-  const document = data as Record<string, unknown>;
-  if (!Array.isArray(document.objects)) return null;
-  if (!document.objects.every((item) => item && typeof item === 'object' && !Array.isArray(item)))
-    return null;
-  return { ...document, objects: document.objects as Array<Record<string, unknown>> };
+  const document = canonicalDocumentSchema.safeParse(candidate);
+  return document.success ? document.data : null;
 }
 
 function applyObjectOperation(
-  currentData: unknown,
+  currentData: JsonValue,
   kind: Exclude<CollaborationCommitKind, 'replace-project' | 'batch'>,
-  payload: unknown,
+  payload: JsonValue,
 ): CanonicalDocument | null {
   const document = asCanonicalDocument(currentData);
-  if (!document || !payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-  const input = payload as Record<string, unknown>;
+  if (!document) return null;
 
   if (kind === 'upsert-object') {
-    const object = input.object;
-    if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
-    const id = (object as { id?: unknown }).id;
-    if (typeof id !== 'string' || id.length === 0 || id.length > 200) return null;
-    const nextObject = object as Record<string, unknown>;
+    const input = upsertObjectPayloadSchema.safeParse(payload);
+    if (!input.success) return null;
+    const nextObject = input.data.object;
+    const id = nextObject.id;
     const index = document.objects.findIndex((entry) => entry.id === id);
     const objects = [...document.objects];
     if (index === -1) objects.push(nextObject);
@@ -129,29 +153,30 @@ function applyObjectOperation(
     return { ...document, objects };
   }
 
-  const id = input.id;
-  if (typeof id !== 'string' || id.length === 0 || id.length > 200) return null;
-  return { ...document, objects: document.objects.filter((entry) => entry.id !== id) };
+  const input = deleteObjectPayloadSchema.safeParse(payload);
+  if (!input.success) return null;
+  return { ...document, objects: document.objects.filter((entry) => entry.id !== input.data.id) };
 }
 
 /** Applies a group atomically so undo/redo never falls back to a board snapshot. */
-function applyBatchOperation(currentData: unknown, payload: unknown): CanonicalDocument | null {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-  const operations = (payload as { operations?: unknown }).operations;
-  if (!Array.isArray(operations) || operations.length === 0 || operations.length > 100) return null;
+function applyBatchOperation(currentData: JsonValue, payload: JsonValue): CanonicalDocument | null {
+  const batch = batchPayloadSchema.safeParse(payload);
+  if (!batch.success) return null;
 
   let data: CanonicalDocument | null = asCanonicalDocument(currentData);
-  for (const operation of operations) {
-    if (!operation || typeof operation !== 'object' || Array.isArray(operation)) return null;
-    const { kind, data: operationData } = operation as { kind?: unknown; data?: unknown };
-    if (kind !== 'upsert-object' && kind !== 'delete-object') return null;
-    data = applyObjectOperation(data, kind, operationData);
+  for (const operation of batch.data.operations) {
+    data = applyObjectOperation(data, operation.kind, operation.data);
     if (!data) return null;
   }
   return data;
 }
 
 export class ProjectService {
+  public constructor(
+    private readonly database: typeof prisma = prisma,
+    private readonly log: Pick<typeof logger, 'debug' | 'info' | 'warn' | 'error'> = logger,
+  ) {}
+
   /**
    * Atomically applies a complete canonical project document. Project.data and
    * Project.revision are the durable state authority; the operation table only
@@ -176,7 +201,7 @@ export class ProjectService {
     const receiptHash = collaborationReceiptHash(input);
 
     const commit = async (): Promise<CollaborationCommitResult> =>
-      prisma.$transaction(async (tx) => {
+      this.database.$transaction(async (tx) => {
         const existingOperation = await tx.collaborationOperation.findUnique({
           where: {
             projectId_operationId: {
@@ -229,6 +254,7 @@ export class ProjectService {
           where: { id: input.projectId, revision: project.revision },
           data: {
             title,
+            // SAFETY: `data` is produced by the canonical Zod JSON-object schemas above.
             data: data as object,
             revision: { increment: 1 },
             updatedAt: new Date(),
@@ -292,8 +318,8 @@ export class ProjectService {
       // A concurrent identical operation can race its first receipt lookup. The
       // unique receipt index makes the winner durable; resolve the loser as a
       // duplicate only when its complete canonical payload matches.
-      if (this.isUniqueConstraintError(error)) {
-        const existingOperation = await prisma.collaborationOperation.findUnique({
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existingOperation = await this.database.collaborationOperation.findUnique({
           where: {
             projectId_operationId: {
               projectId: input.projectId,
@@ -311,18 +337,9 @@ export class ProjectService {
             : { status: 'invalid', operationId: input.operationId };
         }
       }
-      logger.error('Failed to commit canonical collaboration operation', error);
+      this.log.error('Failed to commit canonical collaboration operation', error);
       throw error;
     }
-  }
-
-  private isUniqueConstraintError(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'P2002'
-    );
   }
 
   // Permission checking helper
@@ -332,7 +349,7 @@ export class ProjectService {
     action: 'view' | 'edit' | 'delete' | 'share' | 'manage',
   ): Promise<boolean> {
     try {
-      const project = await prisma.project.findUnique({
+      const project = await this.database.project.findUnique({
         where: { id: projectId },
         include: {
           collaborators: {
@@ -363,7 +380,7 @@ export class ProjectService {
           return false;
       }
     } catch (e) {
-      logger.error('Permission check failed', e);
+      this.log.error('Permission check failed', e);
       return false;
     }
   }
@@ -389,7 +406,7 @@ export class ProjectService {
 
       try {
         // Get projects owned by user
-        ownedProjects = await prisma.project.findMany({
+        ownedProjects = await this.database.project.findMany({
           where: { userId },
           select: {
             id: true,
@@ -408,7 +425,7 @@ export class ProjectService {
         });
 
         // Get projects where user is a collaborator
-        collaboratedProjects = await prisma.project.findMany({
+        collaboratedProjects = await this.database.project.findMany({
           where: {
             collaborators: {
               some: { userId },
@@ -431,10 +448,10 @@ export class ProjectService {
         });
       } catch (e: unknown) {
         // Collaborators table might not exist yet - fallback to simple query
-        logger.warn('Collaborators query failed, falling back to simple query', {
+        this.log.warn('Collaborators query failed, falling back to simple query', {
           error: e instanceof Error ? e.message : String(e),
         });
-        const projects = await prisma.project.findMany({
+        const projects = await this.database.project.findMany({
           where: { userId },
           select: {
             id: true,
@@ -478,11 +495,13 @@ export class ProjectService {
           );
           const role: 'owner' | 'editor' | 'viewer' = isOwner
             ? 'owner'
-            : (collab?.role as 'editor' | 'viewer') || 'viewer';
+            : collab?.role === 'editor'
+              ? 'editor'
+              : 'viewer';
 
           // Debug log if there's a mismatch
           if (isOwner && collab) {
-            logger.warn(
+            this.log.warn(
               `User ${userId} is both owner and collaborator of project ${p.id}. This shouldn't happen!`,
               {
                 projectId: p.id,
@@ -507,7 +526,7 @@ export class ProjectService {
         })
         .sort((a, b) => b.updatedAt - a.updatedAt);
     } catch (e) {
-      logger.error('Failed to list projects', e);
+      this.log.error('Failed to list projects', e);
       return [];
     }
   }
@@ -518,7 +537,7 @@ export class ProjectService {
       let collaborators: { userId: string; role: string }[] = [];
 
       try {
-        project = await prisma.project.findUnique({
+        project = await this.database.project.findUnique({
           where: { id },
           include: {
             collaborators: {
@@ -529,7 +548,7 @@ export class ProjectService {
         collaborators = project?.collaborators || [];
       } catch {
         // Fallback if collaborators table doesn't exist
-        project = await prisma.project.findUnique({
+        project = await this.database.project.findUnique({
           where: { id },
         });
       }
@@ -545,7 +564,7 @@ export class ProjectService {
         return null;
       }
 
-      const role = isOwner ? 'owner' : (collaborator?.role as 'editor' | 'viewer') || 'viewer';
+      const role = isOwner ? 'owner' : collaborator?.role === 'editor' ? 'editor' : 'viewer';
 
       return {
         id: project.id,
@@ -561,14 +580,14 @@ export class ProjectService {
         collaborators,
       };
     } catch (e) {
-      logger.error('Failed to get project', e);
+      this.log.error('Failed to get project', e);
       return null;
     }
   }
 
   public async getByShareToken(shareToken: string): Promise<ProjectRecord | null> {
     try {
-      const project = await prisma.project.findUnique({
+      const project = await this.database.project.findUnique({
         where: { shareToken },
         include: {
           collaborators: {
@@ -599,14 +618,14 @@ export class ProjectService {
         collaborators: project.collaborators,
       };
     } catch (e) {
-      logger.error('Failed to get project by share token', e);
+      this.log.error('Failed to get project by share token', e);
       return null;
     }
   }
 
   public async shareProject(id: string, userId: string): Promise<ProjectRecord | null> {
     try {
-      const existing = await prisma.project.findUnique({
+      const existing = await this.database.project.findUnique({
         where: { id },
       });
 
@@ -616,7 +635,7 @@ export class ProjectService {
 
       const shareToken = randomBytes(32).toString('base64url');
       const shareExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      const project = await prisma.project.update({
+      const project = await this.database.project.update({
         where: { id },
         data: {
           shared: true,
@@ -644,14 +663,14 @@ export class ProjectService {
         collaborators: project.collaborators,
       };
     } catch (e) {
-      logger.error('Failed to share project', e);
+      this.log.error('Failed to share project', e);
       return null;
     }
   }
 
   public async unshareProject(id: string, userId: string): Promise<ProjectRecord | null> {
     try {
-      const existing = await prisma.project.findUnique({
+      const existing = await this.database.project.findUnique({
         where: { id },
       });
 
@@ -659,7 +678,7 @@ export class ProjectService {
         return null;
       }
 
-      const project = await prisma.project.update({
+      const project = await this.database.project.update({
         where: { id },
         data: {
           shared: false,
@@ -686,7 +705,7 @@ export class ProjectService {
         collaborators: project.collaborators,
       };
     } catch (e) {
-      logger.error('Failed to unshare project', e);
+      this.log.error('Failed to unshare project', e);
       return null;
     }
   }
@@ -698,12 +717,12 @@ export class ProjectService {
     role: 'editor' | 'viewer' = 'editor',
   ): Promise<boolean> {
     try {
-      const project = await prisma.project.findUnique({
+      const project = await this.database.project.findUnique({
         where: { id: projectId },
       });
 
       if (!project || project.userId !== ownerUserId) {
-        logger.warn(`Failed to add collaborator: project not found or not owner`, {
+        this.log.warn(`Failed to add collaborator: project not found or not owner`, {
           projectId,
           ownerUserId,
           projectUserId: project?.userId,
@@ -713,7 +732,7 @@ export class ProjectService {
 
       // Can't add owner as collaborator
       if (collaboratorUserId === ownerUserId) {
-        logger.warn(`Attempted to add owner as collaborator`, {
+        this.log.warn(`Attempted to add owner as collaborator`, {
           projectId,
           userId: ownerUserId,
         });
@@ -722,7 +741,7 @@ export class ProjectService {
 
       // Extra safety: Check if collaborator is somehow the project owner
       if (collaboratorUserId === project.userId) {
-        logger.warn(`Collaborator userId matches project owner`, {
+        this.log.warn(`Collaborator userId matches project owner`, {
           projectId,
           collaboratorUserId,
           projectUserId: project.userId,
@@ -730,7 +749,7 @@ export class ProjectService {
         return false;
       }
 
-      await prisma.projectCollaborator.upsert({
+      await this.database.projectCollaborator.upsert({
         where: {
           projectId_userId: {
             projectId,
@@ -747,13 +766,13 @@ export class ProjectService {
         },
       });
 
-      logger.info(
+      this.log.info(
         `Added collaborator ${collaboratorUserId} with role ${role} to project ${projectId}`,
       );
 
       return true;
     } catch (e) {
-      logger.error('Failed to add collaborator', e);
+      this.log.error('Failed to add collaborator', e);
       return false;
     }
   }
@@ -763,7 +782,7 @@ export class ProjectService {
    */
   public async cleanupCorruptCollaborators(): Promise<void> {
     try {
-      const projects = await prisma.project.findMany({
+      const projects = await this.database.project.findMany({
         include: {
           collaborators: true,
         },
@@ -772,8 +791,8 @@ export class ProjectService {
       for (const project of projects) {
         const ownerAsCollaborator = project.collaborators.find((c) => c.userId === project.userId);
         if (ownerAsCollaborator) {
-          logger.warn(`Found owner as collaborator in project ${project.id}, cleaning up...`);
-          await prisma.projectCollaborator.delete({
+          this.log.warn(`Found owner as collaborator in project ${project.id}, cleaning up...`);
+          await this.database.projectCollaborator.delete({
             where: {
               id: ownerAsCollaborator.id,
             },
@@ -781,7 +800,7 @@ export class ProjectService {
         }
       }
     } catch (e) {
-      logger.error('Failed to cleanup corrupt collaborators', e);
+      this.log.error('Failed to cleanup corrupt collaborators', e);
     }
   }
 
@@ -791,7 +810,7 @@ export class ProjectService {
     collaboratorUserId: string,
   ): Promise<boolean> {
     try {
-      const project = await prisma.project.findUnique({
+      const project = await this.database.project.findUnique({
         where: { id: projectId },
       });
 
@@ -799,7 +818,7 @@ export class ProjectService {
         return false;
       }
 
-      await prisma.projectCollaborator.deleteMany({
+      await this.database.projectCollaborator.deleteMany({
         where: {
           projectId,
           userId: collaboratorUserId,
@@ -808,7 +827,7 @@ export class ProjectService {
 
       return true;
     } catch (e) {
-      logger.error('Failed to remove collaborator', e);
+      this.log.error('Failed to remove collaborator', e);
       return false;
     }
   }
@@ -818,7 +837,7 @@ export class ProjectService {
     userId: string,
   ): Promise<{ userId: string; role: string }[]> {
     try {
-      const project = await prisma.project.findUnique({
+      const project = await this.database.project.findUnique({
         where: { id: projectId },
         include: { collaborators: true },
       });
@@ -832,17 +851,18 @@ export class ProjectService {
 
       return project.collaborators.map((c) => ({ userId: c.userId, role: c.role }));
     } catch (e) {
-      logger.error('Failed to get collaborators', e);
+      this.log.error('Failed to get collaborators', e);
       return [];
     }
   }
 
-  public async create(userId: string, title: string, data: unknown): Promise<ProjectRecord> {
+  public async create(userId: string, title: string, data: JsonValue): Promise<ProjectRecord> {
     try {
-      const project = await prisma.project.create({
+      const project = await this.database.project.create({
         data: {
           userId,
           title: title || 'Untitled',
+          // SAFETY: Callers supply the shared recursive JSON wire contract.
           data: data as object,
           shared: false,
         },
@@ -867,14 +887,14 @@ export class ProjectService {
         collaborators: project.collaborators,
       };
     } catch (e) {
-      logger.error('Failed to create project', e);
+      this.log.error('Failed to create project', e);
       throw e;
     }
   }
 
   public async delete(id: string, userId: string): Promise<boolean> {
     try {
-      const existing = await prisma.project.findUnique({
+      const existing = await this.database.project.findUnique({
         where: { id },
       });
 
@@ -885,13 +905,13 @@ export class ProjectService {
         return false;
       }
 
-      await prisma.project.delete({
+      await this.database.project.delete({
         where: { id },
       });
 
       return true;
     } catch (e) {
-      logger.error('Failed to delete project', e);
+      this.log.error('Failed to delete project', e);
       return false;
     }
   }
@@ -899,7 +919,7 @@ export class ProjectService {
   // Folder methods
   public async listFolders(userId: string): Promise<FolderRecord[]> {
     try {
-      const folders = await prisma.folder.findMany({
+      const folders = await this.database.folder.findMany({
         where: { userId },
         include: {
           _count: {
@@ -920,7 +940,7 @@ export class ProjectService {
         projectCount: f._count.projects,
       }));
     } catch (e) {
-      logger.error('Failed to list folders', e);
+      this.log.error('Failed to list folders', e);
       return [];
     }
   }
@@ -933,10 +953,10 @@ export class ProjectService {
   ): Promise<FolderRecord> {
     try {
       if (parentId) {
-        const parent = await prisma.folder.findFirst({ where: { id: parentId, userId } });
+        const parent = await this.database.folder.findFirst({ where: { id: parentId, userId } });
         if (!parent) throw new Error('Parent folder not found');
       }
-      const folder = await prisma.folder.create({
+      const folder = await this.database.folder.create({
         data: {
           userId,
           name,
@@ -961,7 +981,7 @@ export class ProjectService {
         projectCount: folder._count.projects,
       };
     } catch (e) {
-      logger.error('Failed to create folder', e);
+      this.log.error('Failed to create folder', e);
       throw e;
     }
   }
@@ -974,7 +994,7 @@ export class ProjectService {
     parentId?: string | null,
   ): Promise<FolderRecord | null> {
     try {
-      const existing = await prisma.folder.findUnique({
+      const existing = await this.database.folder.findUnique({
         where: { id },
       });
 
@@ -984,11 +1004,11 @@ export class ProjectService {
 
       if (parentId) {
         if (parentId === id) return null;
-        const parent = await prisma.folder.findFirst({ where: { id: parentId, userId } });
+        const parent = await this.database.folder.findFirst({ where: { id: parentId, userId } });
         if (!parent) return null;
       }
 
-      const folder = await prisma.folder.update({
+      const folder = await this.database.folder.update({
         where: { id },
         data: {
           ...(name !== undefined && { name }),
@@ -1013,14 +1033,14 @@ export class ProjectService {
         projectCount: folder._count.projects,
       };
     } catch (e) {
-      logger.error('Failed to update folder', e);
+      this.log.error('Failed to update folder', e);
       return null;
     }
   }
 
   public async deleteFolder(id: string, userId: string): Promise<boolean> {
     try {
-      const existing = await prisma.folder.findUnique({
+      const existing = await this.database.folder.findUnique({
         where: { id },
       });
 
@@ -1029,13 +1049,13 @@ export class ProjectService {
       }
 
       // Delete folder (projects will have folderId set to null due to onDelete: SetNull)
-      await prisma.folder.delete({
+      await this.database.folder.delete({
         where: { id },
       });
 
       return true;
     } catch (e) {
-      logger.error('Failed to delete folder', e);
+      this.log.error('Failed to delete folder', e);
       return false;
     }
   }
@@ -1047,10 +1067,10 @@ export class ProjectService {
   ): Promise<boolean> {
     try {
       if (folderId) {
-        const folder = await prisma.folder.findFirst({ where: { id: folderId, userId } });
+        const folder = await this.database.folder.findFirst({ where: { id: folderId, userId } });
         if (!folder) return false;
       }
-      const project = await prisma.project.findUnique({
+      const project = await this.database.project.findUnique({
         where: { id: projectId },
       });
 
@@ -1060,7 +1080,7 @@ export class ProjectService {
 
       // Verify folder exists and belongs to user (if not null)
       if (folderId) {
-        const folder = await prisma.folder.findUnique({
+        const folder = await this.database.folder.findUnique({
           where: { id: folderId },
         });
         if (!folder || folder.userId !== userId) {
@@ -1068,14 +1088,14 @@ export class ProjectService {
         }
       }
 
-      await prisma.project.update({
+      await this.database.project.update({
         where: { id: projectId },
         data: { folderId },
       });
 
       return true;
     } catch (e) {
-      logger.error('Failed to move project to folder', e);
+      this.log.error('Failed to move project to folder', e);
       return false;
     }
   }

@@ -14,8 +14,13 @@ const ATTR_DEPLOYMENT_ENVIRONMENT = 'deployment.environment';
 // Check if OTel is enabled via env vars
 const isOtelEnabled = !!(process.env.OTEL_EXPORTER_OTLP_ENDPOINT || process.env.HONEYCOMB_API_KEY);
 
+interface OtlpConfig {
+  endpoint: string;
+  headers: Record<string, string>;
+}
+
 // Build OTLP endpoint and headers from env
-function getOtlpConfig(): { endpoint: string; headers: Record<string, string> } {
+function getOtlpConfig(): OtlpConfig {
   // If using Honeycomb convenience vars
   if (process.env.HONEYCOMB_API_KEY) {
     const dataset = process.env.HONEYCOMB_DATASET || 'sketchflow';
