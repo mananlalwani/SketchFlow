@@ -21,9 +21,9 @@
   },
   "devDependencies": {
     "@oxlint/plugins": "1.78.0",
-    "concurrently": "^8.2.2",
+    "concurrently": "^10.0.4",
     "oxlint": "1.78.0",
-    "prettier": "3.6.2"
+    "prettier": "3.9.6"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
