@@ -115,10 +115,15 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
   const { isGuest } = useAuthStore();
   const saveTimeoutRef = useRef<number | undefined>(undefined);
   const recoveredProjectRef = useRef<string | undefined>(undefined);
+  const skipRecoveredBackupRef = useRef(false);
   const { toast } = useToast();
 
   useEffect(() => {
     if (!currentProjectId || !unsavedChanges || projectRole === 'viewer') return;
+    if (skipRecoveredBackupRef.current) {
+      skipRecoveredBackupRef.current = false;
+      return;
+    }
 
     void (async () => {
       try {
@@ -302,6 +307,7 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
         const backup = await getEmergencyBackup(currentProjectId);
         if (!backup) return;
         if (Date.now() - backup.timestamp < 60 * 60 * 1000) {
+          skipRecoveredBackupRef.current = true;
           useDrawingStore.getState().setObjects(deserializeProject(backup.data));
           useDrawingStore.getState().requestFullRedraw();
           recoveredProjectRef.current = currentProjectId;
