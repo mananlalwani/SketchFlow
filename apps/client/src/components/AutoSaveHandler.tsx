@@ -305,10 +305,20 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
           useDrawingStore.getState().setObjects(deserializeProject(backup.data));
           useDrawingStore.getState().requestFullRedraw();
           recoveredProjectRef.current = currentProjectId;
-          toast({
-            title: 'Recovered unsaved changes',
-            description: 'A recent local backup was restored. Review it and save when ready.',
-          });
+          const noticeKey = `sketchflow-recovery-notice:${currentProjectId}`;
+          let noticeShown = false;
+          try {
+            noticeShown = window.localStorage.getItem(noticeKey) === String(backup.timestamp);
+            if (!noticeShown) window.localStorage.setItem(noticeKey, String(backup.timestamp));
+          } catch {
+            // Recovery must still work when browser storage is unavailable.
+          }
+          if (!noticeShown) {
+            toast({
+              title: 'Recovered unsaved changes',
+              description: 'A recent local backup was restored. Review it and save when ready.',
+            });
+          }
           console.info('Recovered unsaved local changes from IndexedDB backup.');
         } else {
           await removeEmergencyBackup(currentProjectId);
