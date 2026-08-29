@@ -85,7 +85,12 @@ jobs:
     permissions:
       contents: read
     needs: changes
-    if: needs.changes.outputs.container == 'true'
+    # Pull requests get a loadable image and smoke test. On main, the publish
+    # job below performs the only production image build, avoiding a duplicate
+    # multi-minute Docker build for the same commit.
+    if: >-
+      needs.changes.outputs.container == 'true' &&
+      github.event_name != 'push'
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -128,7 +133,8 @@ jobs:
     needs: [changes, test, container-build]
     if: >-
       always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-      needs.test.result == 'success' && needs.container-build.result == 'success' &&
+      needs.test.result == 'success' &&
+      (needs.container-build.result == 'success' || needs.container-build.result == 'skipped') &&
       needs.changes.outputs.container == 'true'
     permissions:
       contents: read
