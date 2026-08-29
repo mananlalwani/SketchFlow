@@ -3,7 +3,18 @@ import { useDrawingStore } from '@/store/drawingStore';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Save, Trash2, Cloud, Loader2, Share2, Download, AlertCircle, PenTool } from 'lucide-react';
+import {
+  Save,
+  Trash2,
+  Cloud,
+  Loader2,
+  Share2,
+  Download,
+  AlertCircle,
+  PenTool,
+  Undo2,
+  Redo2,
+} from 'lucide-react';
 import { serializeProject } from '@/lib/utils';
 import { exportAsPNG, exportAsSVG, downloadFile, type ExportQuality } from '@/lib/export';
 import { createProject } from '@/lib/api';
@@ -35,6 +46,10 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     clearCanvas,
     requestFullRedraw,
     objects,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     currentProjectId,
     setCurrentProject,
     newProject,
@@ -279,6 +294,30 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
             >
               <Save className="w-4 h-4 mr-2" />
               Save
+            </Button>
+
+            <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={undo}
+              disabled={!canUndo() || projectRole === 'viewer'}
+              title="Undo (Ctrl+Z)"
+              aria-label="Undo"
+              className="text-stone-500 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-400 dark:hover:bg-white/[0.06] dark:hover:text-stone-50"
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={redo}
+              disabled={!canRedo() || projectRole === 'viewer'}
+              title="Redo (Ctrl+Shift+Z)"
+              aria-label="Redo"
+              className="text-stone-500 hover:bg-stone-200/70 hover:text-stone-950 dark:text-stone-400 dark:hover:bg-white/[0.06] dark:hover:text-stone-50"
+            >
+              <Redo2 className="h-4 w-4" />
             </Button>
 
             <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
