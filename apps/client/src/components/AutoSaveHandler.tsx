@@ -314,8 +314,11 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
           const noticeKey = `sketchflow-recovery-notice:${currentProjectId}`;
           let noticeShown = false;
           try {
-            noticeShown = window.localStorage.getItem(noticeKey) === String(backup.timestamp);
-            if (!noticeShown) window.localStorage.setItem(noticeKey, String(backup.timestamp));
+            // A recovery backup may receive a newer timestamp while the
+            // restored document is settling. A project-level acknowledgement
+            // prevents that timestamp churn from repeating the banner.
+            noticeShown = window.localStorage.getItem(noticeKey) !== null;
+            if (!noticeShown) window.localStorage.setItem(noticeKey, 'shown');
           } catch {
             // Recovery must still work when browser storage is unavailable.
           }
