@@ -287,11 +287,6 @@ function findCorners(points: Point[], angleThreshold: number = Math.PI * 0.6): P
   const minSegmentLength = 8; // Increased minimum distance to reduce noise
   const minCornerSeparation = 15; // Minimum distance between detected corners
 
-  const minCornerAngleDeg = (((Math.PI - angleThreshold) * 180) / Math.PI).toFixed(1);
-  console.log(
-    `findCorners: Processing ${points.length} points, minCornerAngle=${minCornerAngleDeg}°`,
-  );
-
   for (let i = 1; i < points.length - 1; i++) {
     const p1 = points[i - 1];
     const p2 = points[i];
@@ -326,17 +321,10 @@ function findCorners(points: Point[], angleThreshold: number = Math.PI * 0.6): P
       const minCornerAngle = Math.PI - angleThreshold; // Convert from "deviation from straight" to "minimum angle for corner"
       if (angle > minCornerAngle) {
         corners.push(p2);
-        if (corners.length <= 10) {
-          // Only log first 10 to avoid spam
-          console.log(
-            `  Corner ${corners.length}: angle=${((angle * 180) / Math.PI).toFixed(1)}° at (${p2.x.toFixed(1)}, ${p2.y.toFixed(1)})`,
-          );
-        }
       }
     }
   }
 
-  console.log(`findCorners: Found ${corners.length} total corners`);
   return corners;
 }
 
@@ -412,30 +400,20 @@ function determineDominantDirection(
   const totalMovement = horizontalMovement + verticalMovement;
   const circularRatio = circularIndicator / (totalMovement + 1); // Fixed: don't square the denominator
 
-  console.log(
-    `Direction analysis: horizontal=${horizontalMovement.toFixed(1)}, vertical=${verticalMovement.toFixed(1)}, circularIndicator=${circularIndicator.toFixed(1)}, circularRatio=${circularRatio.toFixed(2)}`,
-  );
-
   if (circularRatio > 2) {
     // Lowered from 5 to 2
-    console.log(`  -> CIRCULAR (ratio ${circularRatio.toFixed(2)} > 2)`);
     return 'circular'; // Lower threshold for circular detection
   }
 
   const horizontalRatio = horizontalMovement / totalMovement;
 
-  console.log(`  horizontalRatio=${horizontalRatio.toFixed(3)}`);
-
   if (horizontalRatio > 0.7) {
-    console.log(`  -> HORIZONTAL (ratio ${horizontalRatio.toFixed(3)} > 0.7)`);
     return 'horizontal';
   }
   if (horizontalRatio < 0.3) {
-    console.log(`  -> VERTICAL (ratio ${horizontalRatio.toFixed(3)} < 0.3)`);
     return 'vertical';
   }
 
-  console.log(`  -> DIAGONAL (ratio ${horizontalRatio.toFixed(3)} between 0.3-0.7)`);
   return 'diagonal';
 }
 

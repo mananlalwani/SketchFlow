@@ -19,11 +19,6 @@ function getClientEnv(): ClientEnv {
   // In Vite, environment variables are exposed via import.meta.env
   const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-  if (!clerkKey) {
-    console.error('❌ VITE_CLERK_PUBLISHABLE_KEY is required');
-    // Don't crash in browser - show error in console
-  }
-
   // API URL defaults to current origin (for same-origin deployment)
   const apiUrl = import.meta.env.VITE_API_URL || '';
 

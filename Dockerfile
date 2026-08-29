@@ -17,7 +17,7 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 
 # Copy only workspace manifests before installing. This keeps the dependency
 # layer reusable for code-only changes, which are the common CI case.

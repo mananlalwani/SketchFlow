@@ -7,10 +7,8 @@ import { Save, Trash2, Cloud, Loader2, Share2, Download, AlertCircle, PenTool } 
 import { serializeProject } from '@/lib/utils';
 import { exportAsPNG, exportAsSVG, downloadFile, type ExportQuality } from '@/lib/export';
 import { createProject } from '@/lib/api';
-import {
-  activeProjectWriteCoordinator,
-  ProjectWriteResetError,
-} from '@/lib/projectWriteCoordinator';
+import { ProjectWriteResetError } from '@/lib/projectWriteCoordinator';
+import { saveActiveProject } from '@/lib/saveActiveProject';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +21,8 @@ import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { ProjectShareDialog } from '@/components/ProjectShareDialog';
 import { SettingsDropdown } from '@/components/SettingsDropdown';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { useAuth, SignInButton, SignUpButton, useClerk } from '@clerk/clerk-react';
+import { useAuth, useClerk } from '@clerk/clerk-react';
+import { AuthTrigger } from '@/components/auth/AuthTrigger';
 import { User } from 'lucide-react';
 
 export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean }) {
@@ -32,14 +31,13 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     setProjectTitle,
     unsavedChanges,
     saveStatus,
-    documentVersion,
     projectRole,
     clearCanvas,
     requestFullRedraw,
     objects,
     currentProjectId,
     setCurrentProject,
-    projectRevision,
+    newProject,
     lastSavedAt,
   } = useDrawingStore();
 
@@ -51,9 +49,8 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
   const [isExporting, setIsExporting] = useState(false);
 
   const goToHome = useCallback(() => {
-    setCurrentProject(undefined);
-    clearCanvas();
-  }, [setCurrentProject, clearCanvas]);
+    newProject();
+  }, [newProject]);
 
   const currentProject = useMemo(() => {
     if (!currentProjectId || currentProjectId.startsWith('offline-')) return null;
@@ -70,36 +67,14 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
 
   const handleSave = useCallback(async () => {
     if (projectRole === 'viewer') return;
-    const savedProjectId = currentProjectId;
-    const savedDocumentVersion = documentVersion;
-    const savedTitle = projectTitle || 'Untitled';
-    const payload = serializeProject(objects, 4096, 4096);
     setIsSaving(true);
 
     try {
-      // Manual save is an explicit retry decision, unlike background autosave.
-      activeProjectWriteCoordinator.resume(savedProjectId ?? 'active-draft');
-      const saved = await activeProjectWriteCoordinator.enqueue({
-        projectKey: savedProjectId ?? 'active-draft',
-        projectId: savedProjectId,
-        title: savedTitle,
-        data: payload,
-        documentVersion: savedDocumentVersion,
-        expectedRevision: projectRevision,
+      const result = await saveActiveProject({
         cloud: !isGuest,
         tokenProvider: isGuest ? undefined : getToken,
       });
-      const currentState = useDrawingStore.getState();
-      const isCurrentSnapshot =
-        currentState.documentVersion === savedDocumentVersion &&
-        (savedProjectId
-          ? currentState.currentProjectId === savedProjectId
-          : !currentState.currentProjectId);
-      if (!isCurrentSnapshot) return;
-
-      if (!savedProjectId) currentState.setCurrentProject(saved.id);
-      currentState.setProjectRevision(saved.revision);
-      currentState.markSaved(savedDocumentVersion);
+      if (result !== 'saved') return;
       toast({
         title: isGuest ? 'Saved locally' : 'Saved to cloud',
         description: isGuest ? 'Sign in to save to cloud.' : undefined,
@@ -115,17 +90,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     } finally {
       setIsSaving(false);
     }
-  }, [
-    currentProjectId,
-    documentVersion,
-    getToken,
-    isGuest,
-    objects,
-    projectRevision,
-    projectRole,
-    projectTitle,
-    toast,
-  ]);
+  }, [getToken, isGuest, projectRole, toast]);
 
   const handleClear = () => {
     if (window.confirm('Are you sure you want to clear the canvas?')) {
@@ -226,7 +191,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
             <span className="block font-semibold tracking-[-0.035em] text-stone-950 dark:text-stone-50">
               SketchFlow
             </span>
-            <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+            <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.18em] text-stone-600 dark:text-stone-400">
               Canvas
             </span>
           </span>
@@ -425,7 +390,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
 
         {!isLoading && !isAuthenticated && clerk.loaded && (
           <>
-            <SignInButton mode="modal">
+            <AuthTrigger mode="sign-in">
               <Button
                 variant="ghost"
                 size="sm"
@@ -434,15 +399,15 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
                 <User className="w-4 h-4 mr-2" />
                 Sign In
               </Button>
-            </SignInButton>
-            <SignUpButton mode="modal">
+            </AuthTrigger>
+            <AuthTrigger mode="sign-up">
               <Button
                 size="sm"
                 className="bg-amber-300 text-slate-950 hover:bg-amber-200 dark:bg-amber-300 dark:text-slate-950 dark:hover:bg-amber-200"
               >
                 Sign Up
               </Button>
-            </SignUpButton>
+            </AuthTrigger>
           </>
         )}
 
@@ -492,11 +457,11 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         )}
         <ConnectionStatus />
         {!isLoading && !isAuthenticated && clerk.loaded && (
-          <SignInButton mode="modal">
+          <AuthTrigger mode="sign-in">
             <Button variant="ghost" size="icon" title="Sign in" aria-label="Sign in">
               <User className="h-4 w-4" />
             </Button>
-          </SignInButton>
+          </AuthTrigger>
         )}
         <SettingsDropdown />
       </div>

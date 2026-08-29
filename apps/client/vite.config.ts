@@ -68,11 +68,15 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/',
+        navigateFallback: '/index.html',
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         // PDF tooling is requested explicitly and must not inflate first-install precache.
         globIgnores: [
           'assets/app/pdf-*.js',
+          'assets/app/jspdf.*.js',
+          'assets/app/html2canvas.*.js',
+          'assets/app/purify.*.js',
+          'assets/app/index.es-*.js',
           'assets/workers/pdf.worker.*',
           'assets/app/DrawingCanvas-*.js',
           'assets/rendererWorker-*.js',
@@ -122,7 +126,7 @@ export default defineConfig({
         // so an application-only deploy reuses large vendor layers on a VPS.
         entryFileNames: 'assets/app/[name]-[hash].js',
         chunkFileNames: (chunk) => {
-          if (['vendor', 'socket', 'ui', 'clerk'].includes(chunk.name)) {
+          if (['socket', 'ui', 'clerk', 'router', 'state'].includes(chunk.name)) {
             return 'assets/vendor/[name]-[hash].js';
           }
           if (chunk.name.toLowerCase().includes('worker')) {
@@ -137,10 +141,11 @@ export default defineConfig({
           return 'assets/app/[name]-[hash][extname]';
         },
         manualChunks: {
-          vendor: ['react', 'react-dom'],
           socket: ['socket.io-client'],
           ui: ['lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-select'],
           clerk: ['@clerk/clerk-react'],
+          router: ['react-router-dom'],
+          state: ['zustand', 'zod'],
         },
       },
     },

@@ -161,7 +161,7 @@ class LocalProjectsService {
     try {
       const db = await this.initDB();
       await db.delete(STORE_NAME, id);
-      return true;
+      return this.deleteFromLocalStorage(id);
     } catch (error) {
       console.error('Failed to delete local project:', error);
       return this.deleteFromLocalStorage(id);
@@ -359,8 +359,11 @@ class LocalProjectsService {
     try {
       const db = await this.initDB();
       await db.clear(STORE_NAME);
+    } catch (error) {
+      console.error('Failed to clear IndexedDB projects:', error);
+    }
 
-      // Also clear localStorage
+    try {
       const keys: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -370,7 +373,7 @@ class LocalProjectsService {
       }
       keys.forEach((key) => localStorage.removeItem(key));
     } catch (error) {
-      console.error('Failed to clear local projects:', error);
+      console.error('Failed to clear localStorage projects:', error);
     }
   }
 }

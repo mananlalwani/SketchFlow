@@ -1,4 +1,5 @@
-import { SignInButton, SignUpButton, UserButton, useClerk } from '@clerk/clerk-react';
+import { useClerk, useUser } from '@clerk/clerk-react';
+import { AuthTrigger } from '@/components/auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { User } from 'lucide-react';
@@ -6,16 +7,33 @@ import { User } from 'lucide-react';
 export function FloatingAuthButton() {
   const { user, isAuthenticated, isLoading } = useAuthStore();
   const clerk = useClerk();
+  const { user: clerkUser } = useUser();
 
   if (isLoading) return null;
 
   return (
     <div className="pointer-events-auto">
       {isAuthenticated && user ? (
-        <UserButton afterSignOutUrl="/draw" />
+        <button
+          type="button"
+          onClick={() => clerk.signOut({ redirectUrl: '/draw' })}
+          className="rounded-lg outline-none ring-amber-400 focus-visible:ring-2 focus-visible:ring-offset-2"
+          title="Sign out"
+          aria-label="Sign out"
+        >
+          {clerkUser ? (
+            <img
+              src={clerkUser.imageUrl}
+              alt=""
+              className="h-8 w-8 rounded-lg border border-stone-200 object-cover dark:border-white/[0.1]"
+            />
+          ) : (
+            <User className="h-5 w-5" />
+          )}
+        </button>
       ) : clerk.loaded ? (
         <div className="flex items-center gap-2">
-          <SignInButton mode="modal">
+          <AuthTrigger mode="sign-in">
             <Button
               variant="ghost"
               size="sm"
@@ -23,8 +41,8 @@ export function FloatingAuthButton() {
             >
               Sign In
             </Button>
-          </SignInButton>
-          <SignUpButton mode="modal">
+          </AuthTrigger>
+          <AuthTrigger mode="sign-up">
             <Button
               variant="default"
               size="sm"
@@ -32,7 +50,7 @@ export function FloatingAuthButton() {
             >
               Sign Up
             </Button>
-          </SignUpButton>
+          </AuthTrigger>
         </div>
       ) : (
         <Button

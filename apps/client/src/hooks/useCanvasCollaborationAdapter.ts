@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { DrawingObject } from '@/store/drawingStore';
 import type { CollaborationAppliedEvent, CollaborationHydration, JsonValue } from '@/types/socket';
 import { drawingObjectSchema } from '@/lib/drawingObjectSchema';
@@ -59,6 +59,9 @@ export function useCanvasCollaborationAdapter({
   replaceHistory,
   requestFullRedraw,
 }: CanvasCollaborationAdapterOptions) {
+  const projectRevisionRef = useRef(projectRevision);
+  projectRevisionRef.current = projectRevision;
+
   useEffect(() => {
     if (!isConnected) return;
 
@@ -67,9 +70,10 @@ export function useCanvasCollaborationAdapter({
       allowEqualRevision: boolean,
     ) => {
       if (currentProjectId && state.projectId !== currentProjectId) return;
-      if (projectRevision !== undefined) {
+      const currentRevision = projectRevisionRef.current;
+      if (currentRevision !== undefined) {
         if (
-          allowEqualRevision ? state.revision < projectRevision : state.revision <= projectRevision
+          allowEqualRevision ? state.revision < currentRevision : state.revision <= currentRevision
         ) {
           return;
         }
@@ -77,7 +81,7 @@ export function useCanvasCollaborationAdapter({
         // Applied events must be contiguous. A gap means this socket missed an
         // accepted commit, so obtain a fresh canonical snapshot instead of
         // applying an unverified future state over local state.
-        if (!allowEqualRevision && state.revision !== projectRevision + 1) {
+        if (!allowEqualRevision && state.revision !== currentRevision + 1) {
           if (currentProjectId) requestCanonicalHydration(currentProjectId);
           return;
         }
@@ -118,7 +122,6 @@ export function useCanvasCollaborationAdapter({
     currentProjectId,
     isConnected,
     on,
-    projectRevision,
     replaceHistory,
     requestCanonicalHydration,
     requestFullRedraw,

@@ -300,7 +300,4 @@ export interface SocketData {
   userId?: string;
   userName?: string;
   sessionExpiresAt?: number;
-  /** A public share-link socket is scoped to this one read-only project. */
-  sharedProjectId?: string;
-  shareToken?: string;
 }

@@ -35,21 +35,24 @@ import { createClient } from 'redis';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
-import { clerkMiddleware, getAuth, requireAuth, clerkClient } from '@clerk/express';
+import { clerkMiddleware, getAuth, clerkClient } from '@clerk/express';
 import { ConnectionRegistry } from './services/ConnectionRegistry.js';
 import { ProjectService } from './services/ProjectService.js';
 import { logger } from './utils/logger.js';
 import { env, isProd, clerkPublishableKey } from './config/env.js';
-import { disconnectPrisma, checkDatabaseHealth } from './lib/prisma.js';
+import { disconnectPrisma } from './lib/prisma.js';
 import {
   collaboratorInputSchema,
   collaboratorUserIdSchema,
-  folderInputSchema,
   moveProjectSchema,
   projectInputSchema,
   resourceIdSchema,
   shareTokenSchema,
 } from './validation/project.js';
+import { registerFolderRoutes } from './routes/folders.js';
+import { registerHealthRoutes } from './routes/health.js';
+import { requireAuthenticatedUser } from './middleware/auth.js';
+import type { AuthenticatedRequest } from './types/http.js';
 
 const socketCredentialSchema = z.string().trim().min(1);
 const sessionClaimsSchema = z.object({ exp: z.number().optional() }).nullable();
@@ -91,13 +94,6 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface AuthenticatedRequest extends express.Request<Record<string, string>> {
-  auth?: {
-    userId: string | null;
-    sessionId: string | null;
-  };
-}
-
 export class SketchFlowServer {
   private app = express();
   private server = createServer(this.app);
@@ -115,6 +111,7 @@ export class SketchFlowServer {
   private redisPublisher: { quit: () => Promise<string> } | null = null;
   private redisSubscriber: { quit: () => Promise<string> } | null = null;
   private redisSetup: Promise<void> = Promise.resolve();
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor() {
     // Configure CORS origins for Socket.IO
@@ -209,6 +206,7 @@ export class SketchFlowServer {
 
     // Rate limiting for auth endpoints
     const authRateLimiter = rateLimitMiddleware({
+      namespace: 'auth',
       windowMs: 60 * 1000, // 1 minute
       maxRequests: 30, // 30 requests per minute
     });
@@ -217,7 +215,10 @@ export class SketchFlowServer {
     this.app.use('/api/auth', authRateLimiter);
     this.app.use('/api/projects/:id/collaborators', authRateLimiter);
 
-    this.app.use('/api', rateLimitMiddleware({ windowMs: 60 * 1000, maxRequests: 120 }));
+    this.app.use(
+      '/api',
+      rateLimitMiddleware({ namespace: 'api', windowMs: 60 * 1000, maxRequests: 120 }),
+    );
 
     // Authentication applies to API routes. Keeping liveness probes and static
     // assets outside Clerk makes container health checks independent of Clerk.
@@ -277,44 +278,14 @@ export class SketchFlowServer {
       return next();
     });
 
-    // Health check - basic liveness
-    this.app.get('/api/health', (_req, res) => {
-      res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        connections: this.connectionRegistry.count(),
-        release: env.RELEASE_ID ?? 'unknown',
-      });
+    registerHealthRoutes(this.app, {
+      connectionCount: () => this.connectionRegistry.count(),
+      isShuttingDown: () => this.isShuttingDown,
     });
 
-    // Liveness probe (Kubernetes style) - is the process alive?
-    this.app.get('/api/healthz', (_req, res) => {
-      if (this.isShuttingDown) {
-        res.status(503).json({ status: 'shutting_down' });
-        return;
-      }
-      res.json({ status: 'ok', release: env.RELEASE_ID ?? 'unknown' });
-    });
-
-    // Readiness probe - can we serve traffic?
-    this.app.get('/api/readyz', async (_req, res) => {
-      if (this.isShuttingDown) {
-        res.status(503).json({ status: 'shutting_down' });
-        return;
-      }
-
-      const dbHealthy = await checkDatabaseHealth();
-      if (!dbHealthy) {
-        res.status(503).json({ status: 'database_unhealthy' });
-        return;
-      }
-
-      res.json({
-        status: 'ok',
-        database: 'connected',
-        connections: this.connectionRegistry.count(),
-        release: env.RELEASE_ID ?? 'unknown',
-      });
+    // Auth API - get current user (protected)
+    this.app.get('/api/config', (_req, res) => {
+      res.json({ clerkPublishableKey });
     });
 
     // Auth API - get current user (protected)
@@ -326,23 +297,10 @@ export class SketchFlowServer {
       res.json({ userId });
     });
 
-    // Helper middleware to require authentication and attach userId to request
-    const requireAuthMiddleware = () => {
-      return (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
-        const { userId } = getAuth(req);
-        if (!userId) {
-          return res.status(401).json({ error: 'Authentication required' });
-        }
-        req.auth = { userId, sessionId: null };
-        next();
-      };
-    };
-
     // Project APIs (require authentication)
     this.app.get(
       '/api/projects',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -363,8 +321,7 @@ export class SketchFlowServer {
 
     this.app.get(
       '/api/projects/:id',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         const userId = req.auth!.userId!;
         const record = await this.projectService.get(req.params.id, userId);
@@ -375,8 +332,7 @@ export class SketchFlowServer {
 
     this.app.post(
       '/api/projects',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -393,8 +349,7 @@ export class SketchFlowServer {
 
     this.app.put(
       '/api/projects/:id',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -465,8 +420,7 @@ export class SketchFlowServer {
 
     this.app.delete(
       '/api/projects/:id',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -485,8 +439,7 @@ export class SketchFlowServer {
     // Share/unshare endpoints
     this.app.post(
       '/api/projects/:id/share',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -497,7 +450,7 @@ export class SketchFlowServer {
           res.json({
             shareToken: shared.shareToken,
             expiresAt: shared.shareExpiresAt,
-            shareUrl: `${env.CLIENT_URL || req.protocol + '://' + req.get('host')}/draw?share=${shared.shareToken}`,
+            shareUrl: `${env.CLIENT_URL || env.CORS_ORIGINS[0] || req.protocol + '://' + req.get('host')}/draw?share=${shared.shareToken}`,
           });
         } catch {
           res.status(500).json({ error: 'Failed to share project' });
@@ -507,8 +460,7 @@ export class SketchFlowServer {
 
     this.app.post(
       '/api/projects/:id/unshare',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -526,8 +478,7 @@ export class SketchFlowServer {
     // Collaborator endpoints
     this.app.get(
       '/api/projects/:id/collaborators',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -557,8 +508,7 @@ export class SketchFlowServer {
 
     this.app.post(
       '/api/projects/:id/collaborators',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -611,8 +561,7 @@ export class SketchFlowServer {
 
     this.app.delete(
       '/api/projects/:id/collaborators/:collaboratorUserId',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -634,8 +583,7 @@ export class SketchFlowServer {
     // Move project to folder
     this.app.post(
       '/api/projects/:id/move',
-      requireAuth(),
-      requireAuthMiddleware(),
+      requireAuthenticatedUser,
       async (req: AuthenticatedRequest, res) => {
         try {
           const userId = req.auth!.userId!;
@@ -656,90 +604,7 @@ export class SketchFlowServer {
       },
     );
 
-    // Folder APIs
-    this.app.get(
-      '/api/folders',
-      requireAuth(),
-      requireAuthMiddleware(),
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const folders = await this.projectService.listFolders(userId);
-          res.json(folders);
-        } catch {
-          res.status(500).json({ error: 'Failed to list folders' });
-        }
-      },
-    );
-
-    this.app.post(
-      '/api/folders',
-      requireAuth(),
-      requireAuthMiddleware(),
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const parsed = folderInputSchema.safeParse(req.body);
-          if (!parsed.success || !parsed.data.name)
-            return res.status(400).json({ error: 'Invalid folder payload' });
-          const { name, color, parentId } = parsed.data;
-          const folder = await this.projectService.createFolder(
-            userId,
-            name || 'New Folder',
-            color,
-            parentId,
-          );
-          res.json(folder);
-        } catch {
-          res.status(500).json({ error: 'Failed to create folder' });
-        }
-      },
-    );
-
-    this.app.put(
-      '/api/folders/:id',
-      requireAuth(),
-      requireAuthMiddleware(),
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const parsed = folderInputSchema.safeParse(req.body);
-          if (!parsed.success) return res.status(400).json({ error: 'Invalid folder payload' });
-          const { name, color, parentId } = parsed.data;
-          const folder = await this.projectService.updateFolder(
-            req.params.id,
-            userId,
-            name,
-            color,
-            parentId,
-          );
-          if (!folder) {
-            return res.status(404).json({ error: 'Folder not found' });
-          }
-          res.json(folder);
-        } catch {
-          res.status(500).json({ error: 'Failed to update folder' });
-        }
-      },
-    );
-
-    this.app.delete(
-      '/api/folders/:id',
-      requireAuth(),
-      requireAuthMiddleware(),
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const deleted = await this.projectService.deleteFolder(req.params.id, userId);
-          if (!deleted) {
-            return res.status(404).json({ error: 'Folder not found' });
-          }
-          res.json({ success: true });
-        } catch {
-          res.status(500).json({ error: 'Failed to delete folder' });
-        }
-      },
-    );
+    registerFolderRoutes(this.app, this.projectService);
 
     // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
@@ -756,25 +621,9 @@ export class SketchFlowServer {
         return next(new Error('Server connection limit reached'));
       }
       const token = socket.handshake.auth.token;
-      const shareToken = socket.handshake.auth.shareToken;
-
       const credential = socketCredentialSchema.safeParse(token);
       if (!credential.success) {
-        const publicCredential = shareTokenSchema.safeParse(shareToken);
-        if (!publicCredential.success) {
-          return next(new Error('Authentication required'));
-        }
-        try {
-          // Public links are a deliberately narrow credential: they can only
-          // watch the single live board that the token currently exposes.
-          const project = await this.projectService.getByShareToken(publicCredential.data);
-          if (!project) return next(new Error('Invalid share token'));
-          socket.data.sharedProjectId = project.id;
-          socket.data.shareToken = publicCredential.data;
-          return next();
-        } catch {
-          return next(new Error('Invalid share token'));
-        }
+        return next(new Error('Authentication required'));
       }
 
       try {
@@ -947,13 +796,9 @@ export class SketchFlowServer {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
         }
-        const sharedViewer =
-          socket.data.sharedProjectId === projectId && socket.data.shareToken !== undefined;
         const canView = currentUserId
           ? await this.projectService.checkPermission(projectId, currentUserId, 'view')
-          : sharedViewer
-            ? (await this.projectService.getByShareToken(socket.data.shareToken!))?.id === projectId
-            : false;
+          : false;
         if (!canView || joinGeneration !== roomGeneration) {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
@@ -981,7 +826,7 @@ export class SketchFlowServer {
         // to the versioned collaboration protocol.
         const canonicalProject = currentUserId
           ? await this.projectService.get(projectId, currentUserId)
-          : await this.projectService.getByShareToken(socket.data.shareToken!);
+          : null;
         if (
           !canonicalProject ||
           joinGeneration !== roomGeneration ||
@@ -1199,6 +1044,12 @@ export class SketchFlowServer {
   }
 
   public async stop(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
+    this.shutdownPromise = this.stopOnce();
+    return this.shutdownPromise;
+  }
+
+  private async stopOnce(): Promise<void> {
     this.isShuttingDown = true;
     logger.info('Starting graceful shutdown...');
 

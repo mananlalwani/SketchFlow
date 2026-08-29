@@ -23,6 +23,18 @@ export interface ProjectRecord<T extends JsonValue = JsonValue> extends ProjectL
   data: T;
 }
 
+export interface PublicProjectRecord<T extends JsonValue = JsonValue> {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  data: T;
+  revision: number;
+  shared: true;
+  shareExpiresAt?: number;
+  role: 'viewer';
+}
+
 export interface FolderRecord {
   id: string;
   userId: string;
@@ -50,6 +62,17 @@ const projectListItemSchema = z.object({
 });
 
 const projectRecordSchema = projectListItemSchema.extend({ data: z.json() });
+const publicProjectRecordSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  data: z.json(),
+  revision: z.number(),
+  shared: z.literal(true),
+  shareExpiresAt: z.number().optional(),
+  role: z.literal('viewer'),
+});
 const folderRecordSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -88,6 +111,7 @@ const resolveApiBase = () => {
 };
 
 const API_BASE = resolveApiBase();
+const REQUEST_TIMEOUT_MS = 15_000;
 
 async function getAuthHeadersWithToken(token: string | null): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -106,9 +130,10 @@ async function http<T>(
   try {
     const headers = await getAuthHeadersWithToken(token || null);
     const res = await fetch(API_BASE + path, {
+      ...init,
       headers: { ...headers, ...init?.headers },
       credentials: 'include',
-      ...init,
+      signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -125,6 +150,9 @@ async function http<T>(
     // Convert other errors to NetworkError
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new NetworkError('Network request failed. Check your internet connection.');
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new NetworkError('Network request timed out. Please try again.');
     }
 
     throw error;
@@ -146,20 +174,20 @@ async function httpWithRetry<T>(
       lastError = e instanceof Error ? e : new Error(String(e));
       // Client errors (including validation and revision conflicts) are deterministic.
       // Retrying them only delays conflict recovery and can repeat a stale write.
-      if (e instanceof NetworkError && e.statusCode !== undefined && e.statusCode < 500) break;
-      // Exponential backoff: 200ms, 500ms
-      const delay = i === 0 ? 200 : 500;
-      await new Promise((r) => setTimeout(r, delay));
+      if (
+        e instanceof z.ZodError ||
+        (e instanceof NetworkError && e.statusCode !== undefined && e.statusCode < 500)
+      ) {
+        break;
+      }
+      if (i < attempts - 1) {
+        // Exponential backoff between attempts: 200ms, then 500ms.
+        const delay = i === 0 ? 200 : 500;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
   }
   throw lastError;
-}
-
-// Helper to get token from Clerk context
-export async function getClerkToken(): Promise<string | null> {
-  // This will be called from components with Clerk context
-  // Components should use useAuth().getToken() directly
-  return null;
 }
 
 export async function listProjects(token?: string | null): Promise<ProjectListItem[]> {
@@ -210,7 +238,9 @@ export async function createProject(
   if (!token) {
     return localProjectsService.create(title, data);
   }
-  return httpWithRetry(
+  // Creating a project is not idempotent. Retrying after an ambiguous network
+  // failure can create duplicate projects on the server.
+  return http(
     '/api/projects',
     projectRecordSchema,
     {
@@ -296,7 +326,9 @@ export async function shareProject(
   if (!token) {
     throw new Error('Sharing is not available in guest mode. Please sign in to share projects.');
   }
-  return httpWithRetry(
+  // Sharing rotates the public credential, so an ambiguous retry could revoke
+  // the first URL before the caller ever receives it.
+  return http(
     `/api/projects/${id}/share`,
     shareResultSchema,
     {
@@ -320,14 +352,12 @@ export async function unshareProject(id: string, token?: string | null): Promise
   );
 }
 
-export async function getSharedProject(shareToken: string): Promise<ProjectRecord> {
-  // This endpoint doesn't require authentication
-  const res = await fetch(API_BASE + `/api/projects/shared/${shareToken}`, {
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return projectRecordSchema.parse(await res.json());
+export async function getSharedProject(shareToken: string): Promise<PublicProjectRecord> {
+  return httpWithRetry(
+    `/api/projects/shared/${encodeURIComponent(shareToken)}`,
+    publicProjectRecordSchema,
+    undefined,
+  );
 }
 
 export interface CollaboratorRecord {
@@ -410,7 +440,8 @@ export async function createFolder(
       'Folders are not available in guest mode. Please sign in to organize projects.',
     );
   }
-  return httpWithRetry(
+  // Folder creation is non-idempotent and must be retried only by the user.
+  return http(
     '/api/folders',
     folderRecordSchema,
     {

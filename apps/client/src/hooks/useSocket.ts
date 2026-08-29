@@ -62,27 +62,27 @@ const resolveSocketBaseUrl = () => {
   return currentOrigin;
 };
 
-class SocketManager {
+export class SocketManager {
   private socket: SocketInstance | null = null;
+  private credential: string | null = null;
   private connectionListeners = new Set<(connected: boolean) => void>();
   private errorListeners = new Set<(error: Error) => void>();
   private isConnected = false;
 
-  connect(token?: string, shareToken?: string) {
-    if (this.socket?.connected) return this.socket;
+  connect(token: string) {
+    if (this.socket?.connected && this.credential === token) return this.socket;
 
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
+      this.credential = null;
       this.isConnected = false;
     }
 
     const url = resolveSocketBaseUrl();
 
     this.socket = io(url, {
-      // A share token is only accepted for a read-only public board. Authenticated
-      // users always use their Clerk token instead.
-      auth: token ? { token } : shareToken ? { shareToken } : {},
+      auth: { token },
       // Prefer WebSocket for low-latency collaboration, but retain Socket.IO
       // polling as a safe fallback when a proxy, browser extension, or network
       // path interrupts the WebSocket handshake.
@@ -95,6 +95,7 @@ class SocketManager {
       reconnectionDelayMax: 3000,
       autoConnect: true,
     });
+    this.credential = token;
 
     this.socket.on('connect', () => {
       this.isConnected = true;
@@ -122,6 +123,7 @@ class SocketManager {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
+      this.credential = null;
       this.isConnected = false;
     }
   }
@@ -239,13 +241,14 @@ class SocketManager {
     return this.isConnected;
   }
 
-  reconnect(token?: string, shareToken?: string) {
+  reconnect(token: string) {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
+      this.credential = null;
       this.isConnected = false;
     }
-    return this.connect(token, shareToken);
+    return this.connect(token);
   }
 }
 
@@ -256,15 +259,12 @@ export const useSocket = () => {
   const [connectionError, setConnectionError] = useState<Error | null>(null);
   const [connectionCount, setConnectionCount] = useState(1);
   const wasConnectedRef = React.useRef(false);
-  const { isGuest, isAuthenticated, getToken } = useAuthStore();
-  const shareToken =
-    globalThis.window === undefined
-      ? null
-      : new URLSearchParams(window.location.search).get('share');
+  const { user, isGuest, isAuthenticated, getToken } = useAuthStore();
 
   useEffect(() => {
     let disposed = false;
-    if ((isGuest || !isAuthenticated) && !shareToken) {
+    if (isGuest || !isAuthenticated) {
+      socketManager.disconnect();
       setIsConnected(false);
       return;
     }
@@ -284,18 +284,12 @@ export const useSocket = () => {
       setConnectionError(error);
     });
 
-    if (shareToken && (isGuest || !isAuthenticated)) {
-      socket = socketManager.connect(undefined, shareToken);
+    void getToken().then((token) => {
+      if (disposed || !token) return;
+      socket = socketManager.connect(token);
       socket.on('connection:count', (count: number) => setConnectionCount(count));
       setIsConnected(socketManager.getConnectionStatus());
-    } else {
-      void getToken().then((token) => {
-        if (disposed || !token) return;
-        socket = socketManager.connect(token);
-        socket.on('connection:count', (count: number) => setConnectionCount(count));
-        setIsConnected(socketManager.getConnectionStatus());
-      });
-    }
+    });
 
     return () => {
       unsubscribeConnect();
@@ -305,7 +299,7 @@ export const useSocket = () => {
         socket.off('connection:count');
       }
     };
-  }, [isGuest, isAuthenticated, getToken, shareToken]);
+  }, [user?.id, isGuest, isAuthenticated, getToken]);
 
   const emit = useCallback(
     <T extends keyof ClientToServerEvents>(
@@ -325,9 +319,8 @@ export const useSocket = () => {
   const reconnect = useCallback(() => {
     void getToken().then((token) => {
       if (token) socketManager.reconnect(token);
-      else if (shareToken) socketManager.reconnect(undefined, shareToken);
     });
-  }, [getToken, shareToken]);
+  }, [getToken]);
 
   return {
     isConnected,

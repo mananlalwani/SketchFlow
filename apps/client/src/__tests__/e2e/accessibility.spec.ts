@@ -48,6 +48,11 @@ test('project manager and settings dialog have no serious accessibility violatio
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
+  await dialog.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations({ subtree: true }).map((animation) => animation.finished),
+    );
+  });
   const dialogResults = await new AxeBuilder({ page })
     .include('[role="dialog"]')
     .withTags(['wcag2a', 'wcag2aa'])

@@ -13,17 +13,20 @@ import { useSocket } from '@/hooks/useSocket';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { AutoSaveHandler } from '@/components/AutoSaveHandler';
-import { ProjectManager } from '@/components/ProjectManager';
 import { useAuth } from '@clerk/clerk-react';
 import { deserializeProject } from '@/lib/utils';
 import { useProjectMigration } from '@/hooks/useProjectMigration';
 import { WelcomeTutorial, EmptyStateHint } from '@/components/WelcomeTutorial';
 import { getSharedProject } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { activeProjectWriteCoordinator } from '@/lib/projectWriteCoordinator';
+import { installProjectSession } from '@/lib/projectSession';
+import { AuthPage, SsoCallbackPage } from '@/components/auth/AuthPage';
 
 const DrawingCanvas = lazy(() =>
   import('@/components/DrawingCanvas').then((module) => ({ default: module.DrawingCanvas })),
+);
+const ProjectManager = lazy(() =>
+  import('@/components/ProjectManager').then((module) => ({ default: module.ProjectManager })),
 );
 
 function EditorRoute() {
@@ -34,7 +37,6 @@ function EditorRoute() {
     replaceHistory,
     setProjectTitle,
     requestFullRedraw,
-    hydrateProject,
     projectRole,
   } = useDrawingStore();
   const { userId, isLoaded } = useAuth();
@@ -62,19 +64,7 @@ function EditorRoute() {
             return;
           }
 
-          const objects = deserializeProject(record.data);
-
-          activeProjectWriteCoordinator.reset(record.id, {
-            projectId: record.id,
-            revision: record.revision,
-          });
-          hydrateProject({
-            id: record.id,
-            objects,
-            title: record.title || 'Shared Project',
-            revision: record.revision,
-            role: record.role || 'viewer',
-          });
+          installProjectSession(record, 'viewer');
 
           setInitialized(true);
         } catch (e) {
@@ -127,7 +117,6 @@ function EditorRoute() {
     replaceHistory,
     setProjectTitle,
     requestFullRedraw,
-    hydrateProject,
     shareToken,
     toast,
   ]);
@@ -148,7 +137,9 @@ function EditorRoute() {
   if (!currentProjectId && objectCount === 0) {
     return (
       <Layout hideDrawingTools>
-        <ProjectManager onSelect={() => {}} />
+        <Suspense fallback={<AppStatePage kind="loading" />}>
+          <ProjectManager onSelect={() => {}} />
+        </Suspense>
       </Layout>
     );
   }
@@ -184,6 +175,8 @@ function App() {
 
           {/* Editor Route wrapped in Layout with logic */}
           <Route path="/draw" element={<EditorRoute />} />
+          <Route path="/auth/:mode" element={<AuthPage />} />
+          <Route path="/auth/sso-callback" element={<SsoCallbackPage />} />
 
           <Route path="*" element={<AppStatePage kind="not-found" />} />
         </Routes>

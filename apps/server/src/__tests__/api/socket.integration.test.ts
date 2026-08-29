@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   getByShareToken: vi.fn(),
   commitCollaborationOperation: vi.fn(),
+  disconnectPrisma: vi.fn(),
 }));
 
 vi.mock('../../otel.js', () => ({}));
@@ -21,9 +22,12 @@ vi.mock('../../config/env.js', () => ({
   isProd: false,
   clerkPublishableKey: 'pk_test',
 }));
-vi.mock('../../lib/prisma.js', () => ({ disconnectPrisma: vi.fn(), checkDatabaseHealth: vi.fn() }));
+vi.mock('../../lib/prisma.js', () => ({
+  disconnectPrisma: mocks.disconnectPrisma,
+  checkDatabaseHealth: vi.fn(),
+}));
 vi.mock('../../utils/logger.js', () => ({
-  Logger: { setRequestId: vi.fn() },
+  Logger: { runWithRequestId: (_requestId: string, callback: () => void) => callback() },
   getTraceContext: vi.fn(() => ({})),
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn() },
 }));
@@ -99,7 +103,8 @@ describe('Socket.IO boundary', () => {
 
   afterAll(async () => {
     clients.forEach((client) => client.disconnect());
-    await sketchServer.stop();
+    await Promise.all([sketchServer.stop(), sketchServer.stop()]);
+    expect(mocks.disconnectPrisma).toHaveBeenCalledTimes(1);
   });
 
   function connect(token?: string, endpoint = url, shareToken?: string): Promise<Socket> {
@@ -131,17 +136,10 @@ describe('Socket.IO boundary', () => {
     await expect(connect('a'.repeat(43))).rejects.toThrow('Invalid authentication token');
   });
 
-  it('allows a public share link to join only its read-only live room', async () => {
-    const projectId = 'ckz1h2abc0000qwerty123456';
-    const client = await connect(undefined, url, 'a'.repeat(43));
-    const hydrated = new Promise<unknown>((resolve) =>
-      client.once('collaboration:hydrated', resolve),
+  it('rejects a public share token during the realtime handshake', async () => {
+    await expect(connect(undefined, url, 'a'.repeat(43))).rejects.toThrow(
+      'Authentication required',
     );
-
-    client.emit('room:join', projectId);
-
-    await expect(hydrated).resolves.toMatchObject({ projectId, title: 'Shared board' });
-    expect(mocks.checkPermission).not.toHaveBeenCalled();
   });
 
   it('disconnects an expired session immediately after handshake', async () => {

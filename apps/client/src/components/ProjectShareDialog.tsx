@@ -112,7 +112,6 @@ export function ProjectShareDialog({
         toast({ title: 'Link disabled', description: 'Public link has been disabled' });
       } else {
         const result = await shareProject(project.id, token);
-        console.log('Share result:', result); // Debug log
         setIsShared(true);
         setShareUrl(buildShareUrl(result.shareToken));
         toast({

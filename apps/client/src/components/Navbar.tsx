@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { useDrawingStore } from '@/store/drawingStore';
 import { useAuthStore } from '@/store/authStore';
 import { useSocket } from '@/hooks/useSocket';
-import { SignInButton, SignUpButton, UserButton, useClerk } from '@clerk/clerk-react';
+import { useClerk, useUser } from '@clerk/clerk-react';
+import { AuthTrigger } from '@/components/auth/AuthTrigger';
 import { Palette, Eye, Wifi, WifiOff, RefreshCw, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
@@ -15,6 +16,7 @@ export function Navbar() {
   const { user, isAuthenticated, isLoading, isGuest } = useAuthStore();
   const { reconnect } = useSocket();
   const clerk = useClerk();
+  const { user: clerkUser } = useUser();
   const [navVisible, setNavVisible] = useState(true);
   const navRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
@@ -210,19 +212,25 @@ export function Navbar() {
                   {user.username}
                 </span>
               </div>
-              <UserButton afterSignOutUrl="/draw" />
+              {clerkUser && (
+                <img
+                  src={clerkUser.imageUrl}
+                  alt=""
+                  className="h-8 w-8 rounded-lg border border-blue-300 object-cover dark:border-blue-400/30"
+                />
+              )}
             </div>
           ) : !isLoading ? (
             <div className="flex items-center gap-2">
               {clerk.loaded ? (
                 <>
-                  <SignInButton mode="modal">
+                  <AuthTrigger mode="sign-in">
                     <Button variant="secondary" size="sm" className="font-medium hover:scale-105">
                       <User className="w-4 h-4 mr-1.5" />
                       <span>Sign In</span>
                     </Button>
-                  </SignInButton>
-                  <SignUpButton mode="modal">
+                  </AuthTrigger>
+                  <AuthTrigger mode="sign-up">
                     <Button
                       variant="default"
                       size="sm"
@@ -230,7 +238,7 @@ export function Navbar() {
                     >
                       <span>Sign Up</span>
                     </Button>
-                  </SignUpButton>
+                  </AuthTrigger>
                 </>
               ) : (
                 <Button

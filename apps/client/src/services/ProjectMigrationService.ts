@@ -71,43 +71,38 @@ export class ProjectMigrationService {
         return result;
       }
 
-      console.log(`Starting migration of ${localProjects.length} guest projects...`);
-
-      // Upload each project to the server
-      const migrations = localProjects.map(async (project) => {
+      // Migrate sequentially and remove each successful source record. If a later
+      // upload fails, a future retry sees only the projects that still need work.
+      for (const project of localProjects) {
         try {
           await createProject(project.title, project.data, token, project.thumbnail || null);
+          const removed = await localProjectsService.delete(project.id);
+          if (!removed) throw new Error('Migrated project could not be removed from local storage');
           result.migratedCount++;
-          console.log(`Migrated project: ${project.title}`);
         } catch (error) {
           result.failedCount++;
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
           result.errors.push(`Failed to migrate "${project.title}": ${errorMsg}`);
           console.error(`Failed to migrate project ${project.title}:`, error);
         }
-      });
-
-      // Wait for all migrations to complete
-      await Promise.all(migrations);
+      }
 
       // If all projects migrated successfully, clear local storage
       if (result.failedCount === 0) {
+        const lastGuestId = localStorage.getItem(LAST_GUEST_ID_KEY);
         await localProjectsService.clearAll();
 
         // Mark migration as complete for this guest
-        const lastGuestId = localStorage.getItem(LAST_GUEST_ID_KEY);
         if (lastGuestId) {
           localStorage.setItem(MIGRATION_STATUS_KEY, lastGuestId);
         }
-
-        console.log('Migration completed successfully, local projects cleared');
       } else {
         console.warn(
           `Migration completed with ${result.failedCount} failures. Local projects retained.`,
         );
       }
 
-      result.success = result.migratedCount > 0;
+      result.success = result.failedCount === 0;
       return result;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';

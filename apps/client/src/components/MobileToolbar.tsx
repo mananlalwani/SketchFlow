@@ -24,11 +24,8 @@ import { cn } from '@/lib/utils';
 import { MobilePropertiesDrawer } from './MobilePropertiesDrawer';
 import { useAuth } from '@clerk/clerk-react';
 import { useToast } from '@/hooks/use-toast';
-import { serializeProject } from '@/lib/utils';
-import {
-  activeProjectWriteCoordinator,
-  ProjectWriteResetError,
-} from '@/lib/projectWriteCoordinator';
+import { ProjectWriteResetError } from '@/lib/projectWriteCoordinator';
+import { saveActiveProject } from '@/lib/saveActiveProject';
 
 const tools = [
   { id: 'hand', icon: Hand, label: 'Pan' },
@@ -54,14 +51,9 @@ export function MobileToolbar() {
     redo,
     canUndo,
     canRedo,
-    currentProjectId,
-    documentVersion,
-    projectRevision,
     projectRole,
-    projectTitle,
-    objects,
     unsavedChanges,
-    setCurrentProject,
+    newProject,
   } = useDrawingStore();
   const { isGuest } = useAuthStore();
   const { getToken } = useAuth();
@@ -71,27 +63,12 @@ export function MobileToolbar() {
 
   const handleSave = useCallback(async () => {
     if (projectRole === 'viewer') return;
-    const savedProjectId = currentProjectId;
-    const savedDocumentVersion = documentVersion;
-    const payload = serializeProject(objects, 4096, 4096);
-
     try {
-      activeProjectWriteCoordinator.resume(savedProjectId ?? 'active-draft');
-      const saved = await activeProjectWriteCoordinator.enqueue({
-        projectKey: savedProjectId ?? 'active-draft',
-        projectId: savedProjectId,
-        title: projectTitle || 'Untitled',
-        data: payload,
-        documentVersion: savedDocumentVersion,
-        expectedRevision: projectRevision,
+      const result = await saveActiveProject({
         cloud: !isGuest,
         tokenProvider: isGuest ? undefined : getToken,
       });
-      const currentState = useDrawingStore.getState();
-      if (currentState.documentVersion !== savedDocumentVersion) return;
-      if (!savedProjectId) currentState.setCurrentProject(saved.id);
-      currentState.setProjectRevision(saved.revision);
-      currentState.markSaved(savedDocumentVersion);
+      if (result !== 'saved') return;
       toast({ title: isGuest ? 'Saved locally' : 'Saved to cloud' });
     } catch (error) {
       if (error instanceof ProjectWriteResetError) return;
@@ -102,17 +79,7 @@ export function MobileToolbar() {
         variant: 'destructive',
       });
     }
-  }, [
-    currentProjectId,
-    documentVersion,
-    getToken,
-    isGuest,
-    objects,
-    projectRevision,
-    projectRole,
-    projectTitle,
-    toast,
-  ]);
+  }, [getToken, isGuest, projectRole, toast]);
 
   // Find current tool icon
   const CurrentIcon = tools.find((t) => t.id === currentTool)?.icon || Pen;
@@ -141,8 +108,7 @@ export function MobileToolbar() {
         !unsavedChanges ||
         window.confirm('Open your projects? Unsaved changes in this drawing will be discarded.')
       ) {
-        setCurrentProject(undefined);
-        clearCanvas();
+        newProject();
         setIsDrawerOpen(false);
       }
     }

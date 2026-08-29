@@ -30,10 +30,12 @@ test('10,000-object board remains interactive without uncaught errors', async ({
       contentType: 'application/json',
       body: JSON.stringify({
         id: 'benchmark-project',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
         title: '10,000 object benchmark',
         revision: 1,
         data: { objects: boardObjects },
-        role: 'editor',
+        role: 'viewer',
         shared: true,
       }),
     });

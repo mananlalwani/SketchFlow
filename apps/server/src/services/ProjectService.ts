@@ -4,13 +4,23 @@ import { prisma } from '../lib/prisma.js';
 import { collaborationCommitSchema } from '../validation/project.js';
 import type { JsonObject, JsonValue } from '@sketchflow/shared';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
+import {
+  CollaborationOperationKind as PrismaCollaborationOperationKind,
+  Prisma,
+} from '@prisma/client';
 
 export type CollaborationCommitKind =
   | 'replace-project'
   | 'upsert-object'
   | 'delete-object'
   | 'batch';
+
+const prismaCollaborationOperationKind = {
+  'replace-project': PrismaCollaborationOperationKind.replaceProject,
+  'upsert-object': PrismaCollaborationOperationKind.upsertObject,
+  'delete-object': PrismaCollaborationOperationKind.deleteObject,
+  batch: PrismaCollaborationOperationKind.batch,
+} as const satisfies Record<CollaborationCommitKind, PrismaCollaborationOperationKind>;
 
 export interface CollaborationCommitInput {
   projectId: string;
@@ -86,6 +96,19 @@ export interface ProjectRecord {
   folderId?: string | null;
   role?: 'owner' | 'editor' | 'viewer';
   collaborators?: { userId: string; role: string }[];
+}
+
+/** Minimal representation safe to return to anyone holding a public share link. */
+export interface PublicProjectRecord {
+  id: string;
+  title: string;
+  updatedAt: number;
+  createdAt: number;
+  data: JsonValue;
+  revision: number;
+  shared: true;
+  shareExpiresAt?: number;
+  role: 'viewer';
 }
 
 export interface FolderRecord {
@@ -298,7 +321,7 @@ export class ProjectService {
             operationId: input.operationId,
             actorUserId: input.userId,
             revision,
-            kind: input.kind,
+            kind: prismaCollaborationOperationKind[input.kind],
             receiptHash,
           },
         });
@@ -585,15 +608,10 @@ export class ProjectService {
     }
   }
 
-  public async getByShareToken(shareToken: string): Promise<ProjectRecord | null> {
+  public async getByShareToken(shareToken: string): Promise<PublicProjectRecord | null> {
     try {
       const project = await this.database.project.findUnique({
         where: { shareToken },
-        include: {
-          collaborators: {
-            select: { userId: true, role: true },
-          },
-        },
       });
 
       if (
@@ -606,16 +624,14 @@ export class ProjectService {
 
       return {
         id: project.id,
-        userId: project.userId,
         title: project.title,
         data: project.data,
+        revision: project.revision,
         updatedAt: project.updatedAt.getTime(),
         createdAt: project.createdAt.getTime(),
-        shared: project.shared,
-        shareToken: project.shareToken ?? undefined,
+        shared: true,
         shareExpiresAt: project.shareExpiresAt?.getTime(),
         role: 'viewer',
-        collaborators: project.collaborators,
       };
     } catch (e) {
       this.log.error('Failed to get project by share token', e);
@@ -994,33 +1010,44 @@ export class ProjectService {
     parentId?: string | null,
   ): Promise<FolderRecord | null> {
     try {
-      const existing = await this.database.folder.findUnique({
-        where: { id },
-      });
+      const folder = await this.database.$transaction(
+        async (tx) => {
+          const existing = await tx.folder.findUnique({ where: { id } });
+          if (!existing || existing.userId !== userId) return null;
 
-      if (!existing || existing.userId !== userId) {
-        return null;
-      }
+          if (parentId) {
+            const visited = new Set<string>();
+            let ancestorId: string | null = parentId;
+            while (ancestorId) {
+              if (ancestorId === id || visited.has(ancestorId)) return null;
+              visited.add(ancestorId);
+              const ancestor: { userId: string; parentId: string | null } | null =
+                await tx.folder.findUnique({
+                  where: { id: ancestorId },
+                  select: { userId: true, parentId: true },
+                });
+              if (!ancestor || ancestor.userId !== userId) return null;
+              ancestorId = ancestor.parentId;
+            }
+          }
 
-      if (parentId) {
-        if (parentId === id) return null;
-        const parent = await this.database.folder.findFirst({ where: { id: parentId, userId } });
-        if (!parent) return null;
-      }
-
-      const folder = await this.database.folder.update({
-        where: { id },
-        data: {
-          ...(name !== undefined && { name }),
-          ...(color !== undefined && { color }),
-          ...(parentId !== undefined && { parentId }),
+          return tx.folder.update({
+            where: { id },
+            data: {
+              ...(name !== undefined && { name }),
+              ...(color !== undefined && { color }),
+              ...(parentId !== undefined && { parentId }),
+            },
+            include: {
+              _count: {
+                select: { projects: true },
+              },
+            },
+          });
         },
-        include: {
-          _count: {
-            select: { projects: true },
-          },
-        },
-      });
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      if (!folder) return null;
 
       return {
         id: folder.id,

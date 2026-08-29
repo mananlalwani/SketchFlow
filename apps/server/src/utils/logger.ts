@@ -1,4 +1,5 @@
 import { trace, context } from '@opentelemetry/api';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -73,7 +74,7 @@ function getTraceContext(): TraceContext {
 class Logger {
   private logLevel: LogLevel;
   private logFormat: LogFormat;
-  private static requestId: string | undefined;
+  private static readonly requestContext = new AsyncLocalStorage<{ requestId: string }>();
 
   constructor() {
     this.logLevel = z
@@ -89,15 +90,15 @@ class Logger {
   /**
    * Set the current request ID for correlation
    */
-  static setRequestId(id: string | undefined): void {
-    Logger.requestId = id;
+  static runWithRequestId<T>(requestId: string, callback: () => T): T {
+    return Logger.requestContext.run({ requestId }, callback);
   }
 
   /**
    * Get the current request ID
    */
   static getRequestId(): string | undefined {
-    return Logger.requestId;
+    return Logger.requestContext.getStore()?.requestId;
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -118,7 +119,7 @@ class Logger {
       timestamp: new Date().toISOString(),
       level,
       message,
-      ...(Logger.requestId && { requestId: Logger.requestId }),
+      ...(Logger.getRequestId() && { requestId: Logger.getRequestId() }),
       ...(traceContext.traceId && { traceId: traceContext.traceId }),
       ...(traceContext.spanId && { spanId: traceContext.spanId }),
       ...redactedMeta,
@@ -130,7 +131,8 @@ class Logger {
 
     // Pretty format for development
     const levelStr = level.toUpperCase().padEnd(5);
-    const reqIdStr = Logger.requestId ? ` [req:${Logger.requestId.slice(0, 8)}]` : '';
+    const requestId = Logger.getRequestId();
+    const reqIdStr = requestId ? ` [req:${requestId.slice(0, 8)}]` : '';
     const traceStr = traceContext.traceId ? ` [trace:${traceContext.traceId.slice(0, 8)}]` : '';
     const metaStr =
       redactedMeta && Object.keys(redactedMeta).length > 0

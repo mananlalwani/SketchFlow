@@ -5,5 +5,44 @@ packages:
 onlyBuiltDependencies:
   - '@clerk/shared'
   - '@prisma/engines'
+  - '@sentry/cli'
   - '@swc/core'
+  - core-js
+  - esbuild
   - prisma
+  - protobufjs
+
+overrides:
+  # Temporary Prisma CLI transitive fix for GHSA-ggr8-5vv4-36mx. Remove once
+  # @prisma/config itself requires deepmerge-ts 8 or newer.
+  deepmerge-ts: 8.0.2
+  '@grpc/grpc-js': 1.14.4
+  '@hono/node-server': 1.19.13
+  '@opentelemetry/auto-instrumentations-node': 0.75.0
+  '@opentelemetry/exporter-prometheus': 0.217.0
+  '@opentelemetry/propagator-jaeger': 2.9.0
+  '@opentelemetry/sdk-node': 0.217.0
+  defu: 6.1.5
+  effect: 3.20.0
+  hono: 4.12.25
+  lodash: 4.18.0
+  minimatch: 9.0.7
+  picomatch: 4.0.4
+  protobufjs: 7.6.5
+  find-my-way: 9.7.0
+  ajv: 6.14.0
+  brace-expansion: 5.0.9
+  dompurify: 3.4.13
+  esbuild: 0.28.1
+  fast-uri: 3.1.5
+  flatted: 3.4.2
+  form-data: 4.0.6
+  js-yaml: 4.3.1
+  nanoid: 3.3.18
+  '@opentelemetry/core': 2.8.0
+  serialize-javascript: 7.0.5
+  shell-quote: 1.9.0
+  valibot: 1.4.2
+  'workbox-build>lodash': 4.18.0
+  workbox-build: 7.4.1
+  ws: 8.21.0

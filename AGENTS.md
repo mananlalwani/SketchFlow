@@ -2,7 +2,7 @@
 
 ## Tech Stack & Architecture
 
-- **Framework**: React 18 (Vite) + Node.js (Express) + TypeScript.
+- **Framework**: React 19 (Vite) + Node.js (Express) + TypeScript.
 - **State Management**: Zustand (`apps/client/src/store/`). Deeply integrated with Socket.IO for real-time state sync.
 - **Styling**: Tailwind CSS + Radix UI Primitives. Use `cn()` helper for class merging.
 - **Database**: PostgreSQL with Prisma (`apps/server/prisma/schema.prisma`).

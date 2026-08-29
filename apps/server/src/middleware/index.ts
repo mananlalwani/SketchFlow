@@ -10,13 +10,12 @@ import { captureServerException, captureServerSignal } from '../sentry.js';
  */
 export function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
   const requestHeader = req.headers['x-request-id'];
-  const requestId = Array.isArray(requestHeader)
-    ? requestHeader[0] || randomUUID()
-    : requestHeader || randomUUID();
+  const candidate = Array.isArray(requestHeader) ? requestHeader[0] : requestHeader;
+  const requestId =
+    candidate && /^[A-Za-z0-9._:-]{1,128}$/.test(candidate) ? candidate : randomUUID();
   req.headers['x-request-id'] = requestId;
   res.setHeader('x-request-id', requestId);
-  Logger.setRequestId(requestId);
-  next();
+  Logger.runWithRequestId(requestId, next);
 }
 
 /**
@@ -92,19 +91,26 @@ type RateLimitRedisClient = {
 
 let redisLimiter: RateLimitRedisClient | null = null;
 let redisLimiterConnecting: Promise<RateLimitRedisClient | null> | null = null;
+let redisLimiterRetryAfter = 0;
 
 async function getRedisLimiter(): Promise<RateLimitRedisClient | null> {
   if (!env.REDIS_URL) return null;
   if (redisLimiter?.isOpen) return redisLimiter;
+  if (Date.now() < redisLimiterRetryAfter) return null;
   if (!redisLimiterConnecting) {
     redisLimiterConnecting = (async () => {
       const client = createClient({ url: env.REDIS_URL });
       client.on('error', (error) => logger.error('Redis rate limiter error', error));
       await client.connect();
       redisLimiter = client;
+      redisLimiterConnecting = null;
+      redisLimiterRetryAfter = 0;
       return client;
     })().catch((error) => {
       logger.error('Redis rate limiter unavailable', error);
+      redisLimiter = null;
+      redisLimiterConnecting = null;
+      redisLimiterRetryAfter = Date.now() + 1000;
       return null;
     });
   }
@@ -112,14 +118,15 @@ async function getRedisLimiter(): Promise<RateLimitRedisClient | null> {
 }
 
 export function rateLimitMiddleware(options: {
+  namespace: string;
   windowMs: number;
   maxRequests: number;
   keyGenerator?: (req: Request) => string;
 }) {
-  const { windowMs, maxRequests, keyGenerator } = options;
+  const { namespace, windowMs, maxRequests, keyGenerator } = options;
 
   // Cleanup old entries periodically
-  setInterval(() => {
+  const cleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of rateLimitStore.entries()) {
       if (entry.resetTime < now) {
@@ -127,14 +134,18 @@ export function rateLimitMiddleware(options: {
       }
     }
   }, windowMs);
+  cleanupTimer.unref();
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const key = keyGenerator ? keyGenerator(req) : req.ip || req.socket.remoteAddress || 'unknown';
+    const clientKey = keyGenerator
+      ? keyGenerator(req)
+      : req.ip || req.socket.remoteAddress || 'unknown';
+    const key = `${namespace}:${clientKey}`;
     const now = Date.now();
 
     const redis = await getRedisLimiter();
     if (redis) {
-      const redisKey = `sketchflow:rate-limit:${req.path}:${key}`;
+      const redisKey = `sketchflow:rate-limit:${key}`;
       const count = await redis.incr(redisKey);
       if (count === 1) await redis.pExpire(redisKey, windowMs);
       const ttl = await redis.pTTL(redisKey);

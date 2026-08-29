@@ -1,4 +1,5 @@
-import { SignInButton, SignUpButton, UserButton, useClerk, useUser } from '@clerk/clerk-react';
+import { useClerk, useUser } from '@clerk/clerk-react';
+import { AuthTrigger } from '@/components/auth/AuthTrigger';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
@@ -215,9 +216,10 @@ export function SettingsDropdown() {
                 ) : isAuthenticated && user ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3 dark:border-white/[0.08] dark:bg-white/[0.035]">
-                      <UserButton
-                        afterSignOutUrl="/draw"
-                        appearance={{ elements: { avatarBox: 'w-9 h-9' } }}
+                      <img
+                        src={user.imageUrl}
+                        alt=""
+                        className="h-9 w-9 rounded-xl border border-stone-200 object-cover dark:border-white/[0.1]"
                       />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
@@ -253,13 +255,13 @@ export function SettingsDropdown() {
                     <p className="text-sm leading-6 text-stone-500 dark:text-stone-400">
                       Sign in to keep projects synced and invite collaborators.
                     </p>
-                    <SignInButton mode="modal">
+                    <AuthTrigger mode="sign-in">
                       <Button className="h-11 w-full justify-start gap-2 bg-stone-900 text-amber-100 hover:bg-stone-800 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200">
                         <LogIn className="h-4 w-4" />
                         Sign in
                       </Button>
-                    </SignInButton>
-                    <SignUpButton mode="modal">
+                    </AuthTrigger>
+                    <AuthTrigger mode="sign-up">
                       <Button
                         variant="outline"
                         className="h-11 w-full justify-start gap-2 border-stone-300 dark:border-white/[0.1]"
@@ -267,7 +269,7 @@ export function SettingsDropdown() {
                         <UserPlus className="h-4 w-4" />
                         Create account
                       </Button>
-                    </SignUpButton>
+                    </AuthTrigger>
                   </div>
                 ) : (
                   <Button
@@ -360,13 +362,10 @@ export function SettingsDropdown() {
             ) : isAuthenticated && user ? (
               <>
                 <div className="mx-1 mb-1 flex items-center gap-3 rounded-lg bg-white px-2.5 py-2.5 dark:bg-white/[0.035]">
-                  <UserButton
-                    afterSignOutUrl="/draw"
-                    appearance={{
-                      elements: {
-                        avatarBox: 'w-8 h-8',
-                      },
-                    }}
+                  <img
+                    src={user.imageUrl}
+                    alt=""
+                    className="h-8 w-8 rounded-lg border border-stone-200 object-cover dark:border-white/[0.1]"
                   />
                   <div className="flex flex-col min-w-0">
                     <span className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
@@ -397,7 +396,7 @@ export function SettingsDropdown() {
                 <p className="px-2.5 pb-2 pt-0.5 text-xs leading-5 text-stone-500 dark:text-stone-400">
                   Sign in to keep projects synced and invite collaborators.
                 </p>
-                <SignInButton mode="modal">
+                <AuthTrigger mode="sign-in">
                   <DropdownMenuItem
                     className="gap-2 rounded-lg bg-stone-900 px-2.5 py-2 text-amber-100 focus:bg-stone-800 focus:text-amber-100 dark:bg-amber-300 dark:text-stone-950 dark:focus:bg-amber-200 dark:focus:text-stone-950"
                     onSelect={(e) => e.preventDefault()}
@@ -405,8 +404,8 @@ export function SettingsDropdown() {
                     <LogIn className="w-4 h-4" />
                     <span>Sign In</span>
                   </DropdownMenuItem>
-                </SignInButton>
-                <SignUpButton mode="modal">
+                </AuthTrigger>
+                <AuthTrigger mode="sign-up">
                   <DropdownMenuItem
                     className="mt-1 gap-2 rounded-lg px-2.5 py-2 text-stone-700 dark:text-stone-200"
                     onSelect={(e) => e.preventDefault()}
@@ -414,7 +413,7 @@ export function SettingsDropdown() {
                     <UserPlus className="w-4 h-4" />
                     <span>Sign Up</span>
                   </DropdownMenuItem>
-                </SignUpButton>
+                </AuthTrigger>
               </>
             ) : (
               <DropdownMenuItem
@@ -494,7 +493,7 @@ export function SettingsDropdown() {
                 <DialogTitle className="text-xl font-semibold tracking-[-0.04em] text-stone-950 dark:text-stone-50">
                   SketchFlow
                 </DialogTitle>
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-600 dark:text-stone-400">
                   Canvas
                 </p>
               </div>
@@ -509,7 +508,7 @@ export function SettingsDropdown() {
                 {['Draw together', 'Keep it moving', 'Pick up anywhere'].map((feature) => (
                   <div
                     key={feature}
-                    className="rounded-lg border border-stone-200 bg-white px-2 py-2.5 text-center text-[11px] font-medium leading-4 text-stone-600 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-stone-300"
+                    className="rounded-lg border border-stone-200 bg-white px-2 py-2.5 text-center text-[11px] font-medium leading-4 text-stone-700 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-stone-300"
                   >
                     {feature}
                   </div>
@@ -519,7 +518,7 @@ export function SettingsDropdown() {
                 <span className="font-medium text-stone-500 dark:text-stone-400">
                   Version 1.0.0
                 </span>
-                <span className="text-stone-400 dark:text-stone-500">
+                <span className="text-stone-600 dark:text-stone-400">
                   © {new Date().getFullYear()} Manan Lalwani
                 </span>
               </div>

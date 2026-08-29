@@ -16,6 +16,13 @@ vi.mock('../../lib/prisma.js', () => {
     findUnique: vi.fn(),
     create: vi.fn(),
   };
+  const folder = {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  };
 
   return {
     prisma: {
@@ -29,14 +36,8 @@ vi.mock('../../lib/prisma.js', () => {
         findUnique: vi.fn(),
       },
       collaborationOperation,
-      folder: {
-        findMany: vi.fn(),
-        findUnique: vi.fn(),
-        create: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      $transaction: vi.fn((callback) => callback({ project, collaborationOperation })),
+      folder,
+      $transaction: vi.fn((callback) => callback({ project, collaborationOperation, folder })),
     },
   };
 });
@@ -58,6 +59,7 @@ describe('ProjectService', () => {
       userId: 'owner',
       title: 'Board',
       data: {},
+      revision: 1,
       updatedAt: new Date(),
       createdAt: new Date(),
       shared: true,
@@ -103,10 +105,14 @@ describe('ProjectService', () => {
 
     it('only resolves active, non-revoked share tokens', async () => {
       vi.mocked(prisma.project.findUnique).mockResolvedValue(sharedProject as never);
-      await expect(service.getByShareToken('a'.repeat(43))).resolves.toMatchObject({
+      const result = await service.getByShareToken('a'.repeat(43));
+      expect(result).toMatchObject({
         id: 'proj-1',
         role: 'viewer',
       });
+      expect(result).not.toHaveProperty('userId');
+      expect(result).not.toHaveProperty('shareToken');
+      expect(result).not.toHaveProperty('collaborators');
 
       vi.mocked(prisma.project.findUnique).mockResolvedValue({
         ...sharedProject,
@@ -164,7 +170,7 @@ describe('ProjectService', () => {
             operationId: operation.operationId,
             actorUserId: 'editor',
             revision: 4,
-            kind: 'replace-project',
+            kind: 'replaceProject',
             receiptHash: expect.stringMatching(/^[a-f0-9]{64}$/),
           }),
         }),
@@ -627,6 +633,17 @@ describe('ProjectService', () => {
         expect(prisma.folder.delete).not.toHaveBeenCalled();
       },
     );
+
+    it('rejects moving a folder beneath one of its descendants', async () => {
+      vi.mocked(prisma.folder.findUnique)
+        .mockResolvedValueOnce({ id: 'parent', userId: 'user-123', parentId: null } as never)
+        .mockResolvedValueOnce({ id: 'child', userId: 'user-123', parentId: 'parent' } as never);
+
+      await expect(
+        service.updateFolder('parent', 'user-123', undefined, undefined, 'child'),
+      ).resolves.toBeNull();
+      expect(prisma.folder.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('collaborator management', () => {

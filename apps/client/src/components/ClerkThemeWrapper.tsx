@@ -2,18 +2,17 @@ import { ClerkProvider } from '@clerk/clerk-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ReactNode } from 'react';
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
-
 interface ClerkThemeWrapperProps {
   children: ReactNode;
+  publishableKey: string;
 }
 
-export function ClerkThemeWrapper({ children }: ClerkThemeWrapperProps) {
+export function ClerkThemeWrapper({ children, publishableKey }: ClerkThemeWrapperProps) {
   const { isDark } = useTheme();
 
   return (
     <ClerkProvider
-      publishableKey={PUBLISHABLE_KEY}
+      publishableKey={publishableKey}
       appearance={{
         variables: {
           colorPrimary: isDark ? '#fcd34d' : '#d97706',

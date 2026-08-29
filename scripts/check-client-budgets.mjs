@@ -1,13 +1,22 @@
 import { gzipSync } from 'node:zlib';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, normalize, relative } from 'node:path';
 
 const dist = join(process.cwd(), 'apps/client/dist');
 const assets = join(dist, 'assets');
 const INITIAL_JS_GZIP_LIMIT = 300 * 1024;
 const PRECACHE_LIMIT = 1024 * 1024;
 
-const entry = readdirSync(assets).find((file) => /^index-.*\.js$/.test(file));
+function filesUnder(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? filesUnder(path) : [path];
+  });
+}
+
+const assetFiles = filesUnder(assets);
+const entryPath = assetFiles.find((file) => /^index-.*\.js$/.test(file.split('/').at(-1) ?? ''));
+const entry = entryPath ? relative(assets, entryPath) : undefined;
 if (!entry) throw new Error('Client build entry was not found. Run the client build first.');
 
 const visited = new Set();
@@ -16,14 +25,17 @@ function staticGraph(file) {
   visited.add(file);
   const source = readFileSync(join(assets, file), 'utf8');
   let total = gzipSync(source).length;
-  for (const match of source.matchAll(/from"\.\/([^"?]+\.js)"/g)) total += staticGraph(match[1]);
+  for (const match of source.matchAll(/from"([^"?]+\.js)"/g)) {
+    if (!match[1].startsWith('.')) continue;
+    total += staticGraph(normalize(join(dirname(file), match[1])));
+  }
   return total;
 }
 
 const initialGzip = staticGraph(entry);
 const deferredInitialChunks = [/^pdf-/, /^pdf\.worker\./, /^DrawingCanvas-/, /^rendererWorker-/];
 const eagerDeferredChunk = [...visited].find((file) =>
-  deferredInitialChunks.some((pattern) => pattern.test(file)),
+  deferredInitialChunks.some((pattern) => pattern.test(file.split('/').at(-1) ?? '')),
 );
 const precache = readFileSync(join(dist, 'sw.js'), 'utf8');
 const precacheFiles = new Set(

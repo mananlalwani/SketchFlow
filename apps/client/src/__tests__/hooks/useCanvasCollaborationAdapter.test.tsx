@@ -75,6 +75,27 @@ describe('useCanvasCollaborationAdapter', () => {
     expect(requestCanonicalHydration).toHaveBeenCalledWith('project-1');
   });
 
+  it('does not rejoin the room when only the canonical revision changes', () => {
+    let revision = 1;
+    const hook = renderHook(() =>
+      useCanvasCollaborationAdapter({
+        on,
+        isConnected: true,
+        currentProjectId: 'project-1',
+        projectRevision: revision,
+        requestCanonicalHydration,
+        applyAuthoritativeProject,
+        replaceHistory,
+        requestFullRedraw,
+      }),
+    );
+
+    revision = 2;
+    hook.rerender();
+
+    expect(requestCanonicalHydration).toHaveBeenCalledOnce();
+  });
+
   it('hydrates canonical state without using a dirty local update', () => {
     renderAdapter();
 

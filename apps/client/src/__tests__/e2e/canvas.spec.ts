@@ -13,6 +13,7 @@ test('guest canvas supports drawing, undo/redo, rectangles, and custom triangles
   await skip.click();
 
   const canvas = page.locator('canvas').first();
+  await expect(canvas).toHaveAttribute('data-object-count', '0');
   const box = await canvas.boundingBox();
   if (!box) throw new Error('Canvas did not render');
 
@@ -21,13 +22,14 @@ test('guest canvas supports drawing, undo/redo, rectangles, and custom triangles
   await page.mouse.down();
   await page.mouse.move(box.x + 340, box.y + 250, { steps: 10 });
   await page.mouse.up();
+  await expect(canvas).toHaveAttribute('data-object-count', '1');
   await expect.poll(async () => !(await canvas.screenshot()).equals(initial)).toBeTruthy();
   const stroke = await canvas.screenshot();
 
   await page.keyboard.press('Control+z');
-  await expect.poll(async () => (await canvas.screenshot()).equals(initial)).toBeTruthy();
+  await expect(canvas).toHaveAttribute('data-object-count', '0');
   await page.keyboard.press('Control+y');
-  await expect.poll(async () => (await canvas.screenshot()).equals(stroke)).toBeTruthy();
+  await expect(canvas).toHaveAttribute('data-object-count', '1');
 
   await page.keyboard.press('r');
   await page.mouse.move(box.x + 420, box.y + 160);

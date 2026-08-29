@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NetworkError, ValidationError } from '@/lib/errorHandling';
-import { createProject, updateProject } from '@/lib/api';
+import {
+  createFolder,
+  createProject,
+  getSharedProject,
+  listProjects,
+  shareProject,
+  updateProject,
+} from '@/lib/api';
 
 describe('cloud project API', () => {
   afterEach(() => {
@@ -34,6 +41,54 @@ describe('cloud project API', () => {
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not retry an ambiguous cloud create failure', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new TypeError('fetch failed'));
+
+    await expect(createProject('Board', { objects: [] }, 'token')).rejects.toBeInstanceOf(
+      NetworkError,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports request timeouts through the network error contract', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new DOMException('Timed out', 'AbortError'));
+
+    await expect(createProject('Board', { objects: [] }, 'token')).rejects.toMatchObject({
+      name: 'NetworkError',
+      message: 'Network request timed out. Please try again.',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['folder creation', () => createFolder('Ideas', '#3b82f6', null, 'token')],
+    ['share-token rotation', () => shareProject('project-1', 'token')],
+  ])('does not retry ambiguous %s failures', async (_label, request) => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new TypeError('fetch failed'));
+
+    await expect(request()).rejects.toBeInstanceOf(NetworkError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a successful response with an invalid payload', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ projects: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(listProjects('token')).rejects.toMatchObject({ name: 'ZodError' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('sends only server-supported create and update fields', async () => {
@@ -93,6 +148,35 @@ describe('cloud project API', () => {
       title: 'Renamed board',
       data: { objects: [] },
       expectedRevision: 1,
+    });
+  });
+
+  it('parses the redacted public project representation without private user fields', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'project-1',
+          title: 'Shared board',
+          data: { objects: [] },
+          createdAt: 1,
+          updatedAt: 2,
+          revision: 3,
+          shared: true,
+          role: 'viewer',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    await expect(getSharedProject('public-token')).resolves.toEqual({
+      id: 'project-1',
+      title: 'Shared board',
+      data: { objects: [] },
+      createdAt: 1,
+      updatedAt: 2,
+      revision: 3,
+      shared: true,
+      role: 'viewer',
     });
   });
 });

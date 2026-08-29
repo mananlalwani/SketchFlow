@@ -29,7 +29,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../otel.js', () => ({}));
 vi.mock('../../config/env.js', () => ({
-  env: { CLERK_SECRET_KEY: 'test', CORS_ORIGINS: [], PORT: 0, HOST: '127.0.0.1' },
+  env: {
+    CLERK_SECRET_KEY: 'test',
+    CLIENT_URL: 'https://draw.example.com',
+    CORS_ORIGINS: [],
+    PORT: 0,
+    HOST: '127.0.0.1',
+  },
   isProd: false,
   clerkPublishableKey: 'pk_test',
 }));
@@ -38,7 +44,7 @@ vi.mock('../../lib/prisma.js', () => ({
   checkDatabaseHealth: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('../../utils/logger.js', () => ({
-  Logger: { setRequestId: vi.fn() },
+  Logger: { runWithRequestId: (_requestId: string, callback: () => void) => callback() },
   getTraceContext: vi.fn(() => ({})),
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn() },
 }));
@@ -51,7 +57,9 @@ vi.mock('../../services/ProjectService.js', () => ({
 }));
 vi.mock('@clerk/express', () => ({
   clerkMiddleware: () => (_req: ExpressRequest, _res: Response, next: NextFunction) => next(),
-  requireAuth: () => (_req: ExpressRequest, _res: Response, next: NextFunction) => next(),
+  // Clerk's deprecated requireAuth() redirects browser-like unauthenticated
+  // requests. API routes must not install it ahead of our JSON auth boundary.
+  requireAuth: () => (_req: ExpressRequest, res: Response) => res.redirect('/'),
   getAuth: (req: TestAuthRequest) => ({
     userId: req.headers['x-test-user'] ?? null,
   }),
@@ -68,7 +76,21 @@ describe('project REST boundary', () => {
   it('rejects an unauthenticated project list before calling the service', async () => {
     const response = await request(app).get('/api/projects');
     expect(response.status).toBe(401);
+    expect(response.type).toBe('application/json');
     expect(mocks.projectService.list).not.toHaveBeenCalled();
+  });
+
+  it('exposes only the public runtime authentication configuration', async () => {
+    const response = await request(app).get('/api/config');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ clerkPublishableKey: 'pk_test' });
+    expect(JSON.stringify(response.body)).not.toContain('secret');
+  });
+
+  it('replaces an unsafe request correlation header', async () => {
+    const response = await request(app).get('/api/health').set('x-request-id', 'x'.repeat(200));
+
+    expect(response.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('rejects malformed project payloads at the HTTP boundary', async () => {
@@ -197,9 +219,31 @@ describe('project REST boundary', () => {
   });
 
   it('returns only an active public share record', async () => {
-    mocks.projectService.getByShareToken.mockResolvedValueOnce({ id: 'shared-project' });
+    mocks.projectService.getByShareToken.mockResolvedValueOnce({
+      id: 'shared-project',
+      title: 'Public board',
+      data: { objects: [] },
+      revision: 2,
+      createdAt: 1,
+      updatedAt: 2,
+      shared: true,
+      role: 'viewer',
+    });
     const active = await request(app).get(`/api/projects/shared/${'a'.repeat(43)}`);
     expect(active.status).toBe(200);
+    expect(active.body).toEqual({
+      id: 'shared-project',
+      title: 'Public board',
+      data: { objects: [] },
+      revision: 2,
+      createdAt: 1,
+      updatedAt: 2,
+      shared: true,
+      role: 'viewer',
+    });
+    expect(active.body).not.toHaveProperty('userId');
+    expect(active.body).not.toHaveProperty('shareToken');
+    expect(active.body).not.toHaveProperty('collaborators');
 
     mocks.projectService.getByShareToken.mockResolvedValueOnce(null);
     const expiredOrRevoked = await request(app).get(`/api/projects/shared/${'b'.repeat(43)}`);
@@ -229,7 +273,10 @@ describe('project REST boundary', () => {
       request(app)
         .post('/api/projects/ckz1h2abc0000qwerty123456/share')
         .set('x-test-user', 'owner-1'),
-    ).resolves.toMatchObject({ status: 200 });
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { shareUrl: `https://draw.example.com/draw?share=${'a'.repeat(43)}` },
+    });
     await expect(
       request(app)
         .get('/api/projects/ckz1h2abc0000qwerty123456/collaborators')

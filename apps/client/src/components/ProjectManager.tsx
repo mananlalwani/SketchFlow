@@ -16,9 +16,11 @@ import {
   moveProjectToFolder,
 } from '@/lib/api';
 import { useDrawingStore } from '@/store/drawingStore';
-import { activeProjectWriteCoordinator } from '@/lib/projectWriteCoordinator';
-import { deserializeProject, serializeProject, generateId } from '@/lib/utils';
-import { encodeDrawFormat, decodeDrawFormat, DRAW_FORMAT_EXTENSION } from '@/lib/drawFormat';
+import { installProjectSession } from '@/lib/projectSession';
+import { serializeProject } from '@/lib/utils';
+import { DRAW_FORMAT_EXTENSION } from '@/lib/drawFormat';
+import { exportPersistedProject, type ProjectExportFormat } from '@/lib/projectExport';
+import { importProjectFile } from '@/lib/projectImport';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -176,8 +178,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     }
   };
 
-  const { hydrateProject, currentProjectId, setCurrentProject, setProjectRevision } =
-    useDrawingStore();
+  const { currentProjectId, setProjectRevision } = useDrawingStore();
 
   const handleDismissBanner = () => {
     setGuestBannerDismissed(true);
@@ -411,21 +412,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     try {
       const token = await getToken();
       const record = await getProject(id, token);
-      const objects = deserializeProject(record.data);
-
-      // Install a fully clean project session in one store transition so a load
-      // cannot briefly appear dirty or save with an uninitialized revision.
-      activeProjectWriteCoordinator.reset(record.id, {
-        projectId: record.id,
-        revision: record.revision,
-      });
-      hydrateProject({
-        id: record.id,
-        objects,
-        title: record.title,
-        revision: record.revision,
-        role: isGuest ? 'owner' : record.role || 'owner',
-      });
+      installProjectSession(record, isGuest ? 'owner' : record.role || 'owner');
 
       localStorage.setItem('lastProjectId', record.id);
 
@@ -497,217 +484,36 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     }
   };
 
-  const handleExportPNG = async (projectId: string, title: string) => {
+  const handleDeleteProject = async (project: ProjectListItem) => {
+    if (!confirm('Are you sure you want to delete this project?')) return;
     try {
       const token = await getToken();
-      const record = await getProject(projectId, token);
-      const objects = deserializeProject(record.data);
+      await deleteProject(project.id, token);
+      setProjects((previous) => previous.filter((candidate) => candidate.id !== project.id));
+      if (currentProjectId === project.id) useDrawingStore.getState().newProject();
+      toast({ title: 'Project deleted' });
+    } catch {
+      toast({ title: 'Failed to delete', variant: 'destructive' });
+    }
+  };
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 4096;
-      canvas.height = 4096;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas not supported');
-
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      for (const obj of objects) {
-        ctx.save();
-        ctx.globalAlpha = obj.alpha ?? 1;
-        ctx.strokeStyle = obj.color;
-        ctx.fillStyle = obj.color;
-        ctx.lineWidth = obj.size;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        const x = obj.x ?? 0;
-        const y = obj.y ?? 0;
-        const width = obj.width ?? 0;
-        const height = obj.height ?? 0;
-
-        if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
-          ctx.beginPath();
-          ctx.moveTo(obj.points[0].x, obj.points[0].y);
-          for (let i = 1; i < obj.points.length; i++) {
-            ctx.lineTo(obj.points[i].x, obj.points[i].y);
-          }
-          ctx.stroke();
-        } else if (obj.type === 'line') {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x + width, y + height);
-          ctx.stroke();
-        } else if (obj.type === 'rectangle') {
-          if (obj.filled) {
-            ctx.fillRect(x, y, width, height);
-          } else {
-            ctx.strokeRect(x, y, width, height);
-          }
-        } else if (obj.type === 'ellipse') {
-          ctx.beginPath();
-          ctx.ellipse(
-            x + width / 2,
-            y + height / 2,
-            Math.abs(width / 2),
-            Math.abs(height / 2),
-            0,
-            0,
-            Math.PI * 2,
-          );
-          if (obj.filled) {
-            ctx.fill();
-          } else {
-            ctx.stroke();
-          }
-        } else if (obj.type === 'text' && obj.text) {
-          ctx.font = `${obj.fontSize || 24}px sans-serif`;
-          ctx.fillText(obj.text, x, y);
-        }
-        ctx.restore();
-      }
-
-      const link = document.createElement('a');
-      link.download = `${title || 'drawing'}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-
-      toast({ title: 'Exported as PNG' });
+  const handleExport = async (projectId: string, title: string, format: ProjectExportFormat) => {
+    try {
+      const token = await getToken();
+      await exportPersistedProject({ projectId, title, token, format });
+      toast({ title: `Exported as ${format === 'dra' ? '.dra' : format.toUpperCase()}` });
     } catch (e) {
       console.error(e);
       toast({ title: 'Export failed', variant: 'destructive' });
     }
   };
 
-  const handleExportPDF = async (projectId: string, title: string) => {
-    try {
-      const token = await getToken();
-      const record = await getProject(projectId, token);
-      const objects = deserializeProject(record.data);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = 4096;
-      canvas.height = 4096;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas not supported');
-
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      for (const obj of objects) {
-        ctx.save();
-        ctx.globalAlpha = obj.alpha ?? 1;
-        ctx.strokeStyle = obj.color;
-        ctx.fillStyle = obj.color;
-        ctx.lineWidth = obj.size;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        const x = obj.x ?? 0;
-        const y = obj.y ?? 0;
-        const width = obj.width ?? 0;
-        const height = obj.height ?? 0;
-
-        if (obj.type === 'stroke' && obj.points && obj.points.length > 0) {
-          ctx.beginPath();
-          ctx.moveTo(obj.points[0].x, obj.points[0].y);
-          for (let i = 1; i < obj.points.length; i++) {
-            ctx.lineTo(obj.points[i].x, obj.points[i].y);
-          }
-          ctx.stroke();
-        } else if (obj.type === 'line') {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x + width, y + height);
-          ctx.stroke();
-        } else if (obj.type === 'rectangle') {
-          if (obj.filled) {
-            ctx.fillRect(x, y, width, height);
-          } else {
-            ctx.strokeRect(x, y, width, height);
-          }
-        } else if (obj.type === 'ellipse') {
-          ctx.beginPath();
-          ctx.ellipse(
-            x + width / 2,
-            y + height / 2,
-            Math.abs(width / 2),
-            Math.abs(height / 2),
-            0,
-            0,
-            Math.PI * 2,
-          );
-          if (obj.filled) {
-            ctx.fill();
-          } else {
-            ctx.stroke();
-          }
-        } else if (obj.type === 'text' && obj.text) {
-          ctx.font = `${obj.fontSize || 24}px sans-serif`;
-          ctx.fillText(obj.text, x, y);
-        }
-        ctx.restore();
-      }
-
-      const imgData = canvas.toDataURL('image/png');
-
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>${title || 'Drawing'}</title>
-            <style>
-              body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #1e293b; }
-              img { max-width: 100%; max-height: 100vh; }
-              @media print {
-                body { background: white; }
-                img { max-width: 100%; height: auto; }
-              }
-            </style>
-          </head>
-          <body>
-            <img src="${imgData}" />
-            <script>
-              window.onload = function() {
-                window.print();
-              }
-            </script>
-          </body>
-          </html>
-        `);
-        printWindow.document.close();
-      }
-
-      toast({ title: 'Opening print dialog for PDF' });
-    } catch (e) {
-      console.error(e);
-      toast({ title: 'Export failed', variant: 'destructive' });
-    }
-  };
-
-  const handleExportDRA = async (projectId: string, title: string) => {
-    try {
-      const token = await getToken();
-      const record = await getProject(projectId, token);
-
-      const encrypted = await encodeDrawFormat(record.data);
-
-      const blob = new Blob([encrypted], { type: 'application/x-drawapp' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${title || 'project'}${DRAW_FORMAT_EXTENSION}`;
-      a.click();
-      URL.revokeObjectURL(url);
-
-      toast({ title: 'Exported as .dra file' });
-    } catch (e) {
-      console.error(e);
-      toast({ title: 'Export failed', variant: 'destructive' });
-    }
-  };
+  const handleExportPNG = (projectId: string, title: string) =>
+    handleExport(projectId, title, 'png');
+  const handleExportPDF = (projectId: string, title: string) =>
+    handleExport(projectId, title, 'pdf');
+  const handleExportDRA = (projectId: string, title: string) =>
+    handleExport(projectId, title, 'dra');
 
   const handleImportDRA = async () => {
     const input = document.createElement('input');
@@ -718,13 +524,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       if (!file) return;
 
       try {
-        const buffer = await file.arrayBuffer();
-        const data = await decodeDrawFormat(buffer);
-
         const token = await getToken();
-        const title =
-          file.name.replace(new RegExp(`\\${DRAW_FORMAT_EXTENSION}$`), '') || 'Imported Project';
-        await createProject(title, data, token);
+        await importProjectFile(file, token);
         await loadData();
         toast({ title: 'Project imported successfully' });
       } catch (err) {
@@ -746,96 +547,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       try {
         toast({ title: 'Processing PDF...', description: 'This may take a moment.' });
 
-        const [{ getDocument, GlobalWorkerOptions }, workerModule, buffer] = await Promise.all([
-          import('pdfjs-dist'),
-          import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
-          file.arrayBuffer(),
-        ]);
-        GlobalWorkerOptions.workerSrc = workerModule.default;
-        const pdf = await getDocument({ data: buffer }).promise;
-
-        const objects: ReturnType<typeof deserializeProject> = [];
-        const CANVAS_SIZE = 4096;
-        let yOffset = 100; // Start with some margin
-
-        // Calculate all page positions first
-        const pageData: Array<{
-          imageData: string;
-          x: number;
-          y: number;
-          width: number;
-          height: number;
-        }> = [];
-
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 2 }); // Higher scale for better quality
-
-          // Create a canvas to render the page
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) continue;
-
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-
-          await page.render({ canvasContext: ctx, viewport, canvas }).promise;
-
-          // Convert to data URL
-          const imageData = canvas.toDataURL('image/png');
-
-          // Scale to fit within canvas width with margin
-          const maxWidth = CANVAS_SIZE - 200;
-          const scale = Math.min(1, maxWidth / viewport.width);
-          const scaledWidth = viewport.width * scale;
-          const scaledHeight = viewport.height * scale;
-
-          pageData.push({
-            imageData,
-            x: (CANVAS_SIZE - scaledWidth) / 2, // Center horizontally
-            y: yOffset,
-            width: scaledWidth,
-            height: scaledHeight,
-          });
-
-          yOffset += scaledHeight + 50; // Add spacing between pages
-        }
-
-        if (pageData.length === 0) {
-          toast({
-            title: 'Import failed',
-            description: 'No pages found in PDF',
-            variant: 'destructive',
-          });
-          return;
-        }
-
-        // Add pages in reverse order using unshift so they render in the background
-        // (first in array = drawn first = behind, but we want page 1 visually on top)
-        for (let i = pageData.length - 1; i >= 0; i--) {
-          const page = pageData[i];
-          objects.unshift({
-            id: generateId(),
-            type: 'image',
-            x: page.x,
-            y: page.y,
-            width: page.width,
-            height: page.height,
-            color: '#000000',
-            size: 1,
-            alpha: 1,
-            imageData: page.imageData,
-          });
-        }
-
-        const projectData = serializeProject(objects, CANVAS_SIZE, CANVAS_SIZE);
         const token = await getToken();
-        const title = file.name.replace(/\.pdf$/i, '') || 'Imported PDF';
-        await createProject(title, projectData, token);
+        const result = await importProjectFile(file, token);
         await loadData();
         toast({
           title: 'PDF imported successfully',
-          description: `${pdf.numPages} page(s) imported.`,
+          description: `${result.pageCount} page(s) imported.`,
         });
       } catch (err) {
         console.error('PDF import error:', err);
@@ -915,7 +632,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
             <div className="border-b border-stone-200/90 px-4 py-4 dark:border-white/[0.08]">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-stone-600 dark:text-stone-400">
                     Library
                   </p>
                   <p className="mt-1 text-sm font-semibold tracking-[-0.02em] text-stone-900 dark:text-stone-100">
@@ -1601,26 +1318,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                     <Button
                                       variant="destructive"
                                       className="w-full justify-start"
-                                      onClick={() => {
-                                        if (
-                                          !confirm('Are you sure you want to delete this project?')
-                                        )
-                                          return;
-                                        getToken().then((token) => {
-                                          deleteProject(project.id, token).then(() => {
-                                            setProjects((prev) =>
-                                              prev.filter((p) => p.id !== project.id),
-                                            );
-                                            if (currentProjectId === project.id) {
-                                              const store = useDrawingStore.getState();
-                                              store.newProject();
-                                              store.clearCanvas();
-                                              setCurrentProject(undefined);
-                                            }
-                                            toast({ title: 'Project deleted' });
-                                          });
-                                        });
-                                      }}
+                                      onClick={() => void handleDeleteProject(project)}
                                     >
                                       <Trash2 className="w-4 h-4 mr-2" />
                                       Delete
@@ -1771,35 +1469,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 <>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
-                                    onSelect={(e) => {
-                                      e.preventDefault();
-                                      if (
-                                        !confirm('Are you sure you want to delete this project?')
-                                      ) {
-                                        return;
-                                      }
-                                      getToken()
-                                        .then((token) => {
-                                          deleteProject(project.id, token).then(() => {
-                                            setProjects((prev) =>
-                                              prev.filter((p) => p.id !== project.id),
-                                            );
-                                            if (currentProjectId === project.id) {
-                                              const store = useDrawingStore.getState();
-                                              store.newProject();
-                                              store.clearCanvas();
-                                              setCurrentProject(undefined);
-                                            }
-                                            toast({ title: 'Project deleted' });
-                                          });
-                                        })
-                                        .catch(() => {
-                                          toast({
-                                            title: 'Failed to delete',
-                                            variant: 'destructive',
-                                          });
-                                        });
-                                    }}
+                                    onSelect={() => void handleDeleteProject(project)}
                                     className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400"
                                   >
                                     <Trash2 className="w-4 h-4 mr-2" />
@@ -2008,33 +1678,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                     <Button
                                       variant="destructive"
                                       className="w-full justify-start"
-                                      onClick={() => {
-                                        if (
-                                          !confirm('Are you sure you want to delete this project?')
-                                        )
-                                          return;
-                                        getToken()
-                                          .then((token) => {
-                                            deleteProject(project.id, token).then(() => {
-                                              setProjects((prev) =>
-                                                prev.filter((p) => p.id !== project.id),
-                                              );
-                                              if (currentProjectId === project.id) {
-                                                const store = useDrawingStore.getState();
-                                                store.newProject();
-                                                store.clearCanvas();
-                                                setCurrentProject(undefined);
-                                              }
-                                              toast({ title: 'Project deleted' });
-                                            });
-                                          })
-                                          .catch(() => {
-                                            toast({
-                                              title: 'Failed to delete',
-                                              variant: 'destructive',
-                                            });
-                                          });
-                                      }}
+                                      onClick={() => void handleDeleteProject(project)}
                                     >
                                       <Trash2 className="w-4 h-4 mr-2" />
                                       Delete
@@ -2180,35 +1824,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                 <>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
-                                    onSelect={(e) => {
-                                      e.preventDefault();
-                                      if (
-                                        !confirm('Are you sure you want to delete this project?')
-                                      ) {
-                                        return;
-                                      }
-                                      getToken()
-                                        .then((token) => {
-                                          deleteProject(project.id, token).then(() => {
-                                            setProjects((prev) =>
-                                              prev.filter((p) => p.id !== project.id),
-                                            );
-                                            if (currentProjectId === project.id) {
-                                              const store = useDrawingStore.getState();
-                                              store.newProject();
-                                              store.clearCanvas();
-                                              setCurrentProject(undefined);
-                                            }
-                                            toast({ title: 'Project deleted' });
-                                          });
-                                        })
-                                        .catch(() => {
-                                          toast({
-                                            title: 'Failed to delete',
-                                            variant: 'destructive',
-                                          });
-                                        });
-                                    }}
+                                    onSelect={() => void handleDeleteProject(project)}
                                     className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400"
                                   >
                                     <Trash2 className="w-4 h-4 mr-2" />

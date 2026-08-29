@@ -94,7 +94,7 @@ export function LayerStack({ className }: LayerStackProps) {
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
           Layers · {objects.length}
         </p>
-        <p className="text-xs text-slate-400">Last drawn is on top</p>
+        <p className="text-xs text-slate-600 dark:text-slate-400">Last drawn is on top</p>
       </div>
       {objects.length === 0 ? (
         <div className="border-y border-dashed border-stone-200 px-5 py-8 text-center dark:border-white/[0.1]">

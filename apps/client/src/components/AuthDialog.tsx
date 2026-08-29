@@ -6,7 +6,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { SignInButton, SignUpButton } from '@clerk/clerk-react';
+import { AuthTrigger } from '@/components/auth/AuthTrigger';
 
 interface AuthDialogProps {
   open: boolean;
@@ -24,16 +24,16 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3 pt-4">
-          <SignInButton mode="modal">
+          <AuthTrigger mode="sign-in">
             <Button className="w-full" onClick={() => onOpenChange(false)}>
               Sign In
             </Button>
-          </SignInButton>
-          <SignUpButton mode="modal">
+          </AuthTrigger>
+          <AuthTrigger mode="sign-up">
             <Button variant="outline" className="w-full" onClick={() => onOpenChange(false)}>
               Create Account
             </Button>
-          </SignUpButton>
+          </AuthTrigger>
         </div>
         <p className="text-center text-sm text-slate-500 dark:text-slate-400 pt-2">
           Use social login or email to get started.
