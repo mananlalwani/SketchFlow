@@ -307,6 +307,14 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
         const backup = await getEmergencyBackup(currentProjectId);
         if (!backup) return;
         if (Date.now() - backup.timestamp < 60 * 60 * 1000) {
+          const currentData = serializeProject(objects, 4096, 4096);
+          if (backup.title === projectTitle && backup.data === currentData) {
+            await removeEmergencyBackup(currentProjectId, {
+              title: backup.title,
+              data: backup.data,
+            });
+            return;
+          }
           skipRecoveredBackupRef.current = true;
           useDrawingStore.getState().setObjects(deserializeProject(backup.data));
           useDrawingStore.getState().requestFullRedraw();
@@ -343,6 +351,9 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
     deserializeProject,
     getEmergencyBackup,
     removeEmergencyBackup,
+    objects,
+    projectTitle,
+    serializeProject,
     toast,
     useDrawingStore,
   ]);
