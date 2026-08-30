@@ -235,6 +235,20 @@ describe('Socket.IO boundary', () => {
     expect(socket?.rooms.has('ckz1h2abc0001qwerty123456')).toBe(false);
   });
 
+  it('does not join when access disappears before canonical hydration', async () => {
+    const projectId = 'ckz1h2abc0005qwerty123456';
+    mocks.checkPermission.mockResolvedValue(true);
+    mocks.get.mockResolvedValueOnce(null);
+    const client = await connect('valid-token');
+
+    client.emit('room:join', projectId);
+    await vi.waitFor(() => expect(mocks.get).toHaveBeenCalledWith(projectId, 'user-1'));
+
+    expect(
+      sketchServer.getSocketServer().sockets.sockets.get(client.id)?.rooms.has(projectId),
+    ).toBe(false);
+  });
+
   it('keeps the latest requested room when joins resolve out of order', async () => {
     const firstProject = 'ckz1h2abc0010qwerty123456';
     const secondProject = 'ckz1h2abc0011qwerty123456';

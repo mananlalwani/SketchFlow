@@ -534,18 +534,19 @@ export class ProjectService {
             );
           }
 
-          return {
+          const record: Omit<ProjectRecord, 'data'> = {
             id: p.id,
             userId: p.userId,
             title: p.title,
             updatedAt: p.updatedAt.getTime(),
             createdAt: p.createdAt.getTime(),
             shared: p.shared,
-            shareToken: p.shareToken ?? undefined,
             folderId: p.folderId ?? null,
             role,
             collaborators: p.collaborators,
           };
+          if (isOwner && p.shareToken) record.shareToken = p.shareToken;
+          return record;
         })
         .sort((a, b) => b.updatedAt - a.updatedAt);
     } catch (e) {
@@ -554,7 +555,7 @@ export class ProjectService {
     }
   }
 
-  public async get(id: string, userId?: string): Promise<ProjectRecord | null> {
+  public async get(id: string, userId: string): Promise<ProjectRecord | null> {
     try {
       let project;
       let collaborators: { userId: string; role: string }[] = [];
@@ -583,13 +584,13 @@ export class ProjectService {
       const collaborator = collaborators.find((c) => c.userId === userId);
       const hasAccess = isOwner || collaborator;
 
-      if (userId && !hasAccess) {
+      if (!hasAccess) {
         return null;
       }
 
       const role = isOwner ? 'owner' : collaborator?.role === 'editor' ? 'editor' : 'viewer';
 
-      return {
+      const record: ProjectRecord = {
         id: project.id,
         userId: project.userId,
         title: project.title,
@@ -598,10 +599,11 @@ export class ProjectService {
         updatedAt: project.updatedAt.getTime(),
         createdAt: project.createdAt.getTime(),
         shared: project.shared,
-        shareToken: project.shareToken ?? undefined,
         role,
         collaborators,
       };
+      if (isOwner && project.shareToken) record.shareToken = project.shareToken;
+      return record;
     } catch (e) {
       this.log.error('Failed to get project', e);
       return null;
@@ -851,7 +853,7 @@ export class ProjectService {
   public async getCollaborators(
     projectId: string,
     userId: string,
-  ): Promise<{ userId: string; role: string }[]> {
+  ): Promise<{ userId: string; role: string; addedAt: number }[]> {
     try {
       const project = await this.database.project.findUnique({
         where: { id: projectId },
@@ -865,7 +867,11 @@ export class ProjectService {
         return [];
       }
 
-      return project.collaborators.map((c) => ({ userId: c.userId, role: c.role }));
+      return project.collaborators.map((c) => ({
+        userId: c.userId,
+        role: c.role,
+        addedAt: c.addedAt.getTime(),
+      }));
     } catch (e) {
       this.log.error('Failed to get collaborators', e);
       return [];

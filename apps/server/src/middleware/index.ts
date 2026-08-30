@@ -4,6 +4,7 @@ import { Logger, logger, getTraceContext } from '../utils/logger.js';
 import { createClient } from 'redis';
 import { env, isProd } from '../config/env.js';
 import { captureServerException, captureServerSignal } from '../sentry.js';
+import { z } from 'zod';
 
 /**
  * Request ID middleware - adds correlation ID to all requests
@@ -81,17 +82,43 @@ interface RateLimitEntry {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 type RateLimitRedisClient = {
-  isOpen: boolean;
-  on(event: 'error', listener: (error: Error) => void): RateLimitRedisClient;
-  connect(): Promise<RateLimitRedisClient>;
-  incr(key: string): Promise<number>;
-  pExpire(key: string, milliseconds: number): Promise<number>;
-  pTTL(key: string): Promise<number>;
+  readonly isOpen: boolean;
+  connect(): Promise<void>;
+  evaluate(key: string, windowMs: number): Promise<[count: number, ttl: number]>;
 };
+const redisRateLimitResultSchema = z.tuple([z.number(), z.number()]);
+
+const REDIS_RATE_LIMIT_SCRIPT = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return { count, redis.call('PTTL', KEYS[1]) }
+`;
 
 let redisLimiter: RateLimitRedisClient | null = null;
 let redisLimiterConnecting: Promise<RateLimitRedisClient | null> | null = null;
 let redisLimiterRetryAfter = 0;
+
+function createRateLimitRedisClient(): RateLimitRedisClient {
+  const client = createClient({ url: env.REDIS_URL });
+  client.on('error', (error) => logger.error('Redis rate limiter error', error));
+  return {
+    get isOpen() {
+      return client.isOpen;
+    },
+    async connect() {
+      await client.connect();
+    },
+    async evaluate(key, windowMs) {
+      const result = await client.eval(REDIS_RATE_LIMIT_SCRIPT, {
+        keys: [key],
+        arguments: [String(windowMs)],
+      });
+      return redisRateLimitResultSchema.parse(result);
+    },
+  };
+}
 
 async function getRedisLimiter(): Promise<RateLimitRedisClient | null> {
   if (!env.REDIS_URL) return null;
@@ -99,8 +126,7 @@ async function getRedisLimiter(): Promise<RateLimitRedisClient | null> {
   if (Date.now() < redisLimiterRetryAfter) return null;
   if (!redisLimiterConnecting) {
     redisLimiterConnecting = (async () => {
-      const client = createClient({ url: env.REDIS_URL });
-      client.on('error', (error) => logger.error('Redis rate limiter error', error));
+      const client = createRateLimitRedisClient();
       await client.connect();
       redisLimiter = client;
       redisLimiterConnecting = null;
@@ -146,9 +172,7 @@ export function rateLimitMiddleware(options: {
     const redis = await getRedisLimiter();
     if (redis) {
       const redisKey = `sketchflow:rate-limit:${key}`;
-      const count = await redis.incr(redisKey);
-      if (count === 1) await redis.pExpire(redisKey, windowMs);
-      const ttl = await redis.pTTL(redisKey);
+      const [count, ttl] = await redis.evaluate(redisKey, windowMs);
       res.setHeader('X-RateLimit-Limit', maxRequests);
       res.setHeader('X-RateLimit-Remaining', Math.max(0, maxRequests - count));
       res.setHeader('X-RateLimit-Reset', Math.ceil((Date.now() + Math.max(0, ttl)) / 1000));

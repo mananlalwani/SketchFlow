@@ -87,6 +87,14 @@ describe('project REST boundary', () => {
     expect(JSON.stringify(response.body)).not.toContain('secret');
   });
 
+  it('returns the JSON error contract for unknown API routes', async () => {
+    const response = await request(app).get('/api/does-not-exist');
+
+    expect(response.status).toBe(404);
+    expect(response.type).toBe('application/json');
+    expect(response.body).toMatchObject({ error: 'Not found', path: '/does-not-exist' });
+  });
+
   it('replaces an unsafe request correlation header', async () => {
     const response = await request(app).get('/api/health').set('x-request-id', 'x'.repeat(200));
 

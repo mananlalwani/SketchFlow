@@ -80,6 +80,7 @@ import {
   securityHeadersMiddleware,
   rateLimitMiddleware,
   errorHandlerMiddleware,
+  notFoundMiddleware,
 } from './middleware/index.js';
 import type {
   CursorData,
@@ -606,6 +607,8 @@ export class SketchFlowServer {
 
     registerFolderRoutes(this.app, this.projectService);
 
+    this.app.use('/api', notFoundMiddleware);
+
     // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
 
@@ -803,6 +806,13 @@ export class SketchFlowServer {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
         }
+        // Hydrate before joining. The read performs a second authorization check,
+        // closing the window where access could be revoked after canView resolved.
+        const canonicalProject = currentUserId
+          ? await this.projectService.get(projectId, currentUserId)
+          : null;
+        if (!canonicalProject || joinGeneration !== roomGeneration) return;
+
         // Leave previous room if any
         if (currentRoom) {
           socket.leave(currentRoom);
@@ -821,20 +831,7 @@ export class SketchFlowServer {
         currentRoom = projectId;
         socket.join(projectId);
 
-        // New clients hydrate from the one canonical database authority. Legacy
-        // snapshot replay below remains only for clients that have not migrated
-        // to the versioned collaboration protocol.
-        const canonicalProject = currentUserId
-          ? await this.projectService.get(projectId, currentUserId)
-          : null;
-        if (
-          !canonicalProject ||
-          joinGeneration !== roomGeneration ||
-          currentRoom !== projectId ||
-          !socket.rooms.has(projectId)
-        ) {
-          return;
-        }
+        // New clients hydrate from the one canonical database authority.
         socket.emit('collaboration:hydrated', {
           projectId,
           revision: canonicalProject.revision ?? 1,

@@ -383,6 +383,28 @@ describe('ProjectService', () => {
       expect(result[0].id).toBe('proj-1');
       expect(result[0].role).toBe('owner');
     });
+
+    it('does not expose the public share credential to collaborators', async () => {
+      const project = {
+        id: 'proj-1',
+        userId: 'owner',
+        title: 'Shared project',
+        updatedAt: new Date(),
+        createdAt: new Date(),
+        shared: true,
+        shareToken: 'public-secret',
+        folderId: null,
+        collaborators: [{ userId: 'viewer', role: 'viewer' }],
+      };
+      vi.mocked(prisma.project.findMany)
+        .mockResolvedValueOnce([] as never)
+        .mockResolvedValueOnce([project] as never);
+
+      const [result] = await service.list('viewer');
+
+      expect(result.role).toBe('viewer');
+      expect(result).not.toHaveProperty('shareToken');
+    });
   });
 
   describe('get', () => {
@@ -454,6 +476,26 @@ describe('ProjectService', () => {
       const result = await service.get('proj-1', 'user-123');
 
       expect(result).toBeNull();
+    });
+
+    it('redacts the public share credential from a collaborator project read', async () => {
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        id: 'proj-1',
+        userId: 'owner',
+        title: 'Shared project',
+        data: { objects: [] },
+        revision: 1,
+        updatedAt: new Date(),
+        createdAt: new Date(),
+        shared: true,
+        shareToken: 'public-secret',
+        collaborators: [{ userId: 'editor', role: 'editor' }],
+      } as never);
+
+      const result = await service.get('proj-1', 'editor');
+
+      expect(result?.role).toBe('editor');
+      expect(result).not.toHaveProperty('shareToken');
     });
   });
 
@@ -647,6 +689,19 @@ describe('ProjectService', () => {
   });
 
   describe('collaborator management', () => {
+    it('returns the collaborator timestamp in the HTTP wire format', async () => {
+      const addedAt = new Date('2026-08-29T12:00:00Z');
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        id: 'proj-1',
+        userId: 'owner',
+        collaborators: [{ userId: 'viewer', role: 'viewer', addedAt }],
+      } as never);
+
+      await expect(service.getCollaborators('proj-1', 'owner')).resolves.toEqual([
+        { userId: 'viewer', role: 'viewer', addedAt: addedAt.getTime() },
+      ]);
+    });
+
     it.each(['editor', 'viewer'])('does not let a %s manage collaborators', async (userId) => {
       vi.mocked(prisma.project.findUnique).mockResolvedValue({
         id: 'proj-1',

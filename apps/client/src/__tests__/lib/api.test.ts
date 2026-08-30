@@ -4,6 +4,7 @@ import {
   createFolder,
   createProject,
   getSharedProject,
+  getCollaborators,
   listProjects,
   shareProject,
   updateProject,
@@ -178,5 +179,20 @@ describe('cloud project API', () => {
       shared: true,
       role: 'viewer',
     });
+  });
+
+  it('parses collaborator timestamps returned by the server', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          { userId: 'user-2', email: 'person@example.com', role: 'viewer', addedAt: 1234 },
+        ]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    await expect(getCollaborators('project-1', 'token')).resolves.toEqual([
+      { userId: 'user-2', email: 'person@example.com', role: 'viewer', addedAt: 1234 },
+    ]);
   });
 });
