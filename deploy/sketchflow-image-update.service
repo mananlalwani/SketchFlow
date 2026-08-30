@@ -1,0 +1,8 @@
+[Unit]
+Description=Deploy the latest SketchFlow server image
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sketchflow/deploy-vps-image.sh

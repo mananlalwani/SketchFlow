@@ -36,6 +36,21 @@ a `VITE_*` variable.
 The `main` CI workflow detects this automatically: frontend-only commits skip the expensive
 container build and image publish jobs. It still runs the normal test and quality checks.
 
+## Automatic VPS backend deployment
+
+The VPS checks the public GHCR `latest` image once per minute using the
+`sketchflow-image-update.timer` systemd timer. When the image digest changes, it pulls the image,
+applies Prisma migrations, replaces `live-draw`, and verifies `/api/health`. The installed files
+are `/opt/sketchflow/deploy-vps-image.sh`, `/etc/systemd/system/sketchflow-image-update.service`,
+and `/etc/systemd/system/sketchflow-image-update.timer`.
+
+To inspect it on the VPS:
+
+```bash
+systemctl status sketchflow-image-update.timer
+journalctl -u sketchflow-image-update.service
+```
+
 ## Manual VPS backend deployment
 
 After GitHub Actions has published the image, pull and restart it on the VPS using the existing
