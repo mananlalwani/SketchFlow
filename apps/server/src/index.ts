@@ -637,7 +637,14 @@ export class SketchFlowServer {
     // Cloudflare Pages client. Let it load the same client bundle so the
     // hostname-aware root route can render the SketchFlow easter egg.
     const drawApiHost = 'drawapi.mananlalwani.com';
-    const drawApiFrontend = express.static(this.clientDistPath, { index: 'index.html' });
+    const drawApiFrontend = express.static(this.clientDistPath, {
+      index: 'index.html',
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html') || filePath.endsWith('/sw.js') || filePath.endsWith('/registerSW.js')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        }
+      },
+    });
     this.app.use((req, res, next) => {
       if (req.hostname === drawApiHost) {
         return drawApiFrontend(req, res, next);
