@@ -213,7 +213,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         </button>
 
         {!hideProjectControls && (
-          <div className="hidden items-center sm:flex">
+          <div className="hidden items-center lg:flex">
             <div className="mx-2 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
 
             <div className="flex items-center gap-2 group">
@@ -282,7 +282,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         )}
       </div>
 
-      <div className="hidden items-center gap-1 rounded-xl border border-stone-200/80 bg-stone-100/65 p-1 shadow-sm shadow-stone-950/[0.04] dark:border-[#3b352f] dark:bg-black/15 dark:shadow-none sm:flex">
+      <div className="hidden items-center gap-1 rounded-xl border border-stone-200/80 bg-stone-100/65 p-1 shadow-sm shadow-stone-950/[0.04] dark:border-[#3b352f] dark:bg-black/15 dark:shadow-none lg:flex">
         {!hideProjectControls && (
           <>
             <Button
@@ -454,7 +454,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
         <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-[#3b352f]" />
         <SettingsDropdown />
       </div>
-      <div className="flex items-center gap-1 sm:hidden">
+      <div className="flex items-center gap-1 lg:hidden">
         {!hideProjectControls && (
           <>
             <Button

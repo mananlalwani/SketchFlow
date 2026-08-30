@@ -240,6 +240,7 @@ export class SketchFlowServer {
       return clerk(req, res, next);
     });
 
+    // Keep the hidden DrawAPI page on the server; the normal app is served below.
     this.app.get('/', (req, res, next) => {
       if (req.hostname !== 'drawapi.mananlalwani.com') return next();
       res.setHeader(
