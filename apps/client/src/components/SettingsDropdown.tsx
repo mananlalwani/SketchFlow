@@ -51,6 +51,9 @@ import { useDrawingStore } from '@/store/drawingStore';
 import { clientEnv } from '@/config/env';
 import { downloadFile } from '@/lib/export';
 import { serializeProject } from '@/lib/utils';
+import { getOfflineSaveQueue } from '@/lib/offlineQueue';
+import { getEmergencyBackup } from '@/lib/emergencyBackup';
+import { useSocket } from '@/hooks/useSocket';
 
 export function SettingsDropdown() {
   const { theme, setTheme } = useTheme();
@@ -69,7 +72,49 @@ export function SettingsDropdown() {
   const [lastName, setLastName] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [devActionMessage, setDevActionMessage] = useState<string | null>(null);
+  const [devStorageInfo, setDevStorageInfo] = useState({
+    offlineSaves: 'checking…',
+    backup: 'checking…',
+    apiLatency: 'checking…',
+    caches: 'checking…',
+  });
   const drawingState = useDrawingStore();
+  const { isConnected: socketConnected, connectionError, connectionCount } = useSocket();
+
+  useEffect(() => {
+    if (!showDevTools) return;
+    let cancelled = false;
+    void (async () => {
+      const started = performance.now();
+      const [saves, backup, cacheKeys] = await Promise.all([
+        getOfflineSaveQueue().catch(() => []),
+        drawingState.currentProjectId
+          ? getEmergencyBackup(drawingState.currentProjectId).catch(() => undefined)
+          : Promise.resolve(undefined),
+        'caches' in window ? caches.keys().catch(() => []) : Promise.resolve([]),
+      ]);
+      let apiLatency = 'unavailable';
+      try {
+        const response = await fetch(`${clientEnv.API_URL || window.location.origin}/api/health`, {
+          cache: 'no-store',
+        });
+        apiLatency = `${Math.round(performance.now() - started)} ms (${response.status})`;
+      } catch {
+        // Keep the unavailable marker when the API cannot be reached.
+      }
+      if (!cancelled) {
+        setDevStorageInfo({
+          offlineSaves: `${saves.length} queued`,
+          backup: backup ? `${Math.round((Date.now() - backup.timestamp) / 1000)}s old` : 'none',
+          apiLatency,
+          caches: `${cacheKeys.length} cache(s)`,
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [drawingState.currentProjectId, showDevTools]);
 
   const handleAboutTap = () => {
     const now = Date.now();
@@ -90,6 +135,21 @@ export function SettingsDropdown() {
     objectCount: drawingState.objects.length,
     history: `${drawingState.historyIndex + 1} / ${drawingState.history.length}`,
     saveStatus: drawingState.saveStatus,
+    route: window.location.pathname,
+    viewport: `${window.innerWidth}×${window.innerHeight}`,
+    devicePixelRatio: window.devicePixelRatio,
+    touch: 'ontouchstart' in window,
+    memory:
+      'memory' in performance
+        ? `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
+        : 'unavailable',
+    socketConnected,
+    socketConnectionCount: connectionCount,
+    socketError: connectionError?.message || null,
+    offlineSaves: devStorageInfo.offlineSaves,
+    recoveryBackup: devStorageInfo.backup,
+    apiLatency: devStorageInfo.apiLatency,
+    caches: devStorageInfo.caches,
     userAgent: navigator.userAgent,
   });
 
@@ -640,6 +700,24 @@ export function SettingsDropdown() {
               ['Objects', String(drawingState.objects.length)],
               ['History', `${drawingState.historyIndex + 1} / ${drawingState.history.length}`],
               ['Save status', drawingState.saveStatus],
+              ['Route', window.location.pathname],
+              [
+                'Viewport',
+                `${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio}x`,
+              ],
+              ['Touch input', 'ontouchstart' in window ? 'yes' : 'no'],
+              ['Socket', socketConnected ? `connected (${connectionCount})` : 'disconnected'],
+              ['Socket error', connectionError?.message || 'none'],
+              ['Offline queue', devStorageInfo.offlineSaves],
+              ['Recovery backup', devStorageInfo.backup],
+              ['API latency', devStorageInfo.apiLatency],
+              ['App caches', devStorageInfo.caches],
+              [
+                'Memory',
+                'memory' in performance
+                  ? `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
+                  : 'unavailable',
+              ],
             ].map(([label, value]) => (
               <div
                 key={label}
