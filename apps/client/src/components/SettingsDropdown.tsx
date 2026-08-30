@@ -11,7 +11,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Settings, Sun, Moon, User, LogIn, UserPlus, LogOut, Info, PenTool } from 'lucide-react';
+import {
+  Settings,
+  Sun,
+  Moon,
+  User,
+  LogIn,
+  UserPlus,
+  LogOut,
+  Info,
+  PenTool,
+  Copy,
+  Download,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useRef } from 'react';
 import {
@@ -35,6 +49,8 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useDrawingStore } from '@/store/drawingStore';
 import { clientEnv } from '@/config/env';
+import { downloadFile } from '@/lib/export';
+import { serializeProject } from '@/lib/utils';
 
 export function SettingsDropdown() {
   const { theme, setTheme } = useTheme();
@@ -52,6 +68,7 @@ export function SettingsDropdown() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [devActionMessage, setDevActionMessage] = useState<string | null>(null);
   const drawingState = useDrawingStore();
 
   const handleAboutTap = () => {
@@ -61,6 +78,62 @@ export function SettingsDropdown() {
     if (taps >= 5) {
       aboutTapRef.current = { count: 0, lastTap: now };
       setShowDevTools(true);
+    }
+  };
+
+  const diagnostics = () => ({
+    mode: clientEnv.IS_PRODUCTION ? 'production' : 'development',
+    release: clientEnv.RELEASE_ID,
+    apiOrigin: clientEnv.API_URL || 'same origin',
+    online: navigator.onLine,
+    projectId: drawingState.currentProjectId || null,
+    objectCount: drawingState.objects.length,
+    history: `${drawingState.historyIndex + 1} / ${drawingState.history.length}`,
+    saveStatus: drawingState.saveStatus,
+    userAgent: navigator.userAgent,
+  });
+
+  const copyDiagnostics = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(diagnostics(), null, 2));
+      setDevActionMessage('Diagnostics copied');
+    } catch {
+      setDevActionMessage('Clipboard unavailable');
+    }
+  };
+
+  const exportCurrentDocument = () => {
+    const data = serializeProject(drawingState.objects, 4096, 4096);
+    downloadFile(
+      data,
+      `${drawingState.projectTitle || 'sketchflow-draft'}.json`,
+      'application/json',
+    );
+    setDevActionMessage('Document exported');
+  };
+
+  const resetRecoveryNotice = () => {
+    if (drawingState.currentProjectId) {
+      window.localStorage.removeItem(`sketchflow-recovery-notice:${drawingState.currentProjectId}`);
+    }
+    setDevActionMessage('Recovery notice reset');
+  };
+
+  const clearCaches = async () => {
+    try {
+      if ('caches' in window) {
+        await Promise.all((await caches.keys()).map((key) => caches.delete(key)));
+      }
+      if ('serviceWorker' in navigator) {
+        await Promise.all(
+          (await navigator.serviceWorker.getRegistrations()).map((registration) =>
+            registration.unregister(),
+          ),
+        );
+      }
+      setDevActionMessage('Caches cleared; reload to re-register the app');
+    } catch {
+      setDevActionMessage('Could not clear caches');
     }
   };
 
@@ -531,14 +604,7 @@ export function SettingsDropdown() {
                 ))}
               </div>
               <div className="flex items-center justify-between border-t border-stone-200 pt-4 text-xs dark:border-white/[0.08]">
-                <button
-                  type="button"
-                  onClick={handleAboutTap}
-                  className="font-medium text-stone-500 outline-none transition-colors hover:text-stone-900 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-amber-400 dark:text-stone-400 dark:hover:text-stone-100"
-                  aria-label="SketchFlow version"
-                >
-                  Version 1.0.0
-                </button>
+                <span onPointerDown={handleAboutTap}>Version 1.0.0</span>
                 <span className="text-stone-600 dark:text-stone-400">
                   © {new Date().getFullYear()} Manan Lalwani
                 </span>
@@ -579,6 +645,23 @@ export function SettingsDropdown() {
                 </span>
               </div>
             ))}
+            <div className="mt-2 grid grid-cols-2 gap-2 border-t border-stone-200 pt-4 dark:border-white/[0.08]">
+              <Button variant="outline" size="sm" onClick={() => void copyDiagnostics()}>
+                <Copy className="mr-2 h-4 w-4" /> Copy diagnostics
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportCurrentDocument}>
+                <Download className="mr-2 h-4 w-4" /> Export document
+              </Button>
+              <Button variant="outline" size="sm" onClick={resetRecoveryNotice}>
+                <RotateCcw className="mr-2 h-4 w-4" /> Reset recovery notice
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void clearCaches()}>
+                <Trash2 className="mr-2 h-4 w-4" /> Clear app caches
+              </Button>
+            </div>
+            {devActionMessage && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">{devActionMessage}</p>
+            )}
           </div>
         </DialogContent>
       </Dialog>
