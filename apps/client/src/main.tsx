@@ -16,6 +16,7 @@ import { ClerkThemeWrapper } from './components/ClerkThemeWrapper';
 import App from './App.tsx';
 import './index.css';
 import { loadClerkPublishableKey } from './lib/runtimeConfig';
+import { DrawApiPage } from './components/DrawApiPage';
 
 const isDrawApiHost = globalThis.location?.hostname === 'drawapi.mananlalwani.com';
 
@@ -26,7 +27,7 @@ async function bootstrap() {
       root.render(
         <React.StrictMode>
           <ThemeProvider>
-            <App />
+            <DrawApiPage />
           </ThemeProvider>
         </React.StrictMode>,
       );
