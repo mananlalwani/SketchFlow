@@ -77,6 +77,7 @@ export function SettingsDropdown() {
     backup: 'checking…',
     apiLatency: 'checking…',
     caches: 'checking…',
+    quota: 'checking…',
   });
   const drawingState = useDrawingStore();
   const { isConnected: socketConnected, connectionError, connectionCount } = useSocket();
@@ -93,6 +94,17 @@ export function SettingsDropdown() {
           : Promise.resolve(undefined),
         'caches' in window ? caches.keys().catch(() => []) : Promise.resolve([]),
       ]);
+      let quota = 'unavailable';
+      try {
+        if (navigator.storage?.estimate) {
+          const estimate = await navigator.storage.estimate();
+          const format = (value?: number) =>
+            value === undefined ? '?' : `${Math.round(value / 1024 / 1024)} MB`;
+          quota = `${format(estimate.usage)} used / ${format(estimate.quota)} quota`;
+        }
+      } catch {
+        // Storage estimates are optional browser capabilities.
+      }
       let apiLatency = 'unavailable';
       try {
         const response = await fetch(`${clientEnv.API_URL || window.location.origin}/api/health`, {
@@ -108,6 +120,7 @@ export function SettingsDropdown() {
           backup: backup ? `${Math.round((Date.now() - backup.timestamp) / 1000)}s old` : 'none',
           apiLatency,
           caches: `${cacheKeys.length} cache(s)`,
+          quota,
         });
       }
     })();
@@ -150,6 +163,34 @@ export function SettingsDropdown() {
     recoveryBackup: devStorageInfo.backup,
     apiLatency: devStorageInfo.apiLatency,
     caches: devStorageInfo.caches,
+    storageQuota: devStorageInfo.quota,
+    auth: isAuthenticated ? 'authenticated' : 'guest',
+    userId: user?.id ? `…${user.id.slice(-6)}` : 'none',
+    documentVersion: drawingState.documentVersion,
+    projectRevision: drawingState.projectRevision ?? 'none',
+    selectedObjects: drawingState.selectedObjectIds.length,
+    tool: drawingState.currentTool,
+    canvas: `${drawingState.zoom.toFixed(2)}x @ ${Math.round(drawingState.viewX)},${Math.round(drawingState.viewY)}`,
+    visibility: document.visibilityState,
+    language: navigator.language,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen: `${window.screen.width}×${window.screen.height}`,
+    network:
+      'connection' in navigator
+        ? (() => {
+            const connection = (
+              navigator as Navigator & {
+                connection?: {
+                  effectiveType?: string;
+                  rtt?: number;
+                  downlink?: number;
+                  saveData?: boolean;
+                };
+              }
+            ).connection;
+            return `${connection?.effectiveType || '?'} ${connection?.rtt ?? '?'}ms${connection?.saveData ? ' save-data' : ''}`;
+          })()
+        : 'unavailable',
     userAgent: navigator.userAgent,
   });
 
@@ -712,6 +753,35 @@ export function SettingsDropdown() {
               ['Recovery backup', devStorageInfo.backup],
               ['API latency', devStorageInfo.apiLatency],
               ['App caches', devStorageInfo.caches],
+              ['Storage', devStorageInfo.quota],
+              ['Auth', isAuthenticated ? 'authenticated' : 'guest'],
+              ['User', user?.id ? `…${user.id.slice(-6)}` : 'none'],
+              [
+                'Document',
+                `${drawingState.documentVersion} / revision ${drawingState.projectRevision ?? 'none'}`,
+              ],
+              ['Selected', String(drawingState.selectedObjectIds.length)],
+              ['Tool', drawingState.currentTool],
+              [
+                'Canvas',
+                `${drawingState.zoom.toFixed(2)}x @ ${Math.round(drawingState.viewX)},${Math.round(drawingState.viewY)}`,
+              ],
+              ['Visibility', document.visibilityState],
+              [
+                'Locale',
+                `${navigator.language} / ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+              ],
+              ['Screen', `${window.screen.width}×${window.screen.height}`],
+              [
+                'Network',
+                'connection' in navigator
+                  ? (
+                      navigator as Navigator & {
+                        connection?: { effectiveType?: string; rtt?: number };
+                      }
+                    ).connection?.effectiveType || 'available'
+                  : 'unavailable',
+              ],
               [
                 'Memory',
                 'memory' in performance
