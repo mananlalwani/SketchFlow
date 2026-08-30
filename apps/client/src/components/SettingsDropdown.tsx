@@ -67,6 +67,13 @@ export function SettingsDropdown() {
   const [showMobileProfile, setShowMobileProfile] = useState(false);
   const [showDesktopProfile, setShowDesktopProfile] = useState(false);
   const [showDevTools, setShowDevTools] = useState(false);
+  const [devToolsUnlocked, setDevToolsUnlocked] = useState(() => {
+    try {
+      return window.localStorage.getItem('sketchflow-devtools-unlocked') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const aboutTapRef = useRef({ count: 0, lastTap: 0 });
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -135,6 +142,8 @@ export function SettingsDropdown() {
     aboutTapRef.current = { count: taps, lastTap: now };
     if (taps >= 5) {
       aboutTapRef.current = { count: 0, lastTap: now };
+      setDevToolsUnlocked(true);
+      window.localStorage.setItem('sketchflow-devtools-unlocked', 'true');
       setShowDevTools(true);
     }
   };
@@ -718,6 +727,16 @@ export function SettingsDropdown() {
                   © {new Date().getFullYear()} Manan Lalwani
                 </span>
               </div>
+              {devToolsUnlocked && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setShowDevTools(true)}
+                >
+                  Developer tools
+                </Button>
+              )}
             </div>
           </DialogDescription>
         </DialogContent>
