@@ -28,30 +28,30 @@ const tutorialSteps: TutorialStep[] = [
   {
     title: 'Welcome to SketchFlow!',
     description: 'A collaborative canvas for drawing, sketching, and brainstorming in real-time.',
-    icon: <Sparkles className="w-8 h-8 text-blue-500" />,
+    icon: <Sparkles className="w-8 h-8 text-amber-500" />,
   },
   {
     title: 'Select a Tool',
     description:
       'Choose from pen, shapes, text, and more. Use keyboard shortcuts (P for pen, E for eraser, etc.) for quick access.',
-    icon: <Pen className="w-8 h-8 text-purple-500" />,
+    icon: <Pen className="w-8 h-8 text-amber-600" />,
     target: '[role="toolbar"]',
     position: 'bottom',
   },
   {
     title: 'Customize Your Brush',
     description: 'Adjust size, opacity, and color. Fill shapes or keep them outlined.',
-    icon: <Palette className="w-8 h-8 text-pink-500" />,
+    icon: <Palette className="w-8 h-8 text-orange-500" />,
   },
   {
     title: 'Keyboard Shortcuts',
     description: 'Press ? to see all shortcuts. Use Ctrl+Z/Cmd+Z to undo, Ctrl+S/Cmd+S to save.',
-    icon: <Keyboard className="w-8 h-8 text-green-500" />,
+    icon: <Keyboard className="w-8 h-8 text-stone-500" />,
   },
   {
     title: 'Share & Collaborate',
     description: 'Save your project and share it with others for real-time collaboration.',
-    icon: <Share2 className="w-8 h-8 text-orange-500" />,
+    icon: <Share2 className="w-8 h-8 text-amber-500" />,
   },
 ];
 
@@ -107,32 +107,32 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
 
       {/* Tutorial Card */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className="pointer-events-auto max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden animate-fade-in">
+        <div className="pointer-events-auto max-w-md w-full rounded-2xl border border-stone-200 bg-stone-50 shadow-2xl shadow-stone-950/20 dark:border-white/[0.09] dark:bg-[#211e1b] overflow-hidden animate-fade-in">
           {/* Close Button */}
           <button
             onClick={handleSkip}
-            className="absolute top-4 right-4 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="absolute top-4 right-4 p-2 rounded-lg hover:bg-stone-200 dark:hover:bg-white/[0.06] transition-colors"
             aria-label="Close tutorial"
           >
-            <X className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+            <X className="w-5 h-5 text-stone-600 dark:text-stone-400" />
           </button>
 
           {/* Content */}
           <div className="p-8">
             {/* Icon */}
             <div className="flex justify-center mb-6">
-              <div className="p-4 rounded-full bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-500/10 dark:to-purple-500/10">
+              <div className="p-4 rounded-full bg-gradient-to-br from-amber-100 to-orange-50 dark:from-amber-300/10 dark:to-orange-300/10">
                 {step.icon}
               </div>
             </div>
 
             {/* Title */}
-            <h2 className="text-2xl font-bold text-center text-slate-900 dark:text-slate-100 mb-3">
+            <h2 className="text-2xl font-bold text-center text-stone-950 dark:text-stone-50 mb-3">
               {step.title}
             </h2>
 
             {/* Description */}
-            <p className="text-center text-slate-600 dark:text-slate-400 mb-8">
+            <p className="text-center text-stone-600 dark:text-stone-300 mb-8">
               {step.description}
             </p>
 
@@ -145,8 +145,8 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
                   className={cn(
                     'h-2 rounded-full transition-[width,background-color] duration-200',
                     index === currentStep
-                      ? 'w-8 bg-blue-500'
-                      : 'w-2 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600',
+                      ? 'w-8 bg-amber-400'
+                      : 'w-2 bg-stone-300 dark:bg-stone-700 hover:bg-stone-400 dark:hover:bg-stone-600',
                   )}
                   aria-label={`Go to step ${index + 1}`}
                   aria-current={index === currentStep ? 'step' : undefined}
@@ -168,7 +168,7 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
 
               <Button
                 onClick={handleNext}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                className="flex-1 bg-stone-900 text-amber-100 hover:bg-stone-800 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
               >
                 {isLastStep ? (
                   <>
@@ -187,7 +187,7 @@ export function WelcomeTutorial({ onComplete }: WelcomeTutorialProps) {
             {/* Skip Button */}
             <button
               onClick={handleSkip}
-              className="w-full mt-4 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+              className="w-full mt-4 text-sm text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
             >
               Skip tutorial
             </button>
@@ -240,16 +240,16 @@ export function EmptyStateHint() {
   return (
     <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-10">
       <div className="text-center animate-fade-in">
-        <Pen className="w-16 h-16 mx-auto mb-4 text-slate-300 dark:text-slate-700" />
-        <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-400 mb-2">
+        <Pen className="w-16 h-16 mx-auto mb-4 text-stone-300 dark:text-stone-700" />
+        <h3 className="text-xl font-semibold text-stone-600 dark:text-stone-400 mb-2">
           Start Creating
         </h3>
-        <p className="text-sm text-slate-500 dark:text-slate-500 max-w-sm">
+        <p className="text-sm text-stone-500 dark:text-stone-500 max-w-sm">
           Select a tool from the toolbar and start drawing
         </p>
-        <p className="text-xs text-slate-400 dark:text-slate-600 mt-3">
+        <p className="text-xs text-stone-400 dark:text-stone-600 mt-3">
           Press{' '}
-          <kbd className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-700">
+          <kbd className="px-2 py-1 rounded border border-stone-300 bg-stone-100 dark:border-stone-700 dark:bg-stone-800">
             ?
           </kbd>{' '}
           for keyboard shortcuts
