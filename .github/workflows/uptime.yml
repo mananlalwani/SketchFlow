@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   check:
-    name: Check public services
+    name: Check VPS backend
     runs-on: ubuntu-latest
     steps:
       - name: Check VPS backend
