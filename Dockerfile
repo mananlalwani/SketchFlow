@@ -43,7 +43,6 @@ RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
     pnpm --filter @sketchflow/server db:generate
 
 # Build the server. Cloudflare Pages builds and serves the client separately.
-ARG RELEASE_ID=unknown
 RUN pnpm --filter @sketchflow/server build
 
 # Deploy server (isolated production build)

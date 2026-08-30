@@ -25,7 +25,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      container: ${{ steps.filter.outputs.container }}
+      server: ${{ steps.filter.outputs.server }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,7 +34,7 @@ jobs:
         id: filter
         with:
           filters: |
-            container:
+            server:
               - 'apps/server/**'
               - 'packages/shared/**'
               - 'Dockerfile'
@@ -79,8 +79,8 @@ jobs:
           done
           exit "$status"
 
-  container-build:
-    name: Container build
+  server-image:
+    name: Server image smoke test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -89,7 +89,7 @@ jobs:
     # job below performs the only production image build, avoiding a duplicate
     # multi-minute Docker build for the same commit.
     if: >-
-      needs.changes.outputs.container == 'true' &&
+      needs.changes.outputs.server == 'true' &&
       github.event_name != 'push'
     steps:
       - uses: actions/checkout@v7
@@ -100,9 +100,8 @@ jobs:
           context: .
           load: true
           tags: sketchflow:ci
-          # The production image is the most expensive PR check. Persist all
-          # BuildKit layers between workflow runs, including pnpm install and
-          # client/server compilation layers.
+          # Persist BuildKit layers between workflow runs, including pnpm
+          # install and server compilation layers.
           cache-from: type=gha,scope=sketchflow-production-image
           cache-to: type=gha,mode=max,scope=sketchflow-production-image
           build-args: |
@@ -126,15 +125,15 @@ jobs:
           curl --fail --silent http://localhost:3000/api/health >/dev/null
           docker stop sketchflow-ci
 
-  build-and-push:
-    name: Build & Push Docker Image
+  publish-image:
+    name: Build & Push Server Image
     runs-on: ubuntu-latest
-    needs: [changes, test, container-build]
+    needs: [changes, test, server-image]
     if: >-
       always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       needs.test.result == 'success' &&
-      (needs.container-build.result == 'success' || needs.container-build.result == 'skipped') &&
-      needs.changes.outputs.container == 'true'
+      (needs.server-image.result == 'success' || needs.server-image.result == 'skipped') &&
+      needs.changes.outputs.server == 'true'
     permissions:
       contents: read
       packages: write
