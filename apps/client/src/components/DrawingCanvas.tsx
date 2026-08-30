@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useGesture } from '@use-gesture/react';
 import { z } from 'zod';
 import { useDrawingStore } from '@/store/drawingStore';
@@ -136,26 +136,38 @@ export function DrawingCanvas() {
 
   const [dragPreviewObject, setDragPreviewObject] = useState<DrawingObject | null>(null);
   const [dragPreviewObjects, setDragPreviewObjects] = useState<DrawingObject[] | null>(null);
-  const selectedObject = objects.find((object) => object.id === selectedObjectId);
-  const selectedObjects = objects.filter((object) => selectedObjectIds.includes(object.id));
+  const selectedObject = useMemo(
+    () => objects.find((object) => object.id === selectedObjectId),
+    [objects, selectedObjectId],
+  );
+  const selectedObjects = useMemo(
+    () =>
+      selectedObjectIds.length === 0
+        ? []
+        : objects.filter((object) => selectedObjectIds.includes(object.id)),
+    [objects, selectedObjectIds],
+  );
   const displayedSelectedObjects = dragPreviewObjects ?? selectedObjects;
-  const multiSelectionBounds =
-    displayedSelectedObjects.length > 1
-      ? displayedSelectedObjects
-          .map(getObjectBounds)
-          .filter((bounds): bounds is NonNullable<typeof bounds> => bounds !== null)
-          .reduce<NonNullable<ReturnType<typeof getObjectBounds>> | null>((combined, bounds) => {
-            if (!combined) return bounds;
-            const right = Math.max(combined.x + combined.width, bounds.x + bounds.width);
-            const bottom = Math.max(combined.y + combined.height, bounds.y + bounds.height);
-            return {
-              x: Math.min(combined.x, bounds.x),
-              y: Math.min(combined.y, bounds.y),
-              width: right - Math.min(combined.x, bounds.x),
-              height: bottom - Math.min(combined.y, bounds.y),
-            };
-          }, null)
-      : null;
+  const multiSelectionBounds = useMemo(
+    () =>
+      displayedSelectedObjects.length > 1
+        ? displayedSelectedObjects
+            .map(getObjectBounds)
+            .filter((bounds): bounds is NonNullable<typeof bounds> => bounds !== null)
+            .reduce<NonNullable<ReturnType<typeof getObjectBounds>> | null>((combined, bounds) => {
+              if (!combined) return bounds;
+              const right = Math.max(combined.x + combined.width, bounds.x + bounds.width);
+              const bottom = Math.max(combined.y + combined.height, bounds.y + bounds.height);
+              return {
+                x: Math.min(combined.x, bounds.x),
+                y: Math.min(combined.y, bounds.y),
+                width: right - Math.min(combined.x, bounds.x),
+                height: bottom - Math.min(combined.y, bounds.y),
+              };
+            }, null)
+        : null,
+    [displayedSelectedObjects],
+  );
   const selectedDisplayObject =
     dragPreviewObjects?.find((object) => object.id === selectedObject?.id) ??
     (dragPreviewObject?.id === selectedObject?.id ? dragPreviewObject : selectedObject);
