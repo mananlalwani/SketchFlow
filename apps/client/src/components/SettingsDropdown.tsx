@@ -733,96 +733,98 @@ export function SettingsDropdown() {
               Runtime diagnostics for local development and support.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 px-6 py-5 text-sm">
-            {[
-              ['Mode', clientEnv.IS_PRODUCTION ? 'production' : 'development'],
-              ['Release', clientEnv.RELEASE_ID],
-              ['API origin', clientEnv.API_URL || 'same origin'],
-              ['Online', navigator.onLine ? 'yes' : 'no'],
-              ['Project', drawingState.currentProjectId || 'unsaved draft'],
-              ['Objects', String(drawingState.objects.length)],
-              ['History', `${drawingState.historyIndex + 1} / ${drawingState.history.length}`],
-              ['Save status', drawingState.saveStatus],
-              ['Route', window.location.pathname],
-              [
-                'Viewport',
-                `${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio}x`,
-              ],
-              ['Touch input', 'ontouchstart' in window ? 'yes' : 'no'],
-              ['Socket', socketConnected ? `connected (${connectionCount})` : 'disconnected'],
-              ['Socket error', connectionError?.message || 'none'],
-              ['Offline queue', devStorageInfo.offlineSaves],
-              ['Recovery backup', devStorageInfo.backup],
-              ['API latency', devStorageInfo.apiLatency],
-              ['App caches', devStorageInfo.caches],
-              ['Storage', devStorageInfo.quota],
-              ['Auth', isAuthenticated ? 'authenticated' : 'guest'],
-              ['User', user?.id ? `…${user.id.slice(-6)}` : 'none'],
-              [
-                'Document',
-                `${drawingState.documentVersion} / revision ${drawingState.projectRevision ?? 'none'}`,
-              ],
-              ['Selected', String(drawingState.selectedObjectIds.length)],
-              ['Tool', drawingState.currentTool],
-              [
-                'Canvas',
-                `${drawingState.zoom.toFixed(2)}x @ ${Math.round(drawingState.viewX)},${Math.round(drawingState.viewY)}`,
-              ],
-              ['Visibility', document.visibilityState],
-              [
-                'Locale',
-                `${navigator.language} / ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
-              ],
-              ['Screen', `${window.screen.width}×${window.screen.height}`],
-              [
-                'Network',
-                'connection' in navigator
-                  ? // SAFETY: the feature check above guarantees the non-standard connection field exists.
-                    (
-                      navigator as Navigator & {
-                        connection?: { effectiveType?: string; rtt?: number };
-                      }
-                    ).connection?.effectiveType || 'available'
-                  : 'unavailable',
-              ],
-              [
-                'Memory',
-                'memory' in performance
-                  ? // SAFETY: the feature check above guarantees the non-standard memory field exists.
-                    `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
-                  : 'unavailable',
-              ],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="flex items-center justify-between gap-4 rounded-lg border border-stone-200 bg-white px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.035]"
-              >
-                <span className="text-stone-500 dark:text-stone-400">{label}</span>
-                <span className="max-w-[18rem] truncate font-mono text-xs text-stone-800 dark:text-stone-200">
-                  {value}
-                </span>
+          <div className="max-h-[70vh] overflow-y-auto px-6 py-5 text-sm">
+            <div className="grid gap-3">
+              {[
+                ['Mode', clientEnv.IS_PRODUCTION ? 'production' : 'development'],
+                ['Release', clientEnv.RELEASE_ID],
+                ['API origin', clientEnv.API_URL || 'same origin'],
+                ['Online', navigator.onLine ? 'yes' : 'no'],
+                ['Project', drawingState.currentProjectId || 'unsaved draft'],
+                ['Objects', String(drawingState.objects.length)],
+                ['History', `${drawingState.historyIndex + 1} / ${drawingState.history.length}`],
+                ['Save status', drawingState.saveStatus],
+                ['Route', window.location.pathname],
+                [
+                  'Viewport',
+                  `${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio}x`,
+                ],
+                ['Touch input', 'ontouchstart' in window ? 'yes' : 'no'],
+                ['Socket', socketConnected ? `connected (${connectionCount})` : 'disconnected'],
+                ['Socket error', connectionError?.message || 'none'],
+                ['Offline queue', devStorageInfo.offlineSaves],
+                ['Recovery backup', devStorageInfo.backup],
+                ['API latency', devStorageInfo.apiLatency],
+                ['App caches', devStorageInfo.caches],
+                ['Storage', devStorageInfo.quota],
+                ['Auth', isAuthenticated ? 'authenticated' : 'guest'],
+                ['User', user?.id ? `…${user.id.slice(-6)}` : 'none'],
+                [
+                  'Document',
+                  `${drawingState.documentVersion} / revision ${drawingState.projectRevision ?? 'none'}`,
+                ],
+                ['Selected', String(drawingState.selectedObjectIds.length)],
+                ['Tool', drawingState.currentTool],
+                [
+                  'Canvas',
+                  `${drawingState.zoom.toFixed(2)}x @ ${Math.round(drawingState.viewX)},${Math.round(drawingState.viewY)}`,
+                ],
+                ['Visibility', document.visibilityState],
+                [
+                  'Locale',
+                  `${navigator.language} / ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+                ],
+                ['Screen', `${window.screen.width}×${window.screen.height}`],
+                [
+                  'Network',
+                  'connection' in navigator
+                    ? // SAFETY: the feature check above guarantees the non-standard connection field exists.
+                      (
+                        navigator as Navigator & {
+                          connection?: { effectiveType?: string; rtt?: number };
+                        }
+                      ).connection?.effectiveType || 'available'
+                    : 'unavailable',
+                ],
+                [
+                  'Memory',
+                  'memory' in performance
+                    ? // SAFETY: the feature check above guarantees the non-standard memory field exists.
+                      `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
+                    : 'unavailable',
+                ],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-stone-200 bg-white px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.035]"
+                >
+                  <span className="text-stone-500 dark:text-stone-400">{label}</span>
+                  <span className="max-w-[18rem] truncate font-mono text-xs text-stone-800 dark:text-stone-200">
+                    {value}
+                  </span>
+                </div>
+              ))}
+              <div className="mt-2 grid grid-cols-2 gap-2 border-t border-stone-200 pt-4 dark:border-white/[0.08]">
+                <Button variant="outline" size="sm" onClick={() => void copyDiagnostics()}>
+                  <Copy className="mr-2 h-4 w-4" /> Copy diagnostics
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportCurrentDocument}>
+                  <Download className="mr-2 h-4 w-4" /> Export document
+                </Button>
+                <Button variant="outline" size="sm" onClick={resetRecoveryNotice}>
+                  <RotateCcw className="mr-2 h-4 w-4" /> Reset recovery notice
+                </Button>
+                <Button variant="outline" size="sm" onClick={resetIntro}>
+                  <RotateCcw className="mr-2 h-4 w-4" /> Reset intro/tutorial
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void clearCaches()}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Clear app caches
+                </Button>
               </div>
-            ))}
-            <div className="mt-2 grid grid-cols-2 gap-2 border-t border-stone-200 pt-4 dark:border-white/[0.08]">
-              <Button variant="outline" size="sm" onClick={() => void copyDiagnostics()}>
-                <Copy className="mr-2 h-4 w-4" /> Copy diagnostics
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportCurrentDocument}>
-                <Download className="mr-2 h-4 w-4" /> Export document
-              </Button>
-              <Button variant="outline" size="sm" onClick={resetRecoveryNotice}>
-                <RotateCcw className="mr-2 h-4 w-4" /> Reset recovery notice
-              </Button>
-              <Button variant="outline" size="sm" onClick={resetIntro}>
-                <RotateCcw className="mr-2 h-4 w-4" /> Reset intro/tutorial
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void clearCaches()}>
-                <Trash2 className="mr-2 h-4 w-4" /> Clear app caches
-              </Button>
+              {devActionMessage && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400">{devActionMessage}</p>
+              )}
             </div>
-            {devActionMessage && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">{devActionMessage}</p>
-            )}
           </div>
         </DialogContent>
       </Dialog>
