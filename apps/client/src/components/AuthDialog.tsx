@@ -35,9 +35,6 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
             </Button>
           </AuthTrigger>
         </div>
-        <p className="text-center text-sm text-slate-500 dark:text-slate-400 pt-2">
-          Use social login or email to get started.
-        </p>
       </DialogContent>
     </Dialog>
   );

@@ -5,7 +5,7 @@ import {
   useSignIn,
   useSignUp,
 } from '@clerk/clerk-react';
-import { ArrowLeft, Code2, Loader2, LockKeyhole, Mail, PenTool } from 'lucide-react';
+import { ArrowLeft, Loader2, LockKeyhole, Mail, PenTool } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -212,23 +212,6 @@ function AuthForm({ mode }: { mode: AuthMode }) {
     }
   };
 
-  const continueWith = async (strategy: 'oauth_google' | 'oauth_github') => {
-    if (!isLoaded) return;
-    setError('');
-    try {
-      const auth = mode === 'sign-in' ? signInState.signIn : signUpState.signUp;
-      await auth.authenticateWithRedirect({
-        strategy,
-        redirectUrl: '/auth/sso-callback',
-        redirectUrlComplete: '/draw',
-      });
-    } catch (caught) {
-      setError(
-        errorMessage(caught instanceof Error ? caught : new Error('Social sign-in failed.')),
-      );
-    }
-  };
-
   const otherMode = mode === 'sign-in' ? 'sign-up' : 'sign-in';
   const title = mode === 'sign-in' ? 'Welcome back' : 'Make room for your ideas';
 
@@ -281,31 +264,6 @@ function AuthForm({ mode }: { mode: AuthMode }) {
 
           {step === 'credentials' && (
             <>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 gap-2 border-stone-300 bg-white dark:border-white/[0.1] dark:bg-white/[0.035]"
-                  onClick={() => continueWith('oauth_google')}
-                  disabled={!isLoaded}
-                >
-                  <span className="text-base font-bold text-blue-600">G</span> Google
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 gap-2 border-stone-300 bg-white dark:border-white/[0.1] dark:bg-white/[0.035]"
-                  onClick={() => continueWith('oauth_github')}
-                  disabled={!isLoaded}
-                >
-                  <Code2 className="h-4 w-4" /> GitHub
-                </Button>
-              </div>
-              <div className="my-7 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">
-                <span className="h-px flex-1 bg-stone-200 dark:bg-white/[0.09]" />
-                or use email
-                <span className="h-px flex-1 bg-stone-200 dark:bg-white/[0.09]" />
-              </div>
               <form className="space-y-4" onSubmit={submitCredentials}>
                 <label className="block text-sm font-medium">
                   Email address
