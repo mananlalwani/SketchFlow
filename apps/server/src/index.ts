@@ -51,6 +51,7 @@ import {
 } from './validation/project.js';
 import { registerFolderRoutes } from './routes/folders.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { renderDrawApiPage } from './routes/drawApi.js';
 import { requireAuthenticatedUser } from './middleware/auth.js';
 import type { AuthenticatedRequest } from './types/http.js';
 
@@ -633,23 +634,15 @@ export class SketchFlowServer {
 
     registerFolderRoutes(this.app, this.projectService);
 
-    // The DrawAPI subdomain is served by this container rather than the
-    // Cloudflare Pages client. Let it load the same client bundle so the
-    // hostname-aware root route can render the SketchFlow easter egg.
-    const drawApiHost = 'drawapi.mananlalwani.com' as const;
-    const drawApiFrontend = express.static(this.clientDistPath, {
-      index: 'index.html',
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html') || filePath.endsWith('/sw.js') || filePath.endsWith('/registerSW.js')) {
-          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-        }
-      },
-    });
-    this.app.use((req, res, next) => {
-      if (req.hostname === drawApiHost) {
-        return drawApiFrontend(req, res, next);
-      }
-      next();
+    this.app.get('/', (req, res, next) => {
+      if (req.hostname !== 'drawapi.mananlalwani.com') return next();
+      const nonce = randomUUID();
+      res.setHeader(
+        'Content-Security-Policy',
+        `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'`,
+      );
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.type('html').send(renderDrawApiPage(nonce));
     });
 
     this.app.use('/api', notFoundMiddleware);

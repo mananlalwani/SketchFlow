@@ -2,28 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@keyframes doodle-float {
-  0%, 100% { transform: translateY(0) rotate(-1deg); }
-  50% { transform: translateY(-5px) rotate(1deg); }
-}
-
-@keyframes doodle-wiggle {
-  0%, 100% { transform: rotate(-2deg) scale(1); }
-  25% { transform: rotate(2deg) scale(1.03, 0.98); }
-  50% { transform: rotate(-1deg) scale(0.98, 1.02); }
-  75% { transform: rotate(2deg) scale(1.02, 0.99); }
-}
-
-@keyframes sparkle-pulse {
-  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; }
-  50% { transform: scale(1.18) rotate(12deg); opacity: 1; }
-}
-
-@keyframes card-party {
-  0%, 100% { transform: rotate(3deg) translateY(0); }
-  25% { transform: rotate(-2deg) translateY(-4px); }
-  75% { transform: rotate(7deg) translateY(-2px); }
-}
 
 @layer base {
   :root {
