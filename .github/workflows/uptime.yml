@@ -20,8 +20,7 @@ jobs:
           set -uo pipefail
           failed=0
           for target in \
-            'frontend|https://draw.mananlalwani.com' \
-            'api|https://drawapi.mananlalwani.com/api/health'; do
+            'backend|http://VPS_HOST:4967/api/health'; do
             name="${target%%|*}"
             url="${target#*|}"
             status="$(curl --silent --show-error --location --max-time 20 \

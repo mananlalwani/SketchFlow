@@ -69,7 +69,8 @@ credentials, origin restrictions, retention, and alerting have been reviewed; se
 
 ## Uptime alerts
 
-The `Uptime monitor` workflow checks the frontend and API every five minutes and sends a Discord
-message when either endpoint stops returning a successful HTTP status. Add the Discord webhook as a
+The `Uptime monitor` workflow checks the VPS backend origin every five minutes and sends a Discord
+message when it stops returning a successful HTTP status. It checks the origin directly to avoid
+Cloudflare bot protection causing false positives. Add the Discord webhook as a
 GitHub Actions repository secret named `DISCORD_WEBHOOK_URL`; the workflow intentionally skips
 notification when that secret is not configured.
