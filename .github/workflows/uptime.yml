@@ -25,6 +25,8 @@ jobs:
             name="${target%%|*}"
             url="${target#*|}"
             status="$(curl --silent --show-error --location --max-time 20 \
+              --retry 2 --retry-delay 2 \
+              -A 'Mozilla/5.0 (compatible; SketchFlow-Uptime/1.0)' \
               --output /dev/null --write-out '%{http_code}' "$url" || true)"
             echo "$name HTTP $status"
             if [[ "$status" != 2* ]]; then
