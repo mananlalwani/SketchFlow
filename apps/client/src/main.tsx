@@ -17,9 +17,22 @@ import App from './App.tsx';
 import './index.css';
 import { loadClerkPublishableKey } from './lib/runtimeConfig';
 
+const isDrawApiHost = globalThis.location?.hostname === 'drawapi.mananlalwani.com';
+
 async function bootstrap() {
   const root = ReactDOM.createRoot(document.getElementById('root')!);
   try {
+    if (isDrawApiHost) {
+      root.render(
+        <React.StrictMode>
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
+        </React.StrictMode>,
+      );
+      return;
+    }
+
     const publishableKey = await loadClerkPublishableKey();
     root.render(
       <React.StrictMode>

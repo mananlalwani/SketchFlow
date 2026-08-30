@@ -109,6 +109,7 @@ COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/sw.js /app/c
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/registerSW.js /app/client/dist/
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/workbox-*.js /app/client/dist/
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/favicon.ico /app/client/dist/
+COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/favicon.svg /app/client/dist/
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/apple-touch-icon.png /app/client/dist/
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/masked-icon.svg /app/client/dist/
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/pwa-192x192.png /app/client/dist/
