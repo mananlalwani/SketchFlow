@@ -51,7 +51,7 @@ import {
 } from './validation/project.js';
 import { registerFolderRoutes } from './routes/folders.js';
 import { registerHealthRoutes } from './routes/health.js';
-import { renderDrawApiPage } from './routes/drawApi.js';
+import { renderDrawApiPage, renderDrawApiScript } from './routes/drawApi.js';
 import { requireAuthenticatedUser } from './middleware/auth.js';
 import type { AuthenticatedRequest } from './types/http.js';
 
@@ -242,13 +242,18 @@ export class SketchFlowServer {
 
     this.app.get('/', (req, res, next) => {
       if (req.hostname !== 'drawapi.mananlalwani.com') return next();
-      const nonce = randomUUID();
       res.setHeader(
         'Content-Security-Policy',
-        `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'`,
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
       );
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.type('html').send(renderDrawApiPage(nonce));
+      res.type('html').send(renderDrawApiPage());
+    });
+
+    this.app.get('/drawapi.js', (req, res, next) => {
+      if (req.hostname !== 'drawapi.mananlalwani.com') return next();
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.type('js').send(renderDrawApiScript());
     });
 
     // Static files - serve the built client
