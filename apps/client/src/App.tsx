@@ -23,6 +23,9 @@ import { installProjectSession } from '@/lib/projectSession';
 import { AuthPage, SsoCallbackPage } from '@/components/auth/AuthPage';
 import { DrawApiPage } from '@/components/DrawApiPage';
 
+const isDrawApiHost =
+  typeof window !== 'undefined' && window.location.hostname === 'drawapi.mananlalwani.com';
+
 const DrawingCanvas = lazy(() =>
   import('@/components/DrawingCanvas').then((module) => ({ default: module.DrawingCanvas })),
 );
@@ -172,7 +175,7 @@ function App() {
     <ErrorBoundary>
       <Router>
         <Routes>
-          <Route path="/" element={<Navigate to="/draw" replace />} />
+          <Route path="/" element={isDrawApiHost ? <DrawApiPage /> : <Navigate to="/draw" replace />} />
 
           {/* Editor Route wrapped in Layout with logic */}
           <Route path="/draw" element={<EditorRoute />} />

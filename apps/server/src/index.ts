@@ -607,6 +607,17 @@ export class SketchFlowServer {
 
     registerFolderRoutes(this.app, this.projectService);
 
+    // The DrawAPI subdomain is served by this container rather than the
+    // Cloudflare Pages client. Let it load the same client bundle so the
+    // hostname-aware root route can render the SketchFlow easter egg.
+    const drawApiFrontend = express.static(this.clientDistPath, { index: 'index.html' });
+    this.app.use((req, res, next) => {
+      if (req.hostname === 'drawapi.mananlalwani.com') {
+        return drawApiFrontend(req, res, next);
+      }
+      next();
+    });
+
     this.app.use('/api', notFoundMiddleware);
 
     // Error handler (must be last middleware)
