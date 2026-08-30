@@ -124,7 +124,6 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://localhost:3000/api/health >/dev/null
-          curl --fail --silent http://localhost:3000/draw >/dev/null
           docker stop sketchflow-ci
 
   build-and-push:

@@ -42,23 +42,8 @@ RUN pnpm --filter @sketchflow/shared build
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
     pnpm --filter @sketchflow/server db:generate
 
-# Build client and server. The Sentry token is mounted only for this build step, never
-# copied into an image layer or exposed as a Vite variable. RELEASE_ID is public release metadata.
+# Build the server. Cloudflare Pages builds and serves the client separately.
 ARG RELEASE_ID=unknown
-ARG SENTRY_ORG
-ARG SENTRY_PROJECT
-RUN --mount=type=secret,id=sentry_auth_token,required=false \
-    if [ -f /run/secrets/sentry_auth_token ]; then \
-      SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
-      SENTRY_ORG="$SENTRY_ORG" \
-      SENTRY_PROJECT="$SENTRY_PROJECT" \
-      VITE_RELEASE_ID="$RELEASE_ID" \
-      pnpm --filter @sketchflow/client build; \
-    else \
-      VITE_RELEASE_ID="$RELEASE_ID" pnpm --filter @sketchflow/client build; \
-    fi && \
-    ! find apps/client/dist -type f -name '*.map' -print -quit | grep -q . && \
-    ! grep -R --include='*.js' --include='*.css' 'sourceMappingURL=' apps/client/dist
 RUN pnpm --filter @sketchflow/server build
 
 # Deploy server (isolated production build)
@@ -101,30 +86,9 @@ COPY --from=builder --chown=sketchflow:nodejs /app/deploy/package.json /app/pack
 COPY --from=builder --chown=sketchflow:nodejs /app/deploy/dist /app/dist
 COPY --from=builder --chown=sketchflow:nodejs /app/deploy/prisma /app/prisma
 COPY --from=builder --chown=sketchflow:nodejs /app/deploy/prisma.config.ts /app/prisma.config.ts
-# Keep client output in separately cached layers. New app code does not force a
-# VPS to re-download unchanged vendors or optional PDF/canvas workers.
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/index.html /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/manifest.webmanifest /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/sw.js /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/registerSW.js /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/workbox-*.js /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/favicon.ico /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/favicon.svg /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/apple-touch-icon.png /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/masked-icon.svg /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/pwa-192x192.png /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/pwa-512x512.png /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/vite.svg /app/client/dist/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/rendererWorker-*.js /app/client/dist/assets/
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/vendor /app/client/dist/assets/vendor
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/styles /app/client/dist/assets/styles
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/workers /app/client/dist/assets/workers
-COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/assets/app /app/client/dist/assets/app
-
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV CLIENT_DIST_PATH=/app/client/dist
 
 # Set ownership
 USER sketchflow

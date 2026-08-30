@@ -51,7 +51,8 @@ docker run -d --name live-draw --env-file /opt/sketchflow/.env \
 ```
 
 The environment file should include `PORT=4967` when the host maps port 4967 directly. Verify
-`/api/health` through the API origin and open `/draw` through the client origin after restart.
+`/api/health` through the API origin after restart. The client is served separately by Cloudflare
+Pages at `draw.mananlalwani.com`.
 
 ## Image and GitHub releases
 

@@ -32,8 +32,6 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import { clerkMiddleware, getAuth, clerkClient } from '@clerk/express';
 import { ConnectionRegistry } from './services/ConnectionRegistry.js';
@@ -93,9 +91,6 @@ import type {
   SocketData,
 } from './types/socket.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 export class SketchFlowServer {
   private app = express();
   private server = createServer(this.app);
@@ -108,8 +103,6 @@ export class SketchFlowServer {
   private connectionRegistry = new ConnectionRegistry(200);
   private projectService = new ProjectService();
   private isShuttingDown = false;
-  private clientDistPath =
-    process.env.CLIENT_DIST_PATH || path.join(__dirname, '../../client/dist');
   private redisPublisher: { quit: () => Promise<string> } | null = null;
   private redisSubscriber: { quit: () => Promise<string> } | null = null;
   private redisSetup: Promise<void> = Promise.resolve();
@@ -256,22 +249,6 @@ export class SketchFlowServer {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.type('js').send(renderDrawApiScript());
     });
-
-    // Static files - serve the built client
-    this.app.use(
-      express.static(this.clientDistPath, {
-        // Cache static assets aggressively in production
-        maxAge: isProd ? '1y' : 0,
-        etag: true,
-        lastModified: true,
-        // Don't cache HTML
-        setHeaders: (res, filePath) => {
-          if (filePath.endsWith('.html')) {
-            res.setHeader('Cache-Control', 'no-cache');
-          }
-        },
-      }),
-    );
 
     // Body parsing with limits
     this.app.use(express.json({ limit: '10mb' }));
@@ -656,10 +633,6 @@ export class SketchFlowServer {
     // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
 
-    // The production frontend is Cloudflare Pages. Keep this narrow static
-    // endpoint solely for the container smoke check; do not add a wildcard
-    // fallback that could bypass API routing and its rate limits.
-    this.app.use('/draw', express.static(this.clientDistPath, { index: 'index.html' }));
   }
 
   private setupSocketHandlers(): void {
