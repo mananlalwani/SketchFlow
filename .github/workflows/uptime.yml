@@ -1,0 +1,55 @@
+name: Uptime monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check public services
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check frontend and API
+        id: health
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=0
+          for target in \
+            'frontend|https://draw.mananlalwani.com' \
+            'api|https://drawapi.mananlalwani.com/api/health'; do
+            name="${target%%|*}"
+            url="${target#*|}"
+            status="$(curl --silent --show-error --location --max-time 20 \
+              --output /dev/null --write-out '%{http_code}' "$url" || true)"
+            echo "$name HTTP $status"
+            if [[ "$status" != 2* ]]; then
+              failed=1
+              echo "failed=$name" >> "$GITHUB_OUTPUT"
+            fi
+          done
+          exit "$failed"
+
+      - name: Notify Discord
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          FAILED_SERVICE: ${{ steps.health.outputs.failed || 'unknown' }}
+        shell: bash
+        run: |
+          if [[ -z "$DISCORD_WEBHOOK_URL" ]]; then
+            echo 'DISCORD_WEBHOOK_URL is not configured; skipping notification.'
+            exit 0
+          fi
+          payload=$(jq -n \
+            --arg service "$FAILED_SERVICE" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{content:("🚨 SketchFlow uptime check failed for " + $service + ". " + $repo + " — " + $run)}')
+          curl --fail --silent --show-error --max-time 20 \
+            -H 'Content-Type: application/json' \
+            --data "$payload" "$DISCORD_WEBHOOK_URL"

@@ -66,3 +66,10 @@ Server OpenTelemetry starts when `OTEL_EXPORTER_OTLP_ENDPOINT` or `HONEYCOMB_API
 Sentry starts when `SENTRY_DSN` is set. These integrations should be configured only after provider
 credentials, origin restrictions, retention, and alerting have been reviewed; see
 [`monitoring.md`](monitoring.md).
+
+## Uptime alerts
+
+The `Uptime monitor` workflow checks the frontend and API every five minutes and sends a Discord
+message when either endpoint stops returning a successful HTTP status. Add the Discord webhook as a
+GitHub Actions repository secret named `DISCORD_WEBHOOK_URL`; the workflow intentionally skips
+notification when that secret is not configured.
