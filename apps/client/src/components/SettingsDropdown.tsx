@@ -154,7 +154,8 @@ export function SettingsDropdown() {
     touch: 'ontouchstart' in window,
     memory:
       'memory' in performance
-        ? `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
+        ? // SAFETY: the feature check above guarantees the non-standard memory field exists.
+          `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
         : 'unavailable',
     socketConnected,
     socketConnectionCount: connectionCount,
@@ -178,6 +179,7 @@ export function SettingsDropdown() {
     network:
       'connection' in navigator
         ? (() => {
+            // SAFETY: the feature check above guarantees the non-standard connection field exists.
             const connection = (
               navigator as Navigator & {
                 connection?: {
@@ -775,7 +777,8 @@ export function SettingsDropdown() {
               [
                 'Network',
                 'connection' in navigator
-                  ? (
+                  ? // SAFETY: the feature check above guarantees the non-standard connection field exists.
+                    (
                       navigator as Navigator & {
                         connection?: { effectiveType?: string; rtt?: number };
                       }
@@ -785,7 +788,8 @@ export function SettingsDropdown() {
               [
                 'Memory',
                 'memory' in performance
-                  ? `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
+                  ? // SAFETY: the feature check above guarantees the non-standard memory field exists.
+                    `${Math.round((performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024)} MB heap`
                   : 'unavailable',
               ],
             ].map(([label, value]) => (
