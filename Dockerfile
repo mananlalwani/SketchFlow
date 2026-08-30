@@ -77,6 +77,7 @@ RUN find /app/deploy -type f \( -name '*.map' -o -name '.env' -o -name '.env.*' 
 # pnpm deploy might not copy ignored build artifacts like dist, so we copy them explicitly.
 RUN cp -r apps/server/dist /app/deploy/dist
 RUN cp -r apps/server/prisma /app/deploy/prisma
+RUN cp apps/server/prisma.config.ts /app/deploy/prisma.config.ts
 
 # Generate Prisma Data Proxy/Client for the production deploy
 WORKDIR /app/deploy
@@ -99,6 +100,7 @@ COPY --from=builder --chown=sketchflow:nodejs /app/deploy/node_modules /app/node
 COPY --from=builder --chown=sketchflow:nodejs /app/deploy/package.json /app/package.json
 COPY --from=builder --chown=sketchflow:nodejs /app/deploy/dist /app/dist
 COPY --from=builder --chown=sketchflow:nodejs /app/deploy/prisma /app/prisma
+COPY --from=builder --chown=sketchflow:nodejs /app/deploy/prisma.config.ts /app/prisma.config.ts
 # Keep client output in separately cached layers. New app code does not force a
 # VPS to re-download unchanged vendors or optional PDF/canvas workers.
 COPY --from=builder --chown=sketchflow:nodejs /app/apps/client/dist/index.html /app/client/dist/
