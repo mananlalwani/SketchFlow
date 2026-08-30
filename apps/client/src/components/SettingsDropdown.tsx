@@ -119,6 +119,12 @@ export function SettingsDropdown() {
     setDevActionMessage('Recovery notice reset');
   };
 
+  const resetIntro = () => {
+    window.localStorage.removeItem('sketchflow-tutorial-completed');
+    window.localStorage.removeItem('sketchflow-has-drawn');
+    setDevActionMessage('Intro/tutorial reset; reload to show it again');
+  };
+
   const clearCaches = async () => {
     try {
       if ('caches' in window) {
@@ -654,6 +660,9 @@ export function SettingsDropdown() {
               </Button>
               <Button variant="outline" size="sm" onClick={resetRecoveryNotice}>
                 <RotateCcw className="mr-2 h-4 w-4" /> Reset recovery notice
+              </Button>
+              <Button variant="outline" size="sm" onClick={resetIntro}>
+                <RotateCcw className="mr-2 h-4 w-4" /> Reset intro/tutorial
               </Button>
               <Button variant="outline" size="sm" onClick={() => void clearCaches()}>
                 <Trash2 className="mr-2 h-4 w-4" /> Clear app caches
