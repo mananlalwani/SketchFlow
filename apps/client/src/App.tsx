@@ -23,8 +23,7 @@ import { installProjectSession } from '@/lib/projectSession';
 import { AuthPage, SsoCallbackPage } from '@/components/auth/AuthPage';
 import { DrawApiPage } from '@/components/DrawApiPage';
 
-const isDrawApiHost =
-  typeof window !== 'undefined' && window.location.hostname === 'drawapi.mananlalwani.com';
+const isDrawApiHost = globalThis.location?.hostname === 'drawapi.mananlalwani.com';
 
 const DrawingCanvas = lazy(() =>
   import('@/components/DrawingCanvas').then((module) => ({ default: module.DrawingCanvas })),
