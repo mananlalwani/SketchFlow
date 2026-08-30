@@ -4,7 +4,7 @@ export function renderDrawApiPage(): string {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SketchFlow · Secret studio</title>
+    <title>SketchFlow</title>
     <style>
       :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
       * { box-sizing: border-box; }
@@ -35,12 +35,12 @@ export function renderDrawApiPage(): string {
   </head>
   <body><div class="glow"></div>
     <main class="card">
-      <header><div class="brand"><div class="logo">✎</div><div><strong>SketchFlow</strong><div style="color:#8f877e;font-size:10px;letter-spacing:.18em;text-transform:uppercase">Secret studio</div></div></div><span style="font-size:22px;color:#fbbf24">✦</span></header>
-      <section><p class="eyebrow">200 · Creativity found</p><h1 id="headline">A tiny masterpiece.</h1><p>You found the secret little corner of SketchFlow. Click the doodle and leave a little spark for everyone who visits.</p>
-        <div class="actions"><button id="remix">✦ Remix the doodle</button><button id="party" class="secondary">✨ Party mode</button></div>
+      <header><div class="brand"><div class="logo">✎</div><div><strong>SketchFlow</strong><div style="color:#8f877e;font-size:10px;letter-spacing:.18em;text-transform:uppercase">You found it</div></div></div><span style="font-size:22px;color:#fbbf24">✦</span></header>
+      <section><p class="eyebrow">200 · Nice</p><h1 id="headline">A little drawing.</h1><p>This page is just for fun. Click the drawing and add to the count.</p>
+        <div class="actions"><button id="remix">Change it</button><button id="party" class="secondary">Turn the lights on</button></div>
       </section>
       <button class="doodle" id="doodle" type="button" aria-label="Click to add to the collective counter"><svg viewBox="0 0 200 200"><path class="squiggle" d="M19 111C36 74 55 78 70 105s29 61 51 46 13-65 38-83 30 17 22 40-25 51-7 67" fill="none" stroke="#fcd34d" stroke-linecap="round" stroke-width="13"/><path d="M32 48 48 31l16 17-16 17Z" fill="#f97316"/><circle cx="155" cy="43" r="14" fill="#fcd34d"/><circle cx="155" cy="43" r="5" fill="#1c1917"/><path d="m117 35 7-12 7 12-7 12Z" fill="#8b5cf6"/></svg><span style="display:block;color:#1c1917;font-size:11px;font-weight:800;letter-spacing:.12em">CLICK ME</span></button>
-      <footer class="stats"><span>Collective clicks: <strong id="count">…</strong></span><span>● imagination online</span></footer>
+      <footer class="stats"><span>Clicks: <strong id="count">…</strong></span><span>● still here</span></footer>
     </main>
     <script src="/drawapi.js" data-cfasync="false" defer></script>
   </body>
@@ -52,13 +52,13 @@ export function renderDrawApiScript(): string {
       const count = document.getElementById('count');
       const doodle = document.getElementById('doodle');
       const headline = document.getElementById('headline');
-      const moods = ['A tiny masterpiece.', 'Maximum doodle energy.', 'A very serious squiggle.'];
+      const moods = ['A little drawing.', 'That’s better.', 'One more time.'];
       let mood = 0;
       fetch('/api/drawapi/counter').then(r => r.json()).then(data => count.textContent = data.clicks).catch(() => count.textContent = '—');
       function clickDoodle() { fetch('/api/drawapi/counter', { method: 'POST' }).then(r => r.json()).then(data => count.textContent = data.clicks).catch(() => {}); }
       doodle.addEventListener('click', clickDoodle);
       doodle.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); clickDoodle(); } });
       document.getElementById('remix').addEventListener('click', () => { mood = (mood + 1) % moods.length; headline.textContent = moods[mood]; });
-      document.getElementById('party').addEventListener('click', event => { document.body.classList.toggle('party'); event.currentTarget.textContent = document.body.classList.contains('party') ? '🪩 Quiet mode' : '✨ Party mode'; });
+      document.getElementById('party').addEventListener('click', event => { document.body.classList.toggle('party'); event.currentTarget.textContent = document.body.classList.contains('party') ? 'Turn the lights off' : 'Turn the lights on'; });
 `;
 }
