@@ -13,14 +13,20 @@ jobs:
     name: Check public services
     runs-on: ubuntu-latest
     steps:
-      - name: Check frontend and API
+      - name: Check VPS backend
         id: health
+        env:
+          UPTIME_ORIGIN_URL: ${{ secrets.UPTIME_ORIGIN_URL }}
         shell: bash
         run: |
           set -uo pipefail
+          if [[ -z "$UPTIME_ORIGIN_URL" ]]; then
+            echo 'UPTIME_ORIGIN_URL is not configured; skipping origin check.'
+            exit 0
+          fi
           failed=0
           for target in \
-            'backend|http://VPS_HOST:4967/api/health'; do
+            "backend|${UPTIME_ORIGIN_URL%/}/api/health"; do
             name="${target%%|*}"
             url="${target#*|}"
             status="$(curl --silent --show-error --location --max-time 20 \
