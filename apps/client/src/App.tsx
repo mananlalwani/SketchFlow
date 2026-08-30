@@ -21,6 +21,7 @@ import { getSharedProject } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { installProjectSession } from '@/lib/projectSession';
 import { AuthPage, SsoCallbackPage } from '@/components/auth/AuthPage';
+import { DrawApiPage } from '@/components/DrawApiPage';
 
 const DrawingCanvas = lazy(() =>
   import('@/components/DrawingCanvas').then((module) => ({ default: module.DrawingCanvas })),
@@ -175,6 +176,7 @@ function App() {
 
           {/* Editor Route wrapped in Layout with logic */}
           <Route path="/draw" element={<EditorRoute />} />
+          <Route path="/drawapi" element={<DrawApiPage />} />
           <Route path="/auth/:mode" element={<AuthPage />} />
           <Route path="/auth/sso-callback" element={<SsoCallbackPage />} />
 

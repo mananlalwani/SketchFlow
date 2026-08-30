@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes draw-path {
+  0%, 100% { stroke-dasharray: 8 5; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 18 4; stroke-dashoffset: 24; }
+}
+
 @layer base {
   :root {
     /* Studio desk — warm paper in light, graphite in dark. */
