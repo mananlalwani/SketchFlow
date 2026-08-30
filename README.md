@@ -33,7 +33,7 @@ This project is a monorepo managed with `pnpm` workspaces.
 
 #### **Client** (`apps/client`)
 
-- **Framework**: [React 18](https://react.dev/) + [Vite](https://vitejs.dev/)
+- **Framework**: [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [Radix UI](https://www.radix-ui.com/)
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand)
 - **Real-time**: [Socket.IO Client](https://socket.io/)
@@ -121,7 +121,7 @@ pnpm --filter @sketchflow/server db:studio
 
 ### Production release
 
-Push a signed-off `v*` tag to validate the source, publish a versioned GHCR image, and create a
+Push a reviewed `v*` tag to validate the source, publish a versioned GHCR image, and create a
 GitHub Release. Client changes publish through Cloudflare Pages, while server image changes publish to
 GHCR and are picked up by the VPS deployment timer. The running service requires Clerk live credentials
 and explicit `CORS_ORIGINS`; Sentry, OpenTelemetry, release ID, and Redis (unless scaled beyond one

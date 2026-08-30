@@ -18,7 +18,7 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Sign in to DrawApp</DialogTitle>
+          <DialogTitle>Sign in to SketchFlow</DialogTitle>
           <DialogDescription>
             Sign in to save and access your projects from anywhere.
           </DialogDescription>

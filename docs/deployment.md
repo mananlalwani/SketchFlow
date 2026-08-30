@@ -28,10 +28,10 @@ a `VITE_*` variable.
 
 ## What deploys where
 
-| Change                                                                        | Deploy action                                                                     |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `apps/client/**` only                                                         | Push to `main`; Cloudflare Pages publishes the frontend. No Docker work.          |
-| `apps/server/**`, `packages/shared/**`, dependency manifests, or `Dockerfile` | GitHub Actions builds and publishes a new GHCR image; then promote it on the VPS. |
+| Change                                                                        | Deploy action                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `apps/client/**` only                                                         | Push to `main`; Cloudflare Pages publishes the frontend. No Docker work.        |
+| `apps/server/**`, `packages/shared/**`, dependency manifests, or `Dockerfile` | GitHub Actions builds and publishes a new GHCR image; the VPS timer deploys it. |
 
 The `main` CI workflow detects this automatically: frontend-only commits skip the expensive
 container build and image publish jobs. It still runs the normal test and quality checks.
