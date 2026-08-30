@@ -11,7 +11,7 @@ authentication, persistence, and collaboration.
 
 ## Before deploying
 
-Apply Prisma migrations against the production database:
+For a manual migration or deployment, apply Prisma migrations against the production database:
 
 ```bash
 pnpm --filter @sketchflow/server db:migrate:deploy
@@ -72,9 +72,8 @@ Pages at `draw.mananlalwani.com`.
 ## Image and GitHub releases
 
 Pushing a `v*` tag is an explicit backend release: it validates the source, publishes both the
-versioned GHCR image and `latest`, then creates a GitHub Release. It intentionally does not deploy
-the VPS. Use the image tag for a reproducible rollback or use `latest` for the newest successful
-backend build.
+versioned GHCR image and `latest`, then creates a GitHub Release. The VPS timer picks up the new
+`latest` image automatically. Use the versioned image tag for a reproducible manual rollback.
 
 ## Optional observability
 

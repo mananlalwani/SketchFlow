@@ -122,14 +122,15 @@ pnpm --filter @sketchflow/server db:studio
 ### Production release
 
 Push a signed-off `v*` tag to validate the source, publish a versioned GHCR image, and create a
-GitHub Release. Deployment is intentionally manual: pull the desired image tag on the VPS and restart
-the container. The running service requires Clerk live credentials and explicit `CORS_ORIGINS`; Sentry,
-OpenTelemetry, release ID, and Redis (unless scaled beyond one Socket.IO instance) are optional
-production enhancements. Auto-shape detection is intentionally opt-in.
+GitHub Release. Client changes publish through Cloudflare Pages, while server image changes publish to
+GHCR and are picked up by the VPS deployment timer. The running service requires Clerk live credentials
+and explicit `CORS_ORIGINS`; Sentry, OpenTelemetry, release ID, and Redis (unless scaled beyond one
+Socket.IO instance) are optional production enhancements. Auto-shape detection is intentionally opt-in.
 
 ## Docker Support
 
-Run the application using Docker for an isolated environment.
+Run the API and server-rendered DrawAPI page using Docker for an isolated environment. The production
+client is served separately by Cloudflare Pages.
 
 ```bash
 # Build the image

@@ -14,15 +14,15 @@ This is a current-state roadmap, not evidence that every production control is c
 - Live cursors keyed by browser session so multiple devices under the same account remain visible.
 - Pressure-point stroke widths retained through save/load/render/export, worker rendering with a
   main-thread fallback, PWA shell recovery, and opt-in auto-shape detection.
-- GitHub Actions checks for build, unit/server integration tests, lint, type checks, production
-  dependency audit, secret scanning, Docker build/smoke, and GHCR publication from `main`.
+- GitHub Actions checks for build, unit/server integration tests, lint, type checks, secret scanning,
+  Docker build/smoke, and GHCR publication from `main`.
 - `v*` tags validate, publish versioned GHCR images plus `latest`, and create GitHub Releases.
-  VPS deployment is intentionally manual.
+- The VPS checks GHCR and deploys a changed `latest` image automatically.
 
 ## Validation currently run on `main`
 
 - Shared/client/server build; client type check; client/server Vitest suites; lint; production audit.
-- Docker image build and a health/draw-route smoke test.
+- Server Docker image build and a health smoke test.
 - Gitleaks on pushes, pull requests, and a weekly schedule.
 
 Playwright E2E, PostgreSQL/Redis infrastructure testing, performance benchmarks, formatting, and
@@ -37,7 +37,7 @@ coverage are available locally but are not current required GitHub Actions gates
    retention, source-map, and alert validation.
 4. Add an authenticated Playwright job and infrastructure tests to CI before making stronger
    performance or end-to-end reliability claims.
-5. Keep a tested manual VPS deploy/rollback runbook and pin a versioned GHCR image for releases.
+5. Keep the automatic VPS deploy tested and retain the manual versioned-image rollback runbook.
 
 ## Local checks
 

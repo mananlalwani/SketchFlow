@@ -1,8 +1,8 @@
 # Dependency audit policy
 
-`pnpm audit --prod --audit-level high` runs in CI for pull requests and pushes to `main`. High and
-critical production findings fail that job. The weekly scheduled workflow currently runs secret
-scanning; it does not run the package audit.
+`pnpm audit --prod --audit-level high` is a release-owner check and is not currently run by GitHub
+Actions. Run it locally before a release and review the actual advisory output. The weekly scheduled
+workflow runs secret scanning; it does not run the package audit.
 
 Audit snapshot: 2026-07-25 — 0 critical, 0 high, 13 moderate, and 2 low production findings across
 651 dependencies. This snapshot is informational, not a reachability assessment or a permanent
