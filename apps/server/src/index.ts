@@ -240,6 +240,17 @@ export class SketchFlowServer {
       return clerk(req, res, next);
     });
 
+    this.app.get('/', (req, res, next) => {
+      if (req.hostname !== 'drawapi.mananlalwani.com') return next();
+      const nonce = randomUUID();
+      res.setHeader(
+        'Content-Security-Policy',
+        `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'`,
+      );
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.type('html').send(renderDrawApiPage(nonce));
+    });
+
     // Static files - serve the built client
     this.app.use(
       express.static(this.clientDistPath, {
@@ -633,17 +644,6 @@ export class SketchFlowServer {
     );
 
     registerFolderRoutes(this.app, this.projectService);
-
-    this.app.get('/', (req, res, next) => {
-      if (req.hostname !== 'drawapi.mananlalwani.com') return next();
-      const nonce = randomUUID();
-      res.setHeader(
-        'Content-Security-Policy',
-        `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'`,
-      );
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.type('html').send(renderDrawApiPage(nonce));
-    });
 
     this.app.use('/api', notFoundMiddleware);
 
