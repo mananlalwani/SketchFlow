@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Settings, Sun, Moon, User, LogIn, UserPlus, LogOut, Info, PenTool } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,8 @@ import {
 import { useMobile } from '@/hooks/useMobile';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { useDrawingStore } from '@/store/drawingStore';
+import { clientEnv } from '@/config/env';
 
 export function SettingsDropdown() {
   const { theme, setTheme } = useTheme();
@@ -44,9 +47,22 @@ export function SettingsDropdown() {
   const [showMobileSettings, setShowMobileSettings] = useState(false);
   const [showMobileProfile, setShowMobileProfile] = useState(false);
   const [showDesktopProfile, setShowDesktopProfile] = useState(false);
+  const [showDevTools, setShowDevTools] = useState(false);
+  const aboutTapRef = useRef({ count: 0, lastTap: 0 });
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const drawingState = useDrawingStore();
+
+  const handleAboutTap = () => {
+    const now = Date.now();
+    const taps = now - aboutTapRef.current.lastTap > 1200 ? 1 : aboutTapRef.current.count + 1;
+    aboutTapRef.current = { count: taps, lastTap: now };
+    if (taps >= 5) {
+      aboutTapRef.current = { count: 0, lastTap: now };
+      setShowDevTools(true);
+    }
+  };
 
   useEffect(() => {
     setFirstName(user?.firstName ?? '');
@@ -515,15 +531,55 @@ export function SettingsDropdown() {
                 ))}
               </div>
               <div className="flex items-center justify-between border-t border-stone-200 pt-4 text-xs dark:border-white/[0.08]">
-                <span className="font-medium text-stone-500 dark:text-stone-400">
+                <button
+                  type="button"
+                  onClick={handleAboutTap}
+                  className="font-medium text-stone-500 outline-none transition-colors hover:text-stone-900 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-amber-400 dark:text-stone-400 dark:hover:text-stone-100"
+                  aria-label="SketchFlow version"
+                >
                   Version 1.0.0
-                </span>
+                </button>
                 <span className="text-stone-600 dark:text-stone-400">
                   © {new Date().getFullYear()} Manan Lalwani
                 </span>
               </div>
             </div>
           </DialogDescription>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDevTools} onOpenChange={setShowDevTools}>
+        <DialogContent className="gap-0 overflow-hidden border-stone-200 bg-stone-50 p-0 sm:max-w-lg dark:border-white/[0.09] dark:bg-[#211e1b]">
+          <DialogHeader className="border-b border-stone-200 bg-stone-100/80 px-6 pb-5 pt-6 text-left dark:border-white/[0.08] dark:bg-white/[0.025]">
+            <DialogTitle className="text-xl font-semibold tracking-[-0.04em] text-stone-950 dark:text-stone-50">
+              Developer tools
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-stone-500 dark:text-stone-400">
+              Runtime diagnostics for local development and support.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 px-6 py-5 text-sm">
+            {[
+              ['Mode', clientEnv.IS_PRODUCTION ? 'production' : 'development'],
+              ['Release', clientEnv.RELEASE_ID],
+              ['API origin', clientEnv.API_URL || 'same origin'],
+              ['Online', navigator.onLine ? 'yes' : 'no'],
+              ['Project', drawingState.currentProjectId || 'unsaved draft'],
+              ['Objects', String(drawingState.objects.length)],
+              ['History', `${drawingState.historyIndex + 1} / ${drawingState.history.length}`],
+              ['Save status', drawingState.saveStatus],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="flex items-center justify-between gap-4 rounded-lg border border-stone-200 bg-white px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.035]"
+              >
+                <span className="text-stone-500 dark:text-stone-400">{label}</span>
+                <span className="max-w-[18rem] truncate font-mono text-xs text-stone-800 dark:text-stone-200">
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </>
