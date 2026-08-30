@@ -40,7 +40,7 @@ import { ConnectionRegistry } from './services/ConnectionRegistry.js';
 import { ProjectService } from './services/ProjectService.js';
 import { logger } from './utils/logger.js';
 import { env, isProd, clerkPublishableKey } from './config/env.js';
-import { disconnectPrisma } from './lib/prisma.js';
+import { disconnectPrisma, prisma } from './lib/prisma.js';
 import {
   collaboratorInputSchema,
   collaboratorUserIdSchema,
@@ -287,6 +287,32 @@ export class SketchFlowServer {
     // Auth API - get current user (protected)
     this.app.get('/api/config', (_req, res) => {
       res.json({ clerkPublishableKey });
+    });
+
+    this.app.get('/api/drawapi/counter', async (_req, res) => {
+      try {
+        const counter = await prisma.drawApiCounter.upsert({
+          where: { id: 'global' },
+          create: { id: 'global' },
+          update: {},
+        });
+        res.json({ clicks: counter.clicks });
+      } catch {
+        res.status(500).json({ error: 'Could not load the collective click count' });
+      }
+    });
+
+    this.app.post('/api/drawapi/counter', async (_req, res) => {
+      try {
+        const counter = await prisma.drawApiCounter.upsert({
+          where: { id: 'global' },
+          create: { id: 'global', clicks: 1 },
+          update: { clicks: { increment: 1 } },
+        });
+        res.json({ clicks: counter.clicks });
+      } catch {
+        res.status(500).json({ error: 'Could not record the collective click' });
+      }
     });
 
     // Auth API - get current user (protected)

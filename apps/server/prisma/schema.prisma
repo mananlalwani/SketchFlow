@@ -102,3 +102,11 @@ model ProjectCollaborator {
   @@index([userId])
   @@map("project_collaborators")
 }
+
+model DrawApiCounter {
+  id        String   @id
+  clicks    Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("draw_api_counter")
+}

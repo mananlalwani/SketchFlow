@@ -91,6 +91,7 @@ const collaboratorRecordSchema = z.object({
 });
 const shareResultSchema = z.object({ shareToken: z.string(), shareUrl: z.string() });
 const emptyResponseSchema = z.unknown().transform(() => undefined);
+const drawApiCounterSchema = z.object({ clicks: z.number().int().nonnegative() });
 
 const resolveApiBase = () => {
   const envApiUrl = clientEnv.API_URL;
@@ -112,6 +113,14 @@ const resolveApiBase = () => {
 
 const API_BASE = resolveApiBase();
 const REQUEST_TIMEOUT_MS = 15_000;
+
+export function getDrawApiCounter(): Promise<{ clicks: number }> {
+  return http('/api/drawapi/counter', drawApiCounterSchema);
+}
+
+export function incrementDrawApiCounter(): Promise<{ clicks: number }> {
+  return http('/api/drawapi/counter', drawApiCounterSchema, { method: 'POST' });
+}
 
 async function getAuthHeadersWithToken(token: string | null): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
