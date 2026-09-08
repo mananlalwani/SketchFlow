@@ -4,12 +4,14 @@ import { getCanvasToolShortcut, isEditableKeyboardTarget } from '@/lib/canvasKey
 import { postRendererViewport } from '@/lib/canvasRendererViewport';
 import type { RendererWorkerPort } from '@/lib/canvasRendererViewport';
 import { zoomViewportAtPoint } from '@/lib/canvasViewport';
+import type { CanvasPresentation } from '@/lib/canvasPresentation';
 
 export type { RendererWorkerPort } from '@/lib/canvasRendererViewport';
 
 interface CanvasKeyboardShortcutOptions {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   workerRef: MutableRefObject<RendererWorkerPort | null>;
+  presentation?: CanvasPresentation;
   setIsShiftPressed: (isPressed: boolean) => void;
   onSpacePanStart: () => void;
   onSpacePanEnd: () => void;
@@ -20,6 +22,7 @@ interface CanvasKeyboardShortcutOptions {
 export function useCanvasKeyboardShortcuts({
   canvasRef,
   workerRef,
+  presentation,
   setIsShiftPressed,
   onSpacePanStart,
   onSpacePanEnd,
@@ -44,11 +47,19 @@ export function useCanvasKeyboardShortcuts({
       });
       state.setZoom(viewport.zoom);
       state.setView(viewport.x, viewport.y);
-      postRendererViewport(workerRef.current, rect, {
-        zoom: viewport.zoom,
-        viewX: viewport.x,
-        viewY: viewport.y,
-      });
+      if (presentation) {
+        presentation.setViewport(rect, {
+          zoom: viewport.zoom,
+          viewX: viewport.x,
+          viewY: viewport.y,
+        });
+      } else {
+        postRendererViewport(workerRef.current, rect, {
+          zoom: viewport.zoom,
+          viewX: viewport.x,
+          viewY: viewport.y,
+        });
+      }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -78,17 +89,26 @@ export function useCanvasKeyboardShortcuts({
           state.resetView();
           const canvas = canvasRef.current;
           if (canvas) {
-            postRendererViewport(workerRef.current, canvas.getBoundingClientRect(), {
-              zoom: 1,
-              viewX: 0,
-              viewY: 0,
-            });
+            if (presentation) {
+              presentation.setViewport(canvas.getBoundingClientRect(), {
+                zoom: 1,
+                viewX: 0,
+                viewY: 0,
+              });
+            } else {
+              postRendererViewport(workerRef.current, canvas.getBoundingClientRect(), {
+                zoom: 1,
+                viewX: 0,
+                viewY: 0,
+              });
+            }
           }
         } else if (event.key === 'Delete' || event.key === 'Backspace') {
           event.preventDefault();
           if (window.confirm('Are you sure you want to clear the canvas?')) {
             state.clearCanvas();
-            workerRef.current?.postMessage({ type: 'clear' });
+            if (presentation) presentation.clear();
+            else workerRef.current?.postMessage({ type: 'clear' });
           }
         }
         return;
@@ -120,5 +140,13 @@ export function useCanvasKeyboardShortcuts({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [canvasRef, onSpacePanEnd, onSpacePanStart, setIsShiftPressed, setShowShortcuts, workerRef]);
+  }, [
+    canvasRef,
+    onSpacePanEnd,
+    onSpacePanStart,
+    presentation,
+    setIsShiftPressed,
+    setShowShortcuts,
+    workerRef,
+  ]);
 }

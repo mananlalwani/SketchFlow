@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import type { DrawingObject } from '@/store/drawingStore';
+import { drawRendererObject } from '@/lib/canvasRendererCommands';
 
 /** Small retained-mode renderer used only when OffscreenCanvas cannot transfer. */
 export function useCanvasRendererFallback(
@@ -15,6 +16,7 @@ export function useCanvasRendererFallback(
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !context) return;
+    const imageCache = new Map<string, HTMLImageElement>();
 
     const render = () => {
       const rect = canvas.getBoundingClientRect();
@@ -31,96 +33,38 @@ export function useCanvasRendererFallback(
       context.lineJoin = 'round';
       for (const object of objects) {
         if (object.hidden) continue;
-        context.globalAlpha = object.alpha ?? 1;
-        context.strokeStyle = object.color;
-        context.fillStyle = object.color;
-        if (object.type === 'stroke' && object.points && object.points.length > 1) {
-          for (let index = 1; index < object.points.length; index++) {
-            const start = object.points[index - 1];
-            const end = object.points[index];
-            context.lineWidth = end.width ?? object.size;
-            context.beginPath();
-            context.moveTo(start.x, start.y);
-            context.lineTo(end.x, end.y);
-            context.stroke();
+        if (
+          object.type === 'image' &&
+          object.imageData &&
+          object.x !== undefined &&
+          object.y !== undefined
+        ) {
+          let image = imageCache.get(object.imageData);
+          if (!image) {
+            image = new Image();
+            image.onload = render;
+            image.src = object.imageData;
+            imageCache.set(object.imageData, image);
+          } else if (image.complete && image.naturalWidth > 0) {
+            context.save();
+            context.globalAlpha = object.alpha ?? 1;
+            if (object.rotation) {
+              context.translate(
+                object.x + (object.width ?? 0) / 2,
+                object.y + (object.height ?? 0) / 2,
+              );
+              context.rotate((object.rotation * Math.PI) / 180);
+              context.translate(
+                -(object.x + (object.width ?? 0) / 2),
+                -(object.y + (object.height ?? 0) / 2),
+              );
+            }
+            context.drawImage(image, object.x, object.y, object.width ?? 0, object.height ?? 0);
+            context.restore();
           }
           continue;
         }
-        if (object.x === undefined || object.y === undefined) continue;
-        context.save();
-        const rotation = object.rotation ?? 0;
-        if (rotation) {
-          context.translate(
-            object.x + (object.width ?? 0) / 2,
-            object.y + (object.height ?? 0) / 2,
-          );
-          context.rotate((rotation * Math.PI) / 180);
-          context.translate(
-            -(object.x + (object.width ?? 0) / 2),
-            -(object.y + (object.height ?? 0) / 2),
-          );
-        }
-        context.lineWidth = object.size;
-        if (object.type === 'ellipse' || object.type === 'circle') {
-          context.beginPath();
-          context.ellipse(
-            object.x + (object.width ?? 0) / 2,
-            object.y + (object.height ?? 0) / 2,
-            Math.abs(object.width ?? 0) / 2,
-            Math.abs(object.height ?? 0) / 2,
-            0,
-            0,
-            Math.PI * 2,
-          );
-          if (object.filled) context.fill();
-          else context.stroke();
-        } else if (object.type === 'rectangle') {
-          if (object.filled) {
-            context.fillRect(object.x, object.y, object.width ?? 0, object.height ?? 0);
-          } else {
-            context.strokeRect(object.x, object.y, object.width ?? 0, object.height ?? 0);
-          }
-        } else if (object.type === 'parabola') {
-          context.beginPath();
-          if (object.points && object.points.length > 1) {
-            context.moveTo(object.points[0].x, object.points[0].y);
-            for (const point of object.points.slice(1)) context.lineTo(point.x, point.y);
-          } else {
-            const steps = 64;
-            const width = object.width ?? 0;
-            const height = object.height ?? 0;
-            const opensSideways = object.orientation === 'left' || object.orientation === 'right';
-            const direction = object.orientation === 'left' || object.orientation === 'up' ? -1 : 1;
-            for (let index = 0; index <= steps; index++) {
-              const t = index / steps;
-              const normalized = (t - 0.5) * 2;
-              const x = opensSideways
-                ? object.x + (direction > 0 ? 0 : width) + direction * width * normalized ** 2
-                : object.x + t * width;
-              const y = opensSideways
-                ? object.y + t * height
-                : object.y + (direction > 0 ? 0 : height) + direction * height * normalized ** 2;
-              if (index === 0) context.moveTo(x, y);
-              else context.lineTo(x, y);
-            }
-          }
-          context.stroke();
-        } else if (object.type === 'text' && object.text) {
-          context.font = `${object.fontSize ?? 16}px sans-serif`;
-          context.textBaseline = 'top';
-          const lineHeight = (object.fontSize ?? 16) * 1.4;
-          const textX = object.x ?? 0;
-          const textY = object.y ?? 0;
-          object.text.split('\n').forEach((line, index) => {
-            context.fillText(line, textX, textY + index * lineHeight);
-          });
-        } else {
-          context.beginPath();
-          context.moveTo(object.x, object.y);
-          context.lineTo(object.x + (object.width ?? 0), object.y + (object.height ?? 0));
-          context.stroke();
-        }
-        context.restore();
+        drawRendererObject(context, object);
       }
       context.restore();
       context.globalAlpha = 1;

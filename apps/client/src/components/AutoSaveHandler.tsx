@@ -12,7 +12,6 @@ import {
   removeEmergencyBackup,
   saveEmergencyBackup,
 } from '@/lib/emergencyBackup';
-import { NetworkError } from '@/lib/errorHandling';
 import { useToast } from '@/hooks/use-toast';
 import {
   enqueueOfflineSave,
@@ -22,6 +21,13 @@ import {
 } from '@/lib/offlineQueue';
 import type { DrawingObject, DrawingState } from '@/store/drawingStore';
 import type { JsonValue } from '@sketchflow/shared';
+import {
+  isProjectWriteReset,
+  isSaveConflict,
+  recoverProjectBackup,
+  replayOfflineSaves,
+  saveProjectSnapshot,
+} from '@/lib/projectSaveRecovery';
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 
@@ -162,29 +168,38 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
 
     setSaveStatus('syncing');
     try {
-      const saved = await writeCoordinator.enqueue({
-        projectKey: savedProjectId,
-        projectId: savedProjectId,
-        title: savedTitle,
-        data: payload,
-        documentVersion: savedDocumentVersion,
-        expectedRevision: revision,
+      await saveProjectSnapshot({
+        snapshot: {
+          projectId: savedProjectId,
+          title: savedTitle,
+          data: payload,
+          documentVersion: savedDocumentVersion,
+          expectedRevision: revision,
+        },
         cloud: !isGuest,
         tokenProvider: isGuest ? undefined : getToken,
+        coordinator: writeCoordinator,
+        getCurrentState: () => {
+          const current = useDrawingStore.getState();
+          return {
+            currentProjectId: current.currentProjectId,
+            documentVersion: current.documentVersion,
+          };
+        },
+        actions: {
+          setProjectRevision: (nextRevision) =>
+            useDrawingStore.getState().setProjectRevision(nextRevision),
+          markSaved: (version) => useDrawingStore.getState().markSaved(version),
+        },
+        removeBackup: removeEmergencyBackup,
+        onCleanupFailure: (error) =>
+          console.warn('Could not clear emergency backup after save:', error),
       });
-      const currentState = useDrawingStore.getState();
-      const isCurrentSnapshot =
-        currentState.currentProjectId === savedProjectId &&
-        currentState.documentVersion === savedDocumentVersion;
-      if (isCurrentSnapshot) {
-        currentState.setProjectRevision(saved.revision);
-        await removeEmergencyBackup(savedProjectId, { title: savedTitle, data: payload });
-        currentState.markSaved(savedDocumentVersion);
-      }
       return true;
     } catch (e) {
-      if (e instanceof ProjectWriteResetError) return false;
-      if (e instanceof NetworkError && e.statusCode === 409) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      if (isProjectWriteReset(error, ProjectWriteResetError)) return false;
+      if (isSaveConflict(error)) {
         setSaveStatus('conflict');
         return false;
       }
@@ -243,40 +258,14 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
       if (isGuest || !userId) return;
       if (!(await getToken())) return;
       const operations = await getOfflineSaveQueue();
-      const latestByProject = new Map<string, (typeof operations)[number]>();
-      for (const operation of operations) {
-        const latest = latestByProject.get(operation.projectId);
-        if (!latest || operation.createdAt >= latest.createdAt) {
-          latestByProject.set(operation.projectId, operation);
-        }
-      }
-
-      for (const operation of latestByProject.values()) {
-        if (operation.id === undefined || operation.revision === undefined) {
-          if (operation.id !== undefined) await markOfflineSaveAttempt(operation.id);
-          setSaveStatus('conflict');
-          return;
-        }
-        try {
-          await writeCoordinator.enqueue({
-            projectKey: operation.projectId,
-            projectId: operation.projectId,
-            title: operation.title,
-            data: operation.data,
-            documentVersion: operation.createdAt,
-            expectedRevision: operation.revision,
-            cloud: true,
-            tokenProvider: getToken,
-          });
-          for (const stale of operations.filter((item) => item.projectId === operation.projectId)) {
-            if (stale.id !== undefined) await removeOfflineSave(stale.id);
-          }
-        } catch (error) {
-          await markOfflineSaveAttempt(operation.id);
-          if (error instanceof NetworkError && error.statusCode === 409) setSaveStatus('conflict');
-          return;
-        }
-      }
+      await replayOfflineSaves({
+        operations,
+        coordinator: writeCoordinator,
+        getToken,
+        markAttempt: markOfflineSaveAttempt,
+        remove: removeOfflineSave,
+        onConflict: () => setSaveStatus('conflict'),
+      });
     };
     const retryWhenOnline = () => {
       // Only transiently failed lanes may resume on reconnect. A conflict or
@@ -304,42 +293,45 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
     const tryRecoverBackup = async () => {
       if (!currentProjectId || recoveredProjectRef.current === currentProjectId) return;
       try {
-        const backup = await getEmergencyBackup(currentProjectId);
-        if (!backup) return;
-        if (Date.now() - backup.timestamp < 60 * 60 * 1000) {
-          const currentData = serializeProject(objects, 4096, 4096);
-          if (backup.title === projectTitle && backup.data === currentData) {
-            await removeEmergencyBackup(currentProjectId, {
-              title: backup.title,
-              data: backup.data,
-            });
-            return;
-          }
-          skipRecoveredBackupRef.current = true;
-          useDrawingStore.getState().setObjects(deserializeProject(backup.data));
-          useDrawingStore.getState().requestFullRedraw();
-          recoveredProjectRef.current = currentProjectId;
-          const noticeKey = `sketchflow-recovery-notice:${currentProjectId}`;
-          let noticeShown = false;
-          try {
-            // A recovery backup may receive a newer timestamp while the
-            // restored document is settling. A project-level acknowledgement
-            // prevents that timestamp churn from repeating the banner.
-            noticeShown = window.localStorage.getItem(noticeKey) !== null;
-            if (!noticeShown) window.localStorage.setItem(noticeKey, 'shown');
-          } catch {
-            // Recovery must still work when browser storage is unavailable.
-          }
-          if (!noticeShown) {
-            toast({
-              title: 'Recovered unsaved changes',
-              description: 'A recent local backup was restored. Review it and save when ready.',
-            });
-          }
-          console.info('Recovered unsaved local changes from IndexedDB backup.');
-        } else {
-          await removeEmergencyBackup(currentProjectId);
-        }
+        await recoverProjectBackup({
+          projectId: currentProjectId,
+          projectRole,
+          currentTitle: projectTitle,
+          currentData: serializeProject(objects, 4096, 4096),
+          getBackup: getEmergencyBackup,
+          removeBackup: removeEmergencyBackup,
+          deserialize: deserializeProject,
+          getCurrentState: () => {
+            const current = useDrawingStore.getState();
+            return {
+              currentProjectId: current.currentProjectId,
+              projectRole: current.projectRole,
+            };
+          },
+          restore: (recoveredObjects) => {
+            skipRecoveredBackupRef.current = true;
+            useDrawingStore.getState().setObjects(recoveredObjects);
+            useDrawingStore.getState().requestFullRedraw();
+          },
+          onRecovered: () => {
+            recoveredProjectRef.current = currentProjectId;
+            const noticeKey = `sketchflow-recovery-notice:${currentProjectId}`;
+            let noticeShown = false;
+            try {
+              noticeShown = window.localStorage.getItem(noticeKey) !== null;
+              if (!noticeShown) window.localStorage.setItem(noticeKey, 'shown');
+            } catch {
+              // Recovery still works when browser storage is unavailable.
+            }
+            if (!noticeShown) {
+              toast({
+                title: 'Recovered unsaved changes',
+                description: 'A recent local backup was restored. Review it and save when ready.',
+              });
+            }
+            console.info('Recovered unsaved local changes from IndexedDB backup.');
+          },
+        });
       } catch (e) {
         console.warn('Failed to check emergency backup:', e);
       }
@@ -348,6 +340,7 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
     void tryRecoverBackup();
   }, [
     currentProjectId,
+    projectRole,
     deserializeProject,
     getEmergencyBackup,
     removeEmergencyBackup,

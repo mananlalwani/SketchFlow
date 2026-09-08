@@ -1,0 +1,2 @@
+# Retired historical APP_SECRET from commit 584ed527; suppress only this exact finding.
+584ed527768700fe291ceca4b43c2c773770424c:apps/client/src/lib/drawFormat.ts:generic-api-key:22

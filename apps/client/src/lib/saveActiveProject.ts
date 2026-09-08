@@ -2,6 +2,7 @@ import { activeProjectWriteCoordinator } from './projectWriteCoordinator';
 import { serializeProject } from './utils';
 import { useDrawingStore } from '@/store/drawingStore';
 import { removeEmergencyBackup } from './emergencyBackup';
+import { saveProjectSnapshot } from './projectSaveRecovery';
 
 export interface SaveActiveProjectOptions {
   cloud: boolean;
@@ -19,40 +20,33 @@ export async function saveActiveProject({
   if (snapshot.projectRole === 'viewer') return 'read-only';
 
   const projectId = snapshot.currentProjectId;
-  const projectKey = projectId ?? 'active-draft';
   const documentVersion = snapshot.documentVersion;
   const payload = serializeProject(snapshot.objects, 4096, 4096);
-  activeProjectWriteCoordinator.resume(projectKey);
-
-  const saved = await activeProjectWriteCoordinator.enqueue({
-    projectKey,
-    projectId,
-    title: snapshot.projectTitle || 'Untitled',
-    data: payload,
-    documentVersion,
-    expectedRevision: snapshot.projectRevision,
-    cloud,
-    tokenProvider,
-  });
-
-  const current = useDrawingStore.getState();
-  const isSameSession =
-    current.documentVersion === documentVersion &&
-    (projectId ? current.currentProjectId === projectId : !current.currentProjectId);
-  if (!isSameSession) return 'stale';
-
-  if (!projectId) current.setCurrentProject(saved.id);
-  current.setProjectRevision(saved.revision);
-  current.markSaved(documentVersion);
-  try {
-    await removeEmergencyBackup(projectId ?? saved.id, {
+  return saveProjectSnapshot({
+    snapshot: {
+      projectId,
       title: snapshot.projectTitle || 'Untitled',
       data: payload,
-    });
-  } catch (error) {
-    // A browser storage failure must not turn an acknowledged cloud save into
-    // a false failure. The backup will be compared and cleaned up next load.
-    console.warn('Could not clear emergency backup after save:', error);
-  }
-  return 'saved';
+      documentVersion,
+      expectedRevision: snapshot.projectRevision,
+    },
+    cloud,
+    tokenProvider,
+    coordinator: activeProjectWriteCoordinator,
+    getCurrentState: () => {
+      const current = useDrawingStore.getState();
+      return {
+        currentProjectId: current.currentProjectId,
+        documentVersion: current.documentVersion,
+      };
+    },
+    actions: {
+      setCurrentProject: (id) => useDrawingStore.getState().setCurrentProject(id),
+      setProjectRevision: (revision) => useDrawingStore.getState().setProjectRevision(revision),
+      markSaved: (version) => useDrawingStore.getState().markSaved(version),
+    },
+    removeBackup: removeEmergencyBackup,
+    onCleanupFailure: (error) =>
+      console.warn('Could not clear emergency backup after save:', error),
+  });
 }

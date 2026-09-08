@@ -40,7 +40,7 @@ import {
   translateObjectInCollection,
   translateObjectsBy,
 } from '@/lib/canvasObjectTransform';
-import { postRendererViewport } from '@/lib/canvasRendererViewport';
+import { CanvasPresentation } from '@/lib/canvasPresentation';
 import { drawingObjectsToRendererScene } from '@/lib/canvasRendererObject';
 import {
   committedStrokeSize,
@@ -274,12 +274,23 @@ export function DrawingCanvas() {
   const currentPanViewRef = useRef<{ x: number; y: number } | null>(null);
 
   const workerRef = useRef<Worker | null>(null);
+  const presentation = useMemo(
+    () =>
+      new CanvasPresentation({
+        send: (message) => workerRef.current?.postMessage(message),
+      }),
+    [],
+  );
   const rendererStatus = useCanvasRendererWorker(
     canvasRef,
     workerRef,
     { zoom, viewX, viewY },
     theme,
   );
+  useEffect(() => {
+    if (rendererStatus === 'ready' || rendererStatus === 'fallback') presentation.markReady();
+    else presentation.markUnavailable();
+  }, [presentation, rendererStatus]);
   useCanvasRendererFallback(
     canvasRef,
     rendererStatus === 'fallback',
@@ -287,8 +298,7 @@ export function DrawingCanvas() {
     { zoom, viewX, viewY },
     BG_COLORS[theme],
   );
-  const workerStrokeQueueRef = useRef<StrokeData[]>([]);
-  const workerFlushScheduledRef = useRef(false);
+  useEffect(() => () => presentation.dispose(), [presentation]);
   const strokeGroupRef = useRef<string | null>(null);
   const collaborationCommitInFlightRef = useRef(false);
   const collaborationReplayInFlightRef = useRef(false);
@@ -461,13 +471,12 @@ export function DrawingCanvas() {
   useEffect(() => {
     if (!needsFullRedraw) return;
     const scene = drawingObjectsToRendererScene(objects);
-    workerRef.current?.postMessage({
-      type: 'load-scene',
-      requestId: `scene-${currentProjectId ?? 'local'}-${objects.length}`,
-      ...scene,
-    });
+    presentation.loadScene(`scene-${currentProjectId ?? 'local'}-${objects.length}`, [
+      ...scene.drawings,
+      ...scene.strokes,
+    ]);
     clearFullRedraw();
-  }, [needsFullRedraw, clearFullRedraw, currentProjectId, objects]);
+  }, [needsFullRedraw, clearFullRedraw, currentProjectId, objects, presentation]);
 
   const initializedRef = useRef(false);
   useEffect(() => {
@@ -491,30 +500,11 @@ export function DrawingCanvas() {
     updatePerformanceStats(fps);
   }, [shouldSkipFrame, updateMetrics, fps, updatePerformanceStats]);
 
-  const flushWorkerStrokes = useCallback(() => {
-    const worker = workerRef.current;
-    if (!worker) {
-      workerStrokeQueueRef.current = [];
-      workerFlushScheduledRef.current = false;
-      return;
-    }
-    const batch = workerStrokeQueueRef.current;
-    if (batch.length) {
-      worker.postMessage({ type: 'strokes', data: batch });
-      workerStrokeQueueRef.current = [];
-    }
-    workerFlushScheduledRef.current = false;
-  }, []);
-
   const enqueueWorkerStroke = useCallback(
     (stroke: StrokeData) => {
-      workerStrokeQueueRef.current.push(stroke);
-      if (!workerFlushScheduledRef.current) {
-        workerFlushScheduledRef.current = true;
-        requestAnimationFrame(() => flushWorkerStrokes());
-      }
+      presentation.appendStroke(stroke);
     },
-    [flushWorkerStrokes],
+    [presentation],
   );
 
   useEffect(() => {
@@ -545,6 +535,7 @@ export function DrawingCanvas() {
   useCanvasKeyboardShortcuts({
     canvasRef,
     workerRef,
+    presentation,
     setIsShiftPressed,
     onSpacePanStart: startSpacePan,
     onSpacePanEnd: endSpacePan,
@@ -596,7 +587,7 @@ export function DrawingCanvas() {
 
     saveHistory();
     addObject(textObject);
-    workerRef.current?.postMessage({
+    presentation.send({
       type: 'shape',
       data: { ...textObject, timestamp: Date.now() },
     });
@@ -609,6 +600,7 @@ export function DrawingCanvas() {
     textFontSize,
     clearTextInput,
     saveHistory,
+    presentation,
     textInputPos,
     textInputValue,
   ]);
@@ -996,7 +988,7 @@ export function DrawingCanvas() {
             const width = Math.max(0, maxX - minX);
             const height = Math.max(0, maxY - minY);
 
-            workerRef.current?.postMessage({
+            presentation.send({
               type: 'clear-region',
               x: minX,
               y: minY,
@@ -1073,7 +1065,7 @@ export function DrawingCanvas() {
                   });
                 }
                 if (strokes.length) {
-                  workerRef.current?.postMessage({
+                  presentation.send({
                     type: 'strokes',
                     data: strokes,
                   });
@@ -1105,7 +1097,7 @@ export function DrawingCanvas() {
                   orientation: obj.orientation,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: 'shape', data: drawing });
+                presentation.send({ type: 'shape', data: drawing });
               } else if (
                 obj.type === 'text' &&
                 obj.x !== undefined &&
@@ -1127,7 +1119,7 @@ export function DrawingCanvas() {
                   fontSize: obj.fontSize,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: 'shape', data: drawing });
+                presentation.send({ type: 'shape', data: drawing });
               } else if (
                 obj.type === 'image' &&
                 obj.x !== undefined &&
@@ -1148,7 +1140,7 @@ export function DrawingCanvas() {
                   imageData: obj.imageData,
                   timestamp: Date.now(),
                 };
-                workerRef.current?.postMessage({ type: 'shape', data: drawing });
+                presentation.send({ type: 'shape', data: drawing });
               }
             }
           }
@@ -1209,7 +1201,7 @@ export function DrawingCanvas() {
             saveHistory();
             addObject(triangleObject);
 
-            workerRef.current?.postMessage({
+            presentation.send({
               type: 'shape',
               data: triangleObject,
             });
@@ -1247,6 +1239,7 @@ export function DrawingCanvas() {
       setSelectedObject,
       setSelectedObjects,
       selectedObjectIds,
+      presentation,
     ],
   );
 
@@ -1293,7 +1286,7 @@ export function DrawingCanvas() {
             const canvas = canvasRef.current;
             if (canvas) {
               const rect = canvas.getBoundingClientRect();
-              postRendererViewport(workerRef.current, rect, {
+              presentation.setViewport(rect, {
                 zoom,
                 viewX: latestView.x,
                 viewY: latestView.y,
@@ -1372,7 +1365,7 @@ export function DrawingCanvas() {
                         properties: { hidden: updatedObj.hidden ?? false },
                         timestamp: Date.now(),
                       };
-                      workerRef.current?.postMessage({ type: 'shape', data: stroke });
+                      presentation.send({ type: 'shape', data: stroke });
                     } else if (
                       (updatedObj.type === 'line' ||
                         updatedObj.type === 'rectangle' ||
@@ -1414,7 +1407,7 @@ export function DrawingCanvas() {
                         },
                         timestamp: Date.now(),
                       };
-                      workerRef.current?.postMessage({
+                      presentation.send({
                         type: 'shape',
                         data: drawing,
                       });
@@ -1523,6 +1516,7 @@ export function DrawingCanvas() {
       objects,
       theme,
       emitCursor,
+      presentation,
     ],
   );
 
@@ -1589,7 +1583,7 @@ export function DrawingCanvas() {
       }
     }
     if (!isDrawing) return;
-    flushWorkerStrokes();
+    presentation.flushStrokes();
 
     if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
       if (currentStroke.length > 0) {
@@ -1602,13 +1596,13 @@ export function DrawingCanvas() {
           const drawing = detectDrawingFromStroke(pathPoints);
           if (drawing) {
             if (strokeGroupRef.current) {
-              workerRef.current?.postMessage({
+              presentation.send({
                 type: 'remove-group',
                 groupId: strokeGroupRef.current,
               });
             }
 
-            const clearDrawingPayload = {
+            const clearDrawingPayload: DrawingData = {
               id: 'temp',
               type:
                 drawing.kind === 'line'
@@ -1625,7 +1619,7 @@ export function DrawingCanvas() {
               alpha: brushOpacity,
               orientation: drawing.kind === 'parabola' ? drawing.orientation : undefined,
             };
-            workerRef.current?.postMessage({
+            presentation.send({
               type: 'clear-shape',
               data: clearDrawingPayload,
             });
@@ -1667,7 +1661,7 @@ export function DrawingCanvas() {
 
             addObject(drawingObject);
             saveHistory();
-            workerRef.current?.postMessage({
+            presentation.send({
               type: 'shape',
               data: drawingObject,
             });
@@ -1731,7 +1725,7 @@ export function DrawingCanvas() {
 
       addObject(drawingObject);
 
-      workerRef.current?.postMessage({
+      presentation.send({
         type: 'shape',
         data: drawingObject,
       });
@@ -1763,7 +1757,7 @@ export function DrawingCanvas() {
 
       addObject(starObject);
 
-      workerRef.current?.postMessage({
+      presentation.send({
         type: 'shape',
         data: starObject,
       });
@@ -1805,7 +1799,7 @@ export function DrawingCanvas() {
 
       addObject(triangleObject);
 
-      workerRef.current?.postMessage({
+      presentation.send({
         type: 'shape',
         data: triangleObject,
       });
@@ -1829,7 +1823,7 @@ export function DrawingCanvas() {
     saveHistory,
     startPoint,
     previewDrawing,
-    flushWorkerStrokes,
+    presentation,
     autoDrawing,
     detectDrawingFromStroke,
     triangleMode,
@@ -1864,13 +1858,13 @@ export function DrawingCanvas() {
 
       setZoom(viewport.zoom);
       setView(viewport.x, viewport.y);
-      postRendererViewport(workerRef.current, rect, {
+      presentation.setViewport(rect, {
         zoom: viewport.zoom,
         viewX: viewport.x,
         viewY: viewport.y,
       });
     },
-    [zoom, viewX, viewY, setZoom, setView],
+    [zoom, viewX, viewY, setZoom, setView, presentation],
   );
 
   const handleZoomIn = useCallback(() => handleZoomStep(1.2), [handleZoomStep]);
@@ -1880,8 +1874,8 @@ export function DrawingCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    postRendererViewport(workerRef.current, rect, { zoom: 1, viewX: 0, viewY: 0 });
-  }, [resetView]);
+    presentation.setViewport(rect, { zoom: 1, viewX: 0, viewY: 0 });
+  }, [resetView, presentation]);
 
   const [isMobile, setIsMobile] = useState(false);
 
@@ -1944,7 +1938,7 @@ export function DrawingCanvas() {
 
             setView(constrained.x, constrained.y);
 
-            postRendererViewport(workerRef.current, rect, {
+            presentation.setViewport(rect, {
               zoom,
               viewX: constrained.x,
               viewY: constrained.y,
@@ -2018,7 +2012,7 @@ export function DrawingCanvas() {
           setZoom(viewport.zoom);
           setView(viewport.x, viewport.y);
 
-          postRendererViewport(workerRef.current, rect, {
+          presentation.setViewport(rect, {
             zoom: viewport.zoom,
             viewX: viewport.x,
             viewY: viewport.y,
@@ -2056,7 +2050,7 @@ export function DrawingCanvas() {
           setZoom(viewport.zoom);
           setView(viewport.x, viewport.y);
 
-          postRendererViewport(workerRef.current, rect, {
+          presentation.setViewport(rect, {
             zoom: viewport.zoom,
             viewX: viewport.x,
             viewY: viewport.y,
@@ -2079,7 +2073,7 @@ export function DrawingCanvas() {
             });
             setView(constrained.x, constrained.y);
 
-            postRendererViewport(workerRef.current, rect, {
+            presentation.setViewport(rect, {
               zoom,
               viewX: constrained.x,
               viewY: constrained.y,

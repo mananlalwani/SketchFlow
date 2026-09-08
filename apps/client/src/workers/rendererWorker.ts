@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { objectIntersectsViewport } from '../lib/viewportCulling';
+import { drawWorkerRendererObject } from '../lib/canvasRendererWorkerAdapter';
 
 export {};
 
@@ -360,11 +361,6 @@ function adjustColorForTheme(color: string): string {
   return color;
 }
 
-function getStarPointCount(drawing: Pick<Drawing, 'properties'>): number {
-  const value = drawing.properties?.pointCount;
-  return value !== undefined && Number.isInteger(value) && value >= 3 && value <= 64 ? value : 5;
-}
-
 function applyObjectRotation(
   context: OffscreenCanvasRenderingContext2D,
   drawing: Pick<Drawing, 'x' | 'y' | 'width' | 'height' | 'properties'>,
@@ -662,141 +658,7 @@ function blit() {
         if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
       }
       const adjustedShColor = adjustColorForTheme(sh.color);
-      vectorSSCtx.save();
-      vectorSSCtx.strokeStyle = adjustedShColor;
-      vectorSSCtx.lineWidth = sh.size;
-      vectorSSCtx.globalAlpha = sh.alpha ?? 1;
-      vectorSSCtx.lineCap = 'round';
-      vectorSSCtx.lineJoin = 'round';
-      vectorSSCtx.fillStyle = adjustedShColor;
-      applyObjectRotation(vectorSSCtx, sh);
-      vectorSSCtx.beginPath();
-      if (sh.type === 'stroke' && sh.points && sh.points.length > 1) {
-        for (let pointIndex = 1; pointIndex < sh.points.length; pointIndex++) {
-          const previous = sh.points[pointIndex - 1];
-          const point = sh.points[pointIndex];
-          vectorSSCtx.beginPath();
-          vectorSSCtx.moveTo(previous.x, previous.y);
-          vectorSSCtx.lineTo(point.x, point.y);
-          vectorSSCtx.lineWidth = point.width ?? sh.size;
-          vectorSSCtx.stroke();
-        }
-      } else if (sh.type === 'line') {
-        vectorSSCtx.moveTo(sh.x, sh.y);
-        vectorSSCtx.lineTo(sh.x + sh.width, sh.y + sh.height);
-        vectorSSCtx.stroke();
-      } else if (sh.type === 'rectangle') {
-        if (sh.filled) vectorSSCtx.fillRect(sh.x, sh.y, sh.width, sh.height);
-        vectorSSCtx.strokeRect(sh.x, sh.y, sh.width, sh.height);
-      } else if (sh.type === 'ellipse') {
-        const cx = sh.x + sh.width / 2;
-        const cy = sh.y + sh.height / 2;
-        const rx = sh.width / 2;
-        const ry = sh.height / 2;
-        vectorSSCtx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-        if (sh.filled) vectorSSCtx.fill();
-        vectorSSCtx.stroke();
-      } else if (sh.type === 'triangle') {
-        // Draw triangle using custom vertices if available, otherwise default isosceles
-        let x1, y1, x2, y2, x3, y3;
-
-        if (sh.points && sh.points.length === 3) {
-          // Use custom vertices
-          x1 = sh.points[0].x;
-          y1 = sh.points[0].y;
-          x2 = sh.points[1].x;
-          y2 = sh.points[1].y;
-          x3 = sh.points[2].x;
-          y3 = sh.points[2].y;
-        } else {
-          // Default isosceles triangle with apex at top-center
-          x1 = sh.x + sh.width / 2; // top center (apex)
-          y1 = sh.y;
-          x2 = sh.x; // bottom left
-          y2 = sh.y + sh.height;
-          x3 = sh.x + sh.width; // bottom right
-          y3 = sh.y + sh.height;
-        }
-
-        vectorSSCtx.moveTo(x1, y1);
-        vectorSSCtx.lineTo(x2, y2);
-        vectorSSCtx.lineTo(x3, y3);
-        vectorSSCtx.closePath();
-
-        if (sh.filled) vectorSSCtx.fill();
-        vectorSSCtx.stroke();
-      } else if (sh.type === 'parabola') {
-        traceParabolaPath(vectorSSCtx, sh);
-        vectorSSCtx.stroke();
-      } else if (sh.type === 'text' && sh.text) {
-        vectorSSCtx.fillStyle = adjustedShColor;
-        const fontSize = sh.fontSize || 24;
-        vectorSSCtx.font = `${fontSize}px Inter, system-ui, sans-serif`;
-        vectorSSCtx.textBaseline = 'top';
-        const lines = sh.text.split('\n');
-        const lineHeight = fontSize * 1.4;
-        for (let i = 0; i < lines.length; i++) {
-          vectorSSCtx.fillText(lines[i], sh.x, sh.y + i * lineHeight);
-        }
-      } else if (sh.type === 'star') {
-        // Draw 5-pointed star
-        const cx = sh.x + sh.width / 2;
-        const cy = sh.y + sh.height / 2;
-        const outerRadius = Math.min(sh.width, sh.height) / 2;
-        const innerRadius = outerRadius * 0.38;
-        const pointCount = getStarPointCount(sh);
-
-        vectorSSCtx.beginPath();
-        for (let i = 0; i < pointCount * 2; i++) {
-          const angle = (i * Math.PI) / pointCount - Math.PI / 2;
-          const radius = i % 2 === 0 ? outerRadius : innerRadius;
-          const x = cx + radius * Math.cos(angle);
-          const y = cy + radius * Math.sin(angle);
-          if (i === 0) {
-            vectorSSCtx.moveTo(x, y);
-          } else {
-            vectorSSCtx.lineTo(x, y);
-          }
-        }
-        vectorSSCtx.closePath();
-
-        if (sh.filled) vectorSSCtx.fill();
-        vectorSSCtx.stroke();
-      } else if (sh.type === 'arrow') {
-        // Draw arrow with shaft and head
-        if (sh.points && sh.points.length >= 2) {
-          const start = sh.points[0];
-          const end = sh.points[1];
-
-          // Draw shaft
-          vectorSSCtx.beginPath();
-          vectorSSCtx.moveTo(start.x, start.y);
-          vectorSSCtx.lineTo(end.x, end.y);
-          vectorSSCtx.stroke();
-
-          // Draw arrowhead
-          const angle = Math.atan2(end.y - start.y, end.x - start.x);
-          const headLength = 15;
-          const headAngle = Math.PI / 6;
-
-          const wing1 = {
-            x: end.x - headLength * Math.cos(angle - headAngle),
-            y: end.y - headLength * Math.sin(angle - headAngle),
-          };
-          const wing2 = {
-            x: end.x - headLength * Math.cos(angle + headAngle),
-            y: end.y - headLength * Math.sin(angle + headAngle),
-          };
-
-          vectorSSCtx.beginPath();
-          vectorSSCtx.moveTo(wing1.x, wing1.y);
-          vectorSSCtx.lineTo(end.x, end.y);
-          vectorSSCtx.lineTo(wing2.x, wing2.y);
-          vectorSSCtx.stroke();
-        }
-      }
-      // Note: images are handled separately above (before this loop skips them with continue)
-      vectorSSCtx.restore();
+      drawWorkerRendererObject(vectorSSCtx, sh, adjustedShColor);
     }
 
     vectorSSCtx.restore();
@@ -915,155 +777,8 @@ function blit() {
       if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
     }
     const adjustedColor = adjustColorForTheme(sh.color);
-    screenCtx.save();
-    screenCtx.strokeStyle = adjustedColor;
-    const snap = getSnappedWorldLineWidth(sh.size, zoom, safeDpr);
-    screenCtx.lineWidth = snap.worldWidth;
-    screenCtx.globalAlpha = sh.alpha ?? 1;
-    screenCtx.lineCap = 'round';
-    screenCtx.lineJoin = 'round';
-    screenCtx.fillStyle = adjustedColor;
-    applyObjectRotation(screenCtx, sh);
-    if (snap.snapped && snap.offset !== 0) {
-      screenCtx.translate(snap.offset, snap.offset);
-    }
-    screenCtx.beginPath();
-    if (sh.type === 'stroke' && sh.points && sh.points.length > 1) {
-      for (let pointIndex = 1; pointIndex < sh.points.length; pointIndex++) {
-        const previous = sh.points[pointIndex - 1];
-        const point = sh.points[pointIndex];
-        screenCtx.beginPath();
-        screenCtx.moveTo(previous.x, previous.y);
-        screenCtx.lineTo(point.x, point.y);
-        screenCtx.lineWidth = point.width ?? sh.size;
-        screenCtx.stroke();
-      }
-    } else if (sh.type === 'line') {
-      screenCtx.moveTo(sh.x, sh.y);
-      screenCtx.lineTo(sh.x + sh.width, sh.y + sh.height);
-      screenCtx.stroke();
-    } else if (sh.type === 'rectangle') {
-      if (sh.filled) {
-        screenCtx.fillRect(sh.x, sh.y, sh.width, sh.height);
-      }
-      screenCtx.strokeRect(sh.x, sh.y, sh.width, sh.height);
-    } else if (sh.type === 'ellipse') {
-      const cx = sh.x + sh.width / 2;
-      const cy = sh.y + sh.height / 2;
-      const rx = sh.width / 2;
-      const ry = sh.height / 2;
-      screenCtx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-      if (sh.filled) screenCtx.fill();
-      screenCtx.stroke();
-    } else if (sh.type === 'circle') {
-      const cx = sh.x + sh.width / 2;
-      const cy = sh.y + sh.height / 2;
-      const radius = Math.min(sh.width, sh.height) / 2;
-      screenCtx.arc(cx, cy, radius, 0, 2 * Math.PI);
-      if (sh.filled) screenCtx.fill();
-      screenCtx.stroke();
-    } else if (sh.type === 'triangle') {
-      // Draw triangle using custom vertices if available, otherwise default isosceles
-      let x1, y1, x2, y2, x3, y3;
-
-      if (sh.points && sh.points.length === 3) {
-        // Use custom vertices
-        x1 = sh.points[0].x;
-        y1 = sh.points[0].y;
-        x2 = sh.points[1].x;
-        y2 = sh.points[1].y;
-        x3 = sh.points[2].x;
-        y3 = sh.points[2].y;
-      } else {
-        // Default isosceles triangle with apex at top-center
-        x1 = sh.x + sh.width / 2; // top center (apex)
-        y1 = sh.y;
-        x2 = sh.x; // bottom left
-        y2 = sh.y + sh.height;
-        x3 = sh.x + sh.width; // bottom right
-        y3 = sh.y + sh.height;
-      }
-
-      screenCtx.moveTo(x1, y1);
-      screenCtx.lineTo(x2, y2);
-      screenCtx.lineTo(x3, y3);
-      screenCtx.closePath();
-
-      if (sh.filled) screenCtx.fill();
-      screenCtx.stroke();
-    } else if (sh.type === 'parabola') {
-      traceParabolaPath(screenCtx, sh);
-      screenCtx.stroke();
-    } else if (sh.type === 'text' && sh.text) {
-      screenCtx.fillStyle = adjustedColor;
-      const fontSize = sh.fontSize || 24;
-      screenCtx.font = `${fontSize}px Inter, system-ui, sans-serif`;
-      screenCtx.textBaseline = 'top';
-      // Handle multi-line text
-      const lines = sh.text.split('\n');
-      const lineHeight = fontSize * 1.4;
-      for (let i = 0; i < lines.length; i++) {
-        screenCtx.fillText(lines[i], sh.x, sh.y + i * lineHeight);
-      }
-    } else if (sh.type === 'star') {
-      // Draw star with custom point count
-      const cx = sh.x + sh.width / 2;
-      const cy = sh.y + sh.height / 2;
-      const outerRadius = Math.min(sh.width, sh.height) / 2;
-      const innerRadius = outerRadius * 0.38;
-      const pointCount = getStarPointCount(sh);
-
-      screenCtx.beginPath();
-      for (let i = 0; i < pointCount * 2; i++) {
-        const angle = (i * Math.PI) / pointCount - Math.PI / 2;
-        const radius = i % 2 === 0 ? outerRadius : innerRadius;
-        const x = cx + radius * Math.cos(angle);
-        const y = cy + radius * Math.sin(angle);
-        if (i === 0) {
-          screenCtx.moveTo(x, y);
-        } else {
-          screenCtx.lineTo(x, y);
-        }
-      }
-      screenCtx.closePath();
-
-      if (sh.filled) screenCtx.fill();
-      screenCtx.stroke();
-    } else if (sh.type === 'arrow') {
-      // Draw arrow with shaft and head
-      if (sh.points && sh.points.length >= 2) {
-        const start = sh.points[0];
-        const end = sh.points[1];
-
-        // Draw shaft
-        screenCtx.beginPath();
-        screenCtx.moveTo(start.x, start.y);
-        screenCtx.lineTo(end.x, end.y);
-        screenCtx.stroke();
-
-        // Draw arrowhead
-        const angle = Math.atan2(end.y - start.y, end.x - start.x);
-        const headLength = 15;
-        const headAngle = Math.PI / 6;
-
-        const wing1 = {
-          x: end.x - headLength * Math.cos(angle - headAngle),
-          y: end.y - headLength * Math.sin(angle - headAngle),
-        };
-        const wing2 = {
-          x: end.x - headLength * Math.cos(angle + headAngle),
-          y: end.y - headLength * Math.sin(angle + headAngle),
-        };
-
-        screenCtx.beginPath();
-        screenCtx.moveTo(wing1.x, wing1.y);
-        screenCtx.lineTo(end.x, end.y);
-        screenCtx.lineTo(wing2.x, wing2.y);
-        screenCtx.stroke();
-      }
-    }
-    // Note: images are handled separately above (before this loop skips them with continue)
-    screenCtx.restore();
+    const snappedSize = getSnappedWorldLineWidth(sh.size, zoom, safeDpr).worldWidth;
+    drawWorkerRendererObject(screenCtx, sh, adjustedColor, snappedSize);
   }
 
   screenCtx.restore();
@@ -1224,9 +939,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
       for (let i = retainedDrawings.length - 1; i >= 0; i--) {
         const sh = retainedDrawings[i];
         // Skip images - they are not erasable
-        if (sh.type === 'image') {
-          continue;
-        }
+
         let minX = 0,
           minY = 0,
           maxX = 0,
@@ -1435,53 +1148,7 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         const sh = retainedDrawings[i];
         if (sh.properties?.hidden) continue;
         if (sh.type === 'image') continue;
-        ctx.save();
-        ctx.strokeStyle = sh.color;
-        ctx.lineWidth = sh.size; // in world space
-        ctx.globalAlpha = sh.alpha ?? 1;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.fillStyle = sh.color;
-        applyObjectRotation(ctx, sh);
-        ctx.beginPath();
-        if (sh.type === 'stroke' && sh.points && sh.points.length > 1) {
-          for (let pointIndex = 1; pointIndex < sh.points.length; pointIndex++) {
-            const previous = sh.points[pointIndex - 1];
-            const point = sh.points[pointIndex];
-            ctx.beginPath();
-            ctx.moveTo(previous.x, previous.y);
-            ctx.lineTo(point.x, point.y);
-            ctx.lineWidth = point.width ?? sh.size;
-            ctx.stroke();
-          }
-        } else if (sh.type === 'line') {
-          ctx.moveTo(sh.x, sh.y);
-          ctx.lineTo(sh.x + sh.width, sh.y + sh.height);
-          ctx.stroke();
-        } else if (sh.type === 'rectangle') {
-          ctx.rect(sh.x, sh.y, sh.width, sh.height);
-          if (sh.filled) ctx.fill();
-          ctx.stroke();
-        } else if (sh.type === 'ellipse') {
-          const cx = sh.x + sh.width / 2;
-          const cy = sh.y + sh.height / 2;
-          const rx = sh.width / 2;
-          const ry = sh.height / 2;
-          ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-          if (sh.filled) ctx.fill();
-          ctx.stroke();
-        } else if (sh.type === 'text' && sh.text) {
-          ctx.fillStyle = sh.color;
-          const fontSize = sh.fontSize || 24;
-          ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
-          ctx.textBaseline = 'top';
-          const lines = sh.text.split('\n');
-          const lineHeight = fontSize * 1.4;
-          for (let i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[i], sh.x, sh.y + i * lineHeight);
-          }
-        }
-        ctx.restore();
+        drawWorkerRendererObject(ctx, sh, sh.color);
       }
       snap
         .convertToBlob({ type: 'image/png' })
