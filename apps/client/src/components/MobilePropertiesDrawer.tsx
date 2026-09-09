@@ -81,10 +81,6 @@ export function MobilePropertiesDrawer({
     projectTitle,
     setProjectTitle,
     saveStatus,
-    inputMode,
-    setInputMode,
-    fingerAction,
-    setFingerAction,
   } = useDrawingStore();
   const { theme, toggleTheme } = useTheme();
 
@@ -371,51 +367,6 @@ export function MobilePropertiesDrawer({
                 </span>
                 <span className="text-xs text-slate-500 capitalize">{theme}</span>
               </Button>
-
-              <div className="space-y-3 rounded-lg border border-stone-200 p-3 dark:border-white/[0.08]">
-                <div>
-                  <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Input
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                    Choose how pen, mouse, and finger input reaches the canvas.
-                  </p>
-                </div>
-                <label className="block space-y-2 text-sm text-slate-700 dark:text-slate-200">
-                  <span>Drawing input</span>
-                  <select
-                    value={inputMode}
-                    onChange={(event) => {
-                      // SAFETY: The select options below are the complete CanvasInputMode union.
-                      setInputMode(event.target.value as typeof inputMode);
-                    }}
-                    className="h-10 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-sm outline-none focus:border-amber-500 dark:border-white/[0.08] dark:bg-stone-950 dark:text-slate-200"
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="stylus-only">Stylus and mouse only</option>
-                    <option value="stylus-and-touch">Stylus, mouse, and touch</option>
-                  </select>
-                </label>
-                <div className="space-y-2">
-                  <span className="text-sm text-slate-700 dark:text-slate-200">
-                    Finger behavior
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant={fingerAction === 'pan' ? 'default' : 'secondary'}
-                      onClick={() => setFingerAction('pan')}
-                    >
-                      Pan
-                    </Button>
-                    <Button
-                      variant={fingerAction === 'ignore' ? 'default' : 'secondary'}
-                      onClick={() => setFingerAction('ignore')}
-                    >
-                      Ignore
-                    </Button>
-                  </div>
-                </div>
-              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Button variant="secondary" onClick={() => onAction && onAction('save')}>

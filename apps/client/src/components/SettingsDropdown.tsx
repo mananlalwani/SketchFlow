@@ -55,6 +55,74 @@ import { getOfflineSaveQueue } from '@/lib/offlineQueue';
 import { getEmergencyBackup } from '@/lib/emergencyBackup';
 import { useSocket } from '@/hooks/useSocket';
 
+export function InputSettingsSection({ mobile = false }: { mobile?: boolean }) {
+  const { inputMode, setInputMode, fingerAction, setFingerAction } = useDrawingStore();
+  const modeHelp = {
+    auto: 'Touch draws until a pen is observed, then fingers pan.',
+    'stylus-only': 'Only a pen or mouse draws; finger input follows the setting below.',
+    'stylus-and-touch': 'Pen, mouse, and touch can all draw on the canvas.',
+  } as const;
+
+  return (
+    <section
+      className={
+        mobile
+          ? 'rounded-xl border border-stone-200 p-3 dark:border-white/[0.08]'
+          : 'rounded-lg bg-stone-100/90 p-2 dark:bg-white/[0.035]'
+      }
+    >
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">
+        Drawing input
+      </p>
+      <label className="block space-y-1.5 text-sm text-stone-700 dark:text-stone-200">
+        <span>Input mode</span>
+        <select
+          aria-label="Drawing input mode"
+          value={inputMode}
+          onChange={(event) => {
+            // SAFETY: The select options below are the complete CanvasInputMode union.
+            setInputMode(event.target.value as typeof inputMode);
+          }}
+          className="h-10 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none focus:border-amber-500 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-200"
+        >
+          <option value="auto">Auto</option>
+          <option value="stylus-only">Stylus-only</option>
+          <option value="stylus-and-touch">Stylus-and-touch</option>
+        </select>
+      </label>
+      <p className="mt-1.5 text-xs leading-5 text-stone-500 dark:text-stone-400">
+        {modeHelp[inputMode]}
+      </p>
+      <div className="mt-3 space-y-1.5">
+        <span className="text-sm text-stone-700 dark:text-stone-200">Finger behavior</span>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant={fingerAction === 'pan' ? 'default' : 'secondary'}
+            size="sm"
+            aria-pressed={fingerAction === 'pan'}
+            onClick={() => setFingerAction('pan')}
+          >
+            Pan
+          </Button>
+          <Button
+            type="button"
+            variant={fingerAction === 'ignore' ? 'default' : 'secondary'}
+            size="sm"
+            aria-pressed={fingerAction === 'ignore'}
+            onClick={() => setFingerAction('ignore')}
+          >
+            Ignore
+          </Button>
+        </div>
+        <p className="text-xs leading-5 text-stone-500 dark:text-stone-400">
+          Pan lets fingers move the canvas. Ignore disables finger gestures.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsDropdown() {
   const { theme, setTheme } = useTheme();
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -414,6 +482,8 @@ export function SettingsDropdown() {
                 </div>
               </section>
 
+              <InputSettingsSection mobile />
+
               <section>
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">
                   Account
@@ -526,7 +596,7 @@ export function SettingsDropdown() {
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="w-64 overflow-hidden rounded-xl border-stone-200 bg-stone-50 p-1.5 shadow-xl shadow-stone-950/10 dark:border-white/[0.09] dark:bg-[#211e1b] dark:shadow-black/30"
+            className="w-80 overflow-hidden rounded-xl border-stone-200 bg-stone-50 p-1.5 shadow-xl shadow-stone-950/10 dark:border-white/[0.09] dark:bg-[#211e1b] dark:shadow-black/30"
           >
             <div className="rounded-lg bg-stone-100/90 p-1 dark:bg-white/[0.035]">
               <DropdownMenuLabel className="px-2.5 pb-1.5 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-stone-400">
@@ -557,6 +627,10 @@ export function SettingsDropdown() {
                 </DropdownMenuItem>
               </div>
             </div>
+
+            <DropdownMenuSeparator className="my-1.5 bg-stone-200 dark:bg-white/[0.08]" />
+
+            <InputSettingsSection />
 
             <DropdownMenuSeparator className="my-1.5 bg-stone-200 dark:bg-white/[0.08]" />
 
