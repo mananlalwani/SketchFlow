@@ -44,6 +44,8 @@ export type CollaborationCommitResult =
       status: 'duplicate';
       operationId: string;
       revision: number;
+      data?: JsonValue;
+      title?: string;
     }
   | {
       status: 'conflict';
@@ -51,6 +53,19 @@ export type CollaborationCommitResult =
       currentRevision: number;
     }
   | { status: 'forbidden' | 'not_found' | 'invalid'; operationId: string };
+
+export interface ProjectHistorySnapshotRecord {
+  id: string;
+  revision: number;
+  title: string;
+  createdAt: number;
+  contentHash: string;
+}
+
+export type ProjectRestoreResult =
+  | { status: 'applied'; operationId: string; revision: number; data: JsonValue; title: string }
+  | { status: 'conflict'; currentRevision: number }
+  | { status: 'forbidden' | 'not_found' | 'invalid' };
 
 const jsonPrimitiveSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
@@ -80,6 +95,74 @@ function collaborationReceiptHash(input: CollaborationCommitInput): string {
       }),
     )
     .digest('hex');
+}
+
+function projectContentHash(title: string, data: JsonValue): string {
+  return createHash('sha256').update(stableSerialize({ title, data })).digest('hex');
+}
+
+type HistorySnapshotRecord = {
+  id: string;
+  revision: number;
+  title: string;
+  contentHash: string;
+  createdAt: Date;
+  data: JsonValue;
+};
+
+/*
+ * Prisma exposes more fields on these records. This smaller shape keeps the
+ * transaction adapter tied to the fields this service reads.
+ */
+type HistorySnapshotStore = {
+  create: (args: {
+    data: { projectId: string; revision: number; title: string; data: object; contentHash: string };
+  }) => Promise<HistorySnapshotRecord>;
+  findFirst: (args: {
+    where: { projectId: string; contentHash: string };
+  }) => Promise<HistorySnapshotRecord | null>;
+  findMany: (args: {
+    where: { projectId: string };
+    orderBy: { createdAt: 'desc' };
+    take?: number;
+  }) => Promise<HistorySnapshotRecord[]>;
+  deleteMany: (args: {
+    where: { projectId: string; id: { notIn: string[] } };
+  }) => Promise<{ count: number }>;
+};
+
+type TransactionWithHistory = { projectHistorySnapshot?: HistorySnapshotStore };
+
+export const PROJECT_HISTORY_RETENTION = 20;
+const MAX_OBJECT_REBASE_ATTEMPTS = 3;
+
+async function recordHistorySnapshot(
+  tx: TransactionWithHistory,
+  projectId: string,
+  revision: number,
+  title: string,
+  data: JsonValue,
+) {
+  const snapshots = tx.projectHistorySnapshot;
+  if (!snapshots) return;
+  const contentHash = projectContentHash(title, data);
+  const existing = await snapshots.findFirst({ where: { projectId, contentHash } });
+  if (!existing) {
+    await snapshots.create({
+      // SAFETY: Prisma accepts the JSON object written by the project service.
+      data: { projectId, revision, title, data: data as object, contentHash },
+    });
+  }
+  const retained = await snapshots.findMany({
+    where: { projectId },
+    orderBy: { createdAt: 'desc' },
+    take: PROJECT_HISTORY_RETENTION,
+  });
+  if (retained.length >= PROJECT_HISTORY_RETENTION) {
+    await snapshots.deleteMany({
+      where: { projectId, id: { notIn: retained.map((snapshot) => snapshot.id) } },
+    });
+  }
 }
 
 export interface ProjectRecord {
@@ -152,8 +235,17 @@ function asCanonicalDocument(data: JsonValue): CanonicalDocument | null {
       return null;
     }
   }
+  if (Array.isArray(candidate)) {
+    const objects = z.array(jsonObjectSchema).safeParse(candidate);
+    return objects.success ? { objects: objects.data } : null;
+  }
   const document = canonicalDocumentSchema.safeParse(candidate);
   return document.success ? document.data : null;
+}
+
+function normalizeProjectData(data: JsonValue): JsonValue {
+  const document = asCanonicalDocument(data);
+  return document ?? data;
 }
 
 function applyObjectOperation(
@@ -234,13 +326,20 @@ export class ProjectService {
           },
         });
         if (existingOperation) {
-          return existingOperation.receiptHash === receiptHash
-            ? {
-                status: 'duplicate' as const,
-                operationId: input.operationId,
-                revision: existingOperation.revision,
-              }
-            : { status: 'invalid' as const, operationId: input.operationId };
+          if (existingOperation.receiptHash !== receiptHash) {
+            return { status: 'invalid' as const, operationId: input.operationId };
+          }
+          const canonical = await tx.project.findUnique({
+            where: { id: input.projectId },
+            select: { data: true, title: true },
+          });
+          return {
+            status: 'duplicate' as const,
+            operationId: input.operationId,
+            revision: existingOperation.revision,
+            data: canonical?.data,
+            title: canonical?.title,
+          };
         }
 
         const project = await tx.project.findUnique({
@@ -266,13 +365,17 @@ export class ProjectService {
 
         const data =
           input.kind === 'replace-project'
-            ? input.data
+            ? normalizeProjectData(input.data)
             : input.kind === 'batch'
               ? applyBatchOperation(project.data, input.data)
               : applyObjectOperation(project.data, input.kind, input.data);
         if (!data) return { status: 'invalid' as const, operationId: input.operationId };
 
-        const title = input.title?.trim() ?? project.title;
+        // Object operations mutate only their object payload. Carrying a stale
+        // client title through these operations would revert a concurrent title
+        // edit that was already accepted at a later revision.
+        const title =
+          input.kind === 'replace-project' ? (input.title?.trim() ?? project.title) : project.title;
         const updated = await tx.project.updateMany({
           where: { id: input.projectId, revision: project.revision },
           data: {
@@ -295,13 +398,20 @@ export class ProjectService {
             },
           });
           if (concurrentOperation) {
-            return concurrentOperation.receiptHash === receiptHash
-              ? {
-                  status: 'duplicate' as const,
-                  operationId: input.operationId,
-                  revision: concurrentOperation.revision,
-                }
-              : { status: 'invalid' as const, operationId: input.operationId };
+            if (concurrentOperation.receiptHash !== receiptHash) {
+              return { status: 'invalid' as const, operationId: input.operationId };
+            }
+            const canonical = await tx.project.findUnique({
+              where: { id: input.projectId },
+              select: { data: true, title: true },
+            });
+            return {
+              status: 'duplicate' as const,
+              operationId: input.operationId,
+              revision: concurrentOperation.revision,
+              data: canonical?.data,
+              title: canonical?.title,
+            };
           }
 
           const current = await tx.project.findUnique({ where: { id: input.projectId } });
@@ -325,6 +435,7 @@ export class ProjectService {
             receiptHash,
           },
         });
+        await recordHistorySnapshot(tx, input.projectId, revision, title, data);
 
         return {
           status: 'applied' as const,
@@ -336,7 +447,13 @@ export class ProjectService {
       });
 
     try {
-      return await commit();
+      let lastResult: CollaborationCommitResult | undefined;
+      for (let attempt = 0; attempt < MAX_OBJECT_REBASE_ATTEMPTS; attempt += 1) {
+        const result = await commit();
+        lastResult = result;
+        if (result.status !== 'conflict' || input.kind === 'replace-project') return result;
+      }
+      return lastResult!;
     } catch (error) {
       // A concurrent identical operation can race its first receipt lookup. The
       // unique receipt index makes the winner durable; resolve the loser as a
@@ -351,18 +468,117 @@ export class ProjectService {
           },
         });
         if (existingOperation) {
-          return existingOperation.receiptHash === receiptHash
-            ? {
-                status: 'duplicate',
-                operationId: input.operationId,
-                revision: existingOperation.revision,
-              }
-            : { status: 'invalid', operationId: input.operationId };
+          if (existingOperation.receiptHash !== receiptHash) {
+            return { status: 'invalid', operationId: input.operationId };
+          }
+          const canonical = await this.database.project.findUnique({
+            where: { id: input.projectId },
+            select: { data: true, title: true },
+          });
+          return {
+            status: 'duplicate',
+            operationId: input.operationId,
+            revision: existingOperation.revision,
+            data: canonical?.data,
+            title: canonical?.title,
+          };
         }
       }
       this.log.error('Failed to commit canonical collaboration operation', error);
       throw error;
     }
+  }
+
+  public async listHistory(
+    projectId: string,
+    userId: string,
+  ): Promise<ProjectHistorySnapshotRecord[] | null> {
+    try {
+      const allowed = await this.checkPermission(projectId, userId, 'view');
+      if (!allowed) return null;
+      const snapshots = await this.database.projectHistorySnapshot.findMany({
+        where: { projectId },
+        orderBy: { createdAt: 'desc' },
+        take: PROJECT_HISTORY_RETENTION,
+      });
+      return snapshots.map((snapshot) => ({
+        id: snapshot.id,
+        revision: snapshot.revision,
+        title: snapshot.title,
+        contentHash: snapshot.contentHash,
+        createdAt: snapshot.createdAt.getTime(),
+      }));
+    } catch (error) {
+      this.log.error('Failed to list project history', error);
+      throw error;
+    }
+  }
+
+  public async restoreHistory(
+    projectId: string,
+    userId: string,
+    snapshotId: string,
+    expectedRevision: number,
+  ): Promise<ProjectRestoreResult> {
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 1) {
+      return { status: 'invalid' };
+    }
+    return this.database.$transaction(async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        include: { collaborators: { select: { userId: true, role: true } } },
+      });
+      if (!project) return { status: 'not_found' as const };
+      const collaborator = project.collaborators.find((entry) => entry.userId === userId);
+      if (project.userId !== userId && collaborator?.role !== 'editor') {
+        return { status: 'forbidden' as const };
+      }
+      if (project.revision !== expectedRevision) {
+        return { status: 'conflict' as const, currentRevision: project.revision };
+      }
+      const snapshot = await tx.projectHistorySnapshot.findFirst({
+        where: { id: snapshotId, projectId },
+      });
+      if (!snapshot) return { status: 'not_found' as const };
+
+      await recordHistorySnapshot(tx, projectId, project.revision, project.title, project.data);
+      const updated = await tx.project.updateMany({
+        where: { id: projectId, revision: expectedRevision },
+        data: {
+          title: snapshot.title,
+          // SAFETY: History snapshots come from the JSON value stored for this project.
+          data: snapshot.data as object,
+          revision: { increment: 1 },
+          updatedAt: new Date(),
+        },
+      });
+      if (updated.count !== 1) {
+        const current = await tx.project.findUnique({ where: { id: projectId } });
+        return current
+          ? { status: 'conflict' as const, currentRevision: current.revision }
+          : { status: 'not_found' as const };
+      }
+      const revision = expectedRevision + 1;
+      const operationId = `history_restore_${randomBytes(16).toString('hex')}`;
+      await tx.collaborationOperation.create({
+        data: {
+          projectId,
+          operationId,
+          actorUserId: userId,
+          revision,
+          kind: PrismaCollaborationOperationKind.replaceProject,
+          receiptHash: projectContentHash(snapshot.title, snapshot.data),
+        },
+      });
+      await recordHistorySnapshot(tx, projectId, revision, snapshot.title, snapshot.data);
+      return {
+        status: 'applied' as const,
+        operationId,
+        revision,
+        data: snapshot.data,
+        title: snapshot.title,
+      };
+    });
   }
 
   // Permission checking helper
@@ -880,19 +1096,23 @@ export class ProjectService {
 
   public async create(userId: string, title: string, data: JsonValue): Promise<ProjectRecord> {
     try {
-      const project = await this.database.project.create({
-        data: {
-          userId,
-          title: title || 'Untitled',
-          // SAFETY: Callers supply the shared recursive JSON wire contract.
-          data: data as object,
-          shared: false,
-        },
-        include: {
-          collaborators: {
-            select: { userId: true, role: true },
+      const project = await this.database.$transaction(async (tx) => {
+        const created = await tx.project.create({
+          data: {
+            userId,
+            title: title || 'Untitled',
+            // SAFETY: Callers supply the shared recursive JSON wire contract.
+            data: data as object,
+            shared: false,
           },
-        },
+          include: {
+            collaborators: {
+              select: { userId: true, role: true },
+            },
+          },
+        });
+        await recordHistorySnapshot(tx, created.id, created.revision, created.title, created.data);
+        return created;
       });
 
       return {

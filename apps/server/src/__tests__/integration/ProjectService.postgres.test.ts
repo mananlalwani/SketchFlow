@@ -104,4 +104,76 @@ describe('ProjectService PostgreSQL integration', () => {
     expect(await prisma.collaborationOperation.count({ where: { projectId: project.id } })).toBe(0);
     expect(await prisma.projectCollaborator.count({ where: { projectId: project.id } })).toBe(0);
   });
+
+  it('rebases distinct offline strokes and does not duplicate a replayed operation', async () => {
+    const project = await createProject();
+    const service = new ProjectService();
+    const firstOperationId = `stroke-operation-${randomUUID()}`;
+    const secondOperationId = `stroke-operation-${randomUUID()}`;
+    const firstStroke = {
+      id: 'offline-stroke-a',
+      type: 'stroke',
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+      ],
+    };
+    const secondStroke = {
+      id: 'offline-stroke-b',
+      type: 'stroke',
+      points: [
+        { x: 20, y: 20 },
+        { x: 30, y: 30 },
+      ],
+    };
+
+    await expect(
+      service.commitCollaborationOperation({
+        projectId: project.id,
+        userId: 'infra-editor',
+        operationId: firstOperationId,
+        expectedRevision: project.revision,
+        kind: 'upsert-object',
+        data: { object: firstStroke },
+      }),
+    ).resolves.toMatchObject({ status: 'applied', revision: project.revision + 1 });
+
+    await expect(
+      service.commitCollaborationOperation({
+        projectId: project.id,
+        userId: 'infra-owner',
+        operationId: secondOperationId,
+        // The second client was offline at revision 1. Object edits rebase over
+        // the current document, so its distinct stroke must survive the first.
+        expectedRevision: project.revision,
+        kind: 'upsert-object',
+        data: { object: secondStroke },
+      }),
+    ).resolves.toMatchObject({ status: 'applied', revision: project.revision + 2 });
+
+    await expect(
+      service.commitCollaborationOperation({
+        projectId: project.id,
+        userId: 'infra-editor',
+        operationId: firstOperationId,
+        expectedRevision: project.revision,
+        kind: 'upsert-object',
+        data: { object: firstStroke },
+      }),
+    ).resolves.toMatchObject({
+      status: 'duplicate',
+      operationId: firstOperationId,
+      revision: project.revision + 1,
+    });
+
+    const persisted = await prisma.project.findUniqueOrThrow({ where: { id: project.id } });
+    expect(persisted.revision).toBe(project.revision + 2);
+    expect(persisted.data).toMatchObject({
+      objects: [
+        expect.objectContaining({ id: firstStroke.id }),
+        expect.objectContaining({ id: secondStroke.id }),
+      ],
+    });
+    expect(await prisma.collaborationOperation.count({ where: { projectId: project.id } })).toBe(2);
+  });
 });

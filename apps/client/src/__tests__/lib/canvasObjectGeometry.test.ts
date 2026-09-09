@@ -42,6 +42,33 @@ describe('canvas object geometry', () => {
     ).toEqual({ x: 6, y: 12, width: 4, height: 8 });
   });
 
+  it('uses the widest authored point width for stroke bounds', () => {
+    expect(
+      getObjectBounds({
+        id: 'pressure-stroke',
+        type: 'stroke',
+        color: '#fff',
+        size: 2,
+        points: [
+          { x: 10, y: 20, width: 2 },
+          { x: 30, y: 40, width: 12 },
+        ],
+      }),
+    ).toEqual({ x: -2, y: 8, width: 44, height: 44 });
+  });
+
+  it('uses retained pressure when an older stroke point has no authored width', () => {
+    expect(
+      getObjectBounds({
+        id: 'legacy-pressure-stroke',
+        type: 'stroke',
+        color: '#facc15',
+        size: 20,
+        points: [{ x: 10, y: 20, pressure: 0.5 }],
+      }),
+    ).toEqual({ x: -2.5, y: 7.5, width: 25, height: 25 });
+  });
+
   it('maps a world point into rotated object space', () => {
     const mapped = pointInObjectSpace(
       { x: 10, y: 5 },

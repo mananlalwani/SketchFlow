@@ -204,6 +204,82 @@ describe('ProjectService', () => {
       });
     });
 
+    it('normalizes a legacy array document before applying object operations', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue({
+        ...project,
+        data: [{ id: 'legacy-shape', type: 'rectangle' }],
+      } as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockResolvedValue({} as never);
+
+      await expect(
+        service.commitCollaborationOperation({
+          ...operation,
+          operationId: 'operation_legacy_array',
+          kind: 'upsert-object',
+          data: { object: { id: 'new-shape', type: 'ellipse' } },
+        }),
+      ).resolves.toMatchObject({
+        status: 'applied',
+        data: {
+          objects: [
+            { id: 'legacy-shape', type: 'rectangle' },
+            { id: 'new-shape', type: 'ellipse' },
+          ],
+        },
+      });
+    });
+
+    it('retries a concurrent object CAS miss against the latest canonical document', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      const rebasedProject = {
+        ...project,
+        revision: 4,
+        data: { objects: [{ id: 'peer-object', type: 'ellipse' }] },
+      };
+      vi.mocked(prisma.project.findUnique)
+        .mockResolvedValueOnce(project as never)
+        .mockResolvedValueOnce(rebasedProject as never)
+        .mockResolvedValue(rebasedProject as never);
+      vi.mocked(prisma.project.updateMany)
+        .mockResolvedValueOnce({ count: 0 } as never)
+        .mockResolvedValueOnce({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockResolvedValue({} as never);
+
+      await expect(
+        service.commitCollaborationOperation({
+          ...operation,
+          kind: 'upsert-object',
+          operationId: 'operation_rebase_1',
+          data: { object: { id: 'local-object', type: 'rectangle' } },
+        }),
+      ).resolves.toMatchObject({ status: 'applied', revision: 5 });
+      expect(prisma.project.updateMany).toHaveBeenCalledTimes(2);
+      expect(prisma.project.updateMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({ where: { id: 'proj-1', revision: 4 } }),
+      );
+    });
+
+    it('does not let an object operation carry a stale title', async () => {
+      vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.project.findUnique).mockResolvedValue(project as never);
+      vi.mocked(prisma.project.updateMany).mockResolvedValue({ count: 1 } as never);
+      vi.mocked(prisma.collaborationOperation.create).mockResolvedValue({} as never);
+
+      await service.commitCollaborationOperation({
+        ...operation,
+        kind: 'delete-object',
+        operationId: 'operation_title_1',
+        title: 'Stale client title',
+        data: { id: 'missing-object' },
+      });
+
+      expect(prisma.project.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ title: 'Board' }) }),
+      );
+    });
+
     it('persists lock and group metadata from an atomic client selection action', async () => {
       vi.mocked(prisma.collaborationOperation.findUnique).mockResolvedValue(null);
       vi.mocked(prisma.project.findUnique).mockResolvedValue({
@@ -290,6 +366,8 @@ describe('ProjectService', () => {
         status: 'duplicate',
         operationId: operation.operationId,
         revision: 4,
+        data: project.data,
+        title: project.title,
       });
       expect(prisma.project.updateMany).toHaveBeenCalledTimes(1);
     });
@@ -344,6 +422,8 @@ describe('ProjectService', () => {
         status: 'duplicate',
         operationId: operation.operationId,
         revision: 4,
+        data: project.data,
+        title: project.title,
       });
     });
   });

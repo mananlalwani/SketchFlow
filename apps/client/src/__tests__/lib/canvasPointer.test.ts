@@ -69,14 +69,32 @@ describe('canvas pointer helpers', () => {
       { clientX: 10, clientY: 10, pointerType: 'pen', pressure: 0.5 },
       { clientX: 20, clientY: 20, pointerType: 'pen', pressure: 0.5 },
     ];
-    expect(
-      getPointerSamples({
-        clientX: 0,
-        clientY: 0,
-        pointerType: 'pen',
-        pressure: 0.5,
-        getCoalescedEvents: () => samples,
-      }),
-    ).toBe(samples);
+    const result = getPointerSamples({
+      clientX: 0,
+      clientY: 0,
+      pointerType: 'pen',
+      pressure: 0.5,
+      getCoalescedEvents: () => samples,
+    });
+    expect(result).toHaveLength(3);
+    expect(result.slice(0, 2)).toEqual(samples);
+    expect(result[2]).toMatchObject({ clientX: 0, clientY: 0 });
+  });
+
+  it('includes a dispatched endpoint omitted from coalesced samples', () => {
+    const samples = [{ clientX: 10, clientY: 10, pointerType: 'pen', pressure: 0.5 }];
+    const endpoint = { clientX: 20, clientY: 20, pointerType: 'pen', pressure: 0.8 };
+
+    const result = getPointerSamples({ ...endpoint, getCoalescedEvents: () => samples });
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(samples[0]);
+    expect(result[1]).toMatchObject(endpoint);
+  });
+
+  it('does not duplicate a dispatched endpoint already in coalesced samples', () => {
+    const endpoint = { clientX: 20, clientY: 20, pointerType: 'pen', pressure: 0.8 };
+    const samples = [{ clientX: 10, clientY: 10, pointerType: 'pen', pressure: 0.5 }, endpoint];
+
+    expect(getPointerSamples({ ...endpoint, getCoalescedEvents: () => samples })).toBe(samples);
   });
 });

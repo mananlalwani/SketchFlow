@@ -2,6 +2,7 @@ import { Layers, PenLine, Square, Type } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { expandObjectIdsWithGroups } from '@/lib/canvasObjectTransform';
+import { compareCanvasObjects } from '@/lib/canvasObjectOrder';
 import { useDrawingStore } from '@/store/drawingStore';
 import { cn } from '@/lib/utils';
 
@@ -43,7 +44,7 @@ export function LayerStack({ className }: LayerStackProps) {
   const isEditable = projectRole !== 'viewer';
   const orderedObjects = objects
     .map((object, index) => ({ object, index }))
-    .sort((a, b) => (a.object.zIndex ?? a.index) - (b.object.zIndex ?? b.index))
+    .sort(compareCanvasObjects)
     .map(({ object }) => object);
 
   const setLayerOrder = (direction: -1 | 1) => {

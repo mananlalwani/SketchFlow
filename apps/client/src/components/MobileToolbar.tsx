@@ -2,45 +2,14 @@ import { useCallback, useState } from 'react';
 import { useDrawingStore, type Tool } from '@/store/drawingStore';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
-import {
-  Pen,
-  Eraser,
-  Minus,
-  Square,
-  Circle,
-  Triangle,
-  Star,
-  Type,
-  Hand,
-  MousePointer2,
-  Move,
-  ImageIcon,
-  ChevronDown,
-  SlidersHorizontal,
-  Undo2,
-  Redo2,
-} from 'lucide-react';
+import { MoreHorizontal, Pen, ChevronDown, SlidersHorizontal, Undo2, Redo2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MobilePropertiesDrawer } from './MobilePropertiesDrawer';
 import { useAuth } from '@clerk/clerk-react';
 import { useToast } from '@/hooks/use-toast';
 import { ProjectWriteResetError } from '@/lib/projectWriteCoordinator';
 import { saveActiveProject } from '@/lib/saveActiveProject';
-
-const tools = [
-  { id: 'hand', icon: Hand, label: 'Pan' },
-  { id: 'select', icon: MousePointer2, label: 'Select' },
-  { id: 'move', icon: Move, label: 'Move' },
-  { id: 'pen', icon: Pen, label: 'Pen' },
-  { id: 'eraser', icon: Eraser, label: 'Eraser' },
-  { id: 'line', icon: Minus, label: 'Line' },
-  { id: 'rectangle', icon: Square, label: 'Rectangle' },
-  { id: 'ellipse', icon: Circle, label: 'Ellipse' },
-  { id: 'triangle', icon: Triangle, label: 'Triangle' },
-  { id: 'star', icon: Star, label: 'Star' },
-  { id: 'text', icon: Type, label: 'Text' },
-  { id: 'image', icon: ImageIcon, label: 'Image' },
-] as const satisfies readonly { id: Tool; icon: typeof Hand; label: string }[];
+import { quickTools, tools } from './mobileToolbarTools';
 
 export function MobileToolbar() {
   const {
@@ -54,6 +23,10 @@ export function MobileToolbar() {
     projectRole,
     unsavedChanges,
     newProject,
+    brushColor,
+    brushSize,
+    setBrushColor,
+    setBrushSize,
   } = useDrawingStore();
   const { isGuest } = useAuthStore();
   const { getToken } = useAuth();
@@ -116,6 +89,109 @@ export function MobileToolbar() {
 
   return (
     <>
+      {isExpanded && (
+        <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-40 hidden w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 flex-wrap justify-center gap-2 rounded-2xl border border-stone-200 bg-white/95 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95 sm:flex lg:hidden">
+          {tools.map(({ id, icon: Icon, label }) => (
+            <Button
+              key={id}
+              onClick={() => handleToolClick(id)}
+              variant={currentTool === id ? 'default' : 'ghost'}
+              size="icon"
+              className={cn(
+                'h-11 w-11 rounded-xl',
+                currentTool === id && 'bg-amber-300 text-stone-950',
+              )}
+              title={label}
+              aria-label={label}
+              aria-pressed={currentTool === id}
+            >
+              <Icon className="h-5 w-5" />
+            </Button>
+          ))}
+        </div>
+      )}
+      <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-40 hidden -translate-x-1/2 items-center gap-2 rounded-2xl border border-stone-200 bg-white/95 p-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95 sm:flex lg:hidden">
+        {quickTools.map(({ id, icon: Icon, label }) => (
+          <Button
+            key={id}
+            onClick={() => setTool(id)}
+            variant={currentTool === id ? 'default' : 'ghost'}
+            size="icon"
+            className={cn(
+              'h-11 w-11 rounded-xl',
+              currentTool === id && 'bg-amber-300 text-stone-950',
+            )}
+            aria-label={label}
+            aria-pressed={currentTool === id}
+            title={label}
+          >
+            <Icon className="h-5 w-5" />
+          </Button>
+        ))}
+        <label className="flex h-11 items-center gap-2 border-l border-stone-200 px-2 dark:border-white/10">
+          <span className="sr-only">Active color</span>
+          <input
+            type="color"
+            value={brushColor}
+            onChange={(event) => setBrushColor(event.target.value)}
+            className="h-9 w-9 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+            aria-label="Active color"
+          />
+        </label>
+        <label className="flex h-11 items-center gap-2 border-l border-stone-200 px-2 dark:border-white/10">
+          <span className="sr-only">Active size</span>
+          <input
+            type="range"
+            min={1}
+            max={100}
+            value={brushSize}
+            onChange={(event) => setBrushSize(Number(event.target.value))}
+            className="w-24 accent-amber-500"
+            aria-label={`Active size ${brushSize}px`}
+          />
+          <span className="w-9 text-right font-mono text-xs text-stone-500">{brushSize}</span>
+        </label>
+        <Button
+          onClick={() => setIsExpanded((expanded) => !expanded)}
+          size="icon"
+          variant={isExpanded ? 'default' : 'ghost'}
+          className="h-11 w-11 rounded-xl"
+          aria-label="More tools"
+          aria-expanded={isExpanded}
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={() => setIsDrawerOpen(true)}
+          size="icon"
+          variant="ghost"
+          className="h-11 w-11 rounded-xl"
+          aria-label="Open properties"
+        >
+          <SlidersHorizontal className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={undo}
+          disabled={!canUndo}
+          size="icon"
+          variant="ghost"
+          className="h-11 w-11 rounded-xl"
+          aria-label="Undo"
+        >
+          <Undo2 className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={redo}
+          disabled={!canRedo}
+          size="icon"
+          variant="ghost"
+          className="h-11 w-11 rounded-xl"
+          aria-label="Redo"
+        >
+          <Redo2 className="h-5 w-5" />
+        </Button>
+      </div>
+
       <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 items-end gap-3 sm:hidden">
         {/* Properties Toggle */}
         <Button

@@ -1,10 +1,12 @@
+import { getStrokePointWidth } from './canvasRendererCommands';
+
 export interface CullableObject {
   type: string;
   x?: number;
   y?: number;
   width?: number;
   height?: number;
-  points?: { x: number; y: number }[];
+  points?: { x: number; y: number; pressure?: number; width?: number }[];
   size?: number;
 }
 
@@ -15,7 +17,13 @@ export function objectIntersectsViewport(
   viewRight: number,
   viewBottom: number,
 ): boolean {
-  const margin = Math.max(2, object.size || 1);
+  const margin = Math.max(
+    2,
+    object.size || 1,
+    ...(object.type === 'stroke' && object.points
+      ? object.points.map((point) => getStrokePointWidth(point, object.size || 1))
+      : []),
+  );
   if (object.type === 'stroke' && object.points?.length) {
     let minX = Infinity;
     let minY = Infinity;

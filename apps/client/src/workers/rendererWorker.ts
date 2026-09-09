@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 
 import { objectIntersectsViewport } from '../lib/viewportCulling';
-import { drawWorkerRendererObject } from '../lib/canvasRendererWorkerAdapter';
+import { getMaxStrokeWidth } from '../lib/canvasRendererCommands';
+import { drawWorkerRendererObject, drawWorkerStrokePath } from '../lib/canvasRendererWorkerAdapter';
 
 export {};
 
@@ -26,6 +27,7 @@ type Stroke = {
   size: number;
   alpha?: number;
   groupId?: string;
+  pressure?: number;
 };
 
 type StrokeMessage = {
@@ -218,7 +220,8 @@ interface ConsolidatedPath {
   color: string;
   size: number;
   alpha: number;
-  points: { x: number; y: number }[];
+  points: { x: number; y: number; width?: number }[];
+  maxWidth: number;
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
 }
 const consolidatedPaths: Map<string, ConsolidatedPath> = new Map();
@@ -444,12 +447,14 @@ function drawStrokeToWorld(stroke: Stroke) {
       color: stroke.color,
       size: stroke.size,
       alpha: stroke.alpha ?? 1,
-      points: [{ x: stroke.x0, y: stroke.y0 }],
+      points: [{ x: stroke.x0, y: stroke.y0, width: stroke.size }],
+      maxWidth: stroke.size,
       bounds: { minX: stroke.x0, minY: stroke.y0, maxX: stroke.x0, maxY: stroke.y0 },
     };
     consolidatedPaths.set(groupId, path);
   }
-  path.points.push({ x: stroke.x1, y: stroke.y1 });
+  path.points.push({ x: stroke.x1, y: stroke.y1, width: stroke.size });
+  path.maxWidth = Math.max(path.maxWidth, stroke.size);
   // Update bounds
   path.bounds.minX = Math.min(path.bounds.minX, stroke.x1);
   path.bounds.minY = Math.min(path.bounds.minY, stroke.y1);
@@ -553,7 +558,7 @@ function blit() {
     objectIntersectsViewport(drawing, vx1, vy1, vx2, vy2),
   ).length;
   const visiblePathCount = Array.from(consolidatedPaths.values()).filter((path) => {
-    const margin = path.size;
+    const margin = Math.max(2, path.maxWidth);
     return !(
       path.bounds.maxX + margin < vx1 ||
       path.bounds.minX - margin > vx2 ||
@@ -608,7 +613,7 @@ function blit() {
     // Draw consolidated paths first (batched strokes for performance)
     for (const [, path] of consolidatedPaths) {
       // Viewport culling using bounds
-      const margin = path.size;
+      const margin = Math.max(2, path.maxWidth);
       if (
         path.bounds.maxX + margin < vx1 ||
         path.bounds.minX - margin > vx2 ||
@@ -622,24 +627,12 @@ function blit() {
       vectorSSCtx.save();
       if (isEraserPath) {
         vectorSSCtx.globalCompositeOperation = 'destination-out';
-        vectorSSCtx.strokeStyle = '#000000';
-      } else {
-        vectorSSCtx.strokeStyle = adjustColorForTheme(path.color);
       }
-      vectorSSCtx.lineWidth = path.size;
-      vectorSSCtx.globalAlpha = path.alpha;
-      vectorSSCtx.lineCap = 'round';
-      vectorSSCtx.lineJoin = 'round';
-
-      // Draw entire path in one go - much faster than individual segments
-      if (path.points.length > 0) {
-        vectorSSCtx.beginPath();
-        vectorSSCtx.moveTo(path.points[0].x, path.points[0].y);
-        for (let i = 1; i < path.points.length; i++) {
-          vectorSSCtx.lineTo(path.points[i].x, path.points[i].y);
-        }
-        vectorSSCtx.stroke();
-      }
+      drawWorkerStrokePath(
+        vectorSSCtx,
+        path,
+        isEraserPath ? '#000000' : adjustColorForTheme(path.color),
+      );
       vectorSSCtx.restore();
     }
 
@@ -723,7 +716,7 @@ function blit() {
   // Draw consolidated paths first (batched strokes for performance)
   for (const [, path] of consolidatedPaths) {
     // Viewport culling using bounds
-    const margin = path.size;
+    const margin = Math.max(2, path.maxWidth);
     if (
       path.bounds.maxX + margin < vx1 ||
       path.bounds.minX - margin > vx2 ||
@@ -742,23 +735,15 @@ function blit() {
       screenCtx.strokeStyle = adjustColorForTheme(path.color);
     }
     const snap = getSnappedWorldLineWidth(path.size, zoom, safeDpr);
-    screenCtx.lineWidth = snap.worldWidth;
-    screenCtx.globalAlpha = path.alpha;
-    screenCtx.lineCap = 'round';
-    screenCtx.lineJoin = 'round';
     if (snap.snapped && snap.offset !== 0) {
       screenCtx.translate(snap.offset, snap.offset);
     }
 
-    // Draw entire path in one go
-    if (path.points.length > 0) {
-      screenCtx.beginPath();
-      screenCtx.moveTo(path.points[0].x, path.points[0].y);
-      for (let i = 1; i < path.points.length; i++) {
-        screenCtx.lineTo(path.points[i].x, path.points[i].y);
-      }
-      screenCtx.stroke();
-    }
+    drawWorkerStrokePath(
+      screenCtx,
+      path,
+      isEraserPath ? '#000000' : adjustColorForTheme(path.color),
+    );
     screenCtx.restore();
   }
 
@@ -945,10 +930,11 @@ function handleMessage(evt: MessageEvent<Inbound>) {
           maxX = 0,
           maxY = 0;
         if (sh.type === 'stroke' && sh.points && sh.points.length > 0) {
-          minX = Math.min(...sh.points.map((point) => point.x)) - sh.size;
-          minY = Math.min(...sh.points.map((point) => point.y)) - sh.size;
-          maxX = Math.max(...sh.points.map((point) => point.x)) + sh.size;
-          maxY = Math.max(...sh.points.map((point) => point.y)) + sh.size;
+          const margin = getMaxStrokeWidth(sh.points, sh.size);
+          minX = Math.min(...sh.points.map((point) => point.x)) - margin;
+          minY = Math.min(...sh.points.map((point) => point.y)) - margin;
+          maxX = Math.max(...sh.points.map((point) => point.x)) + margin;
+          maxY = Math.max(...sh.points.map((point) => point.y)) + margin;
         } else if (sh.type === 'line') {
           const bb = lineBBox(sh.x, sh.y, sh.x + sh.width, sh.y + sh.height);
           minX = bb.minX;
@@ -1124,23 +1110,8 @@ function handleMessage(evt: MessageEvent<Inbound>) {
         ctx.save();
         if (isEraserPath) {
           ctx.globalCompositeOperation = 'destination-out';
-          ctx.strokeStyle = '#000000';
-        } else {
-          ctx.strokeStyle = path.color;
         }
-        ctx.lineWidth = path.size;
-        ctx.globalAlpha = path.alpha;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        if (path.points.length > 0) {
-          ctx.beginPath();
-          ctx.moveTo(path.points[0].x, path.points[0].y);
-          for (let i = 1; i < path.points.length; i++) {
-            ctx.lineTo(path.points[i].x, path.points[i].y);
-          }
-          ctx.stroke();
-        }
+        drawWorkerStrokePath(ctx, path, isEraserPath ? '#000000' : path.color);
         ctx.restore();
       }
       // Shapes (skip images - already rendered above)

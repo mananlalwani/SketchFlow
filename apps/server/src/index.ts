@@ -92,6 +92,7 @@ import type {
 } from './types/socket.js';
 
 export class SketchFlowServer {
+  private readonly roomEvictionHandlers = new Map<string, () => void>();
   private app = express();
   private server = createServer(this.app);
   private io: SocketIOServer<
@@ -440,6 +441,63 @@ export class SketchFlowServer {
       },
     );
 
+    this.app.get(
+      '/api/projects/:id/history',
+      requireAuthenticatedUser,
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const history = await this.projectService.listHistory(req.params.id, req.auth!.userId!);
+          if (!history) return res.status(404).json({ error: 'Project not found' });
+          res.json(history);
+        } catch {
+          res.status(500).json({ error: 'Failed to list project history' });
+        }
+      },
+    );
+
+    this.app.post(
+      '/api/projects/:id/history/:snapshotId/restore',
+      requireAuthenticatedUser,
+      async (req: AuthenticatedRequest, res) => {
+        try {
+          const parsed = z
+            .object({ expectedRevision: z.number().int().positive() })
+            .safeParse(req.body);
+          if (!parsed.success)
+            return res.status(400).json({ error: 'expectedRevision is required' });
+          const result = await this.projectService.restoreHistory(
+            req.params.id,
+            req.auth!.userId!,
+            req.params.snapshotId,
+            parsed.data.expectedRevision,
+          );
+          if (result.status === 'conflict') {
+            return res.status(409).json({
+              error: 'Project was updated by another editor',
+              currentRevision: result.currentRevision,
+            });
+          }
+          if (result.status === 'forbidden')
+            return res.status(403).json({ error: 'Access denied' });
+          if (result.status === 'not_found')
+            return res.status(404).json({ error: 'Project or snapshot not found' });
+          if (result.status !== 'applied')
+            return res.status(400).json({ error: 'Invalid history restore' });
+          this.io.to(req.params.id).emit('collaboration:applied', {
+            projectId: req.params.id,
+            operationId: result.operationId,
+            revision: result.revision,
+            kind: 'replace-project',
+            data: result.data,
+            title: result.title,
+          });
+          res.json({ revision: result.revision, data: result.data, title: result.title });
+        } catch {
+          res.status(500).json({ error: 'Failed to restore project history' });
+        }
+      },
+    );
+
     this.app.delete(
       '/api/projects/:id',
       requireAuthenticatedUser,
@@ -595,6 +653,15 @@ export class SketchFlowServer {
           if (!removed) {
             return res.status(404).json({ error: 'Project not found or unauthorized' });
           }
+          // Remove every live session from the realtime room immediately. This
+          // also works through the Redis adapter, so a revoked collaborator
+          // cannot receive ordinary or history-restore broadcasts from a stale
+          // room membership.
+          try {
+            await this.evictProjectUser(req.params.id, req.params.collaboratorUserId);
+          } catch (error) {
+            logger.error('Failed to evict revoked collaborator from project room', error);
+          }
           res.json({ success: true });
         } catch {
           res.status(500).json({ error: 'Failed to remove collaborator' });
@@ -632,7 +699,6 @@ export class SketchFlowServer {
 
     // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
-
   }
 
   private setupSocketHandlers(): void {
@@ -698,6 +764,20 @@ export class SketchFlowServer {
       // results cannot apply to a room selected after the check started.
       let roomGeneration = 0;
       const currentUserId = socket.data.userId ?? null;
+      this.roomEvictionHandlers.set(clientId, () => {
+        roomGeneration++;
+        if (!currentRoom) return;
+        socket.leave(currentRoom);
+        if (roomCursors.has(currentRoom)) {
+          roomCursors.get(currentRoom)?.delete(clientId);
+          this.io.to(currentRoom).emit('cursor:leave', clientId);
+        }
+        if (roomSelections.has(currentRoom)) {
+          roomSelections.get(currentRoom)?.delete(clientId);
+          this.io.to(currentRoom).emit('selection:leave', clientId);
+        }
+        currentRoom = null;
+      });
       const sessionExpiryTimer = socket.data.sessionExpiresAt
         ? setTimeout(
             () => socket.disconnect(true),
@@ -964,6 +1044,7 @@ export class SketchFlowServer {
 
       // Handle disconnection
       socket.on('disconnect', (reason) => {
+        this.roomEvictionHandlers.delete(clientId);
         if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
         this.connectionRegistry.remove(clientId);
 
@@ -989,6 +1070,25 @@ export class SketchFlowServer {
         logger.error(`Socket error from ${clientId}:`, error);
       });
     });
+  }
+
+  private async evictProjectUser(projectId: string, userId: string): Promise<void> {
+    const sockets = await this.io.in(projectId).fetchSockets();
+    await Promise.all(
+      sockets
+        .filter((socket) => socket.data.userId === userId)
+        .map((socket) => {
+          const localCleanup = this.roomEvictionHandlers.get(socket.id);
+          if (localCleanup) {
+            localCleanup();
+          } else {
+            // A Redis adapter may return a socket owned by another instance.
+            // Disconnecting it there runs that instance's presence cleanup.
+            socket.disconnect(true);
+          }
+          return Promise.resolve();
+        }),
+    );
   }
 
   private async getLocalIPs(): Promise<string[]> {

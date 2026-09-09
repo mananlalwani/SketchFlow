@@ -20,7 +20,7 @@ export interface RendererDrawing {
   alpha?: number;
   filled?: boolean;
   orientation?: 'up' | 'down' | 'left' | 'right';
-  points?: { x: number; y: number; width?: number }[];
+  points?: { x: number; y: number; pressure?: number; width?: number }[];
   text?: string;
   fontSize?: number;
   imageData?: string;
@@ -63,6 +63,76 @@ export interface RendererDrawingContext {
   textBaseline: CanvasTextBaseline;
 }
 
+export type RendererStrokePoint = { x: number; y: number; pressure?: number; width?: number };
+
+function finitePositive(value: number | undefined, fallback: number): number {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/** Resolves persisted point width, retaining pressure for older point data. */
+export function getStrokePointWidth(point: RendererStrokePoint, fallback: number): number {
+  if (point.width !== undefined && Number.isFinite(point.width) && point.width > 0) {
+    return point.width;
+  }
+  if (point.pressure !== undefined && Number.isFinite(point.pressure) && point.pressure > 0) {
+    return finitePositive(fallback, 1) * (0.25 + Math.min(1, point.pressure) * 0.75);
+  }
+  return finitePositive(fallback, 1);
+}
+
+/** Returns the widest authored point width, falling back to the object's base size. */
+export function getMaxStrokeWidth(
+  points: readonly RendererStrokePoint[] | undefined,
+  fallback: number,
+): number {
+  return (
+    points?.reduce(
+      (max, point) => Math.max(max, getStrokePointWidth(point, fallback)),
+      finitePositive(fallback, 1),
+    ) ?? finitePositive(fallback, 1)
+  );
+}
+
+/** Draws a stroke without flattening its per-point pressure widths. */
+export function drawVariableWidthStroke(
+  context: RendererDrawingContext,
+  points: readonly RendererStrokePoint[] | undefined,
+  fallbackSize: number,
+) {
+  if (!points?.length) return;
+  const first = points[0];
+  if (points.length === 1) {
+    const width = getStrokePointWidth(first, fallbackSize);
+    context.beginPath();
+    context.arc(first.x, first.y, width / 2, 0, Math.PI * 2);
+    context.fill();
+    return;
+  }
+
+  const firstWidth = getStrokePointWidth(first, fallbackSize);
+  const isUniform = points.every(
+    (point) => getStrokePointWidth(point, fallbackSize) === firstWidth,
+  );
+  if (isUniform) {
+    context.beginPath();
+    context.moveTo(first.x, first.y);
+    for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+    context.lineWidth = firstWidth;
+    context.stroke();
+    return;
+  }
+
+  for (let index = 1; index < points.length; index++) {
+    const from = points[index - 1];
+    const to = points[index];
+    context.beginPath();
+    context.moveTo(from.x, from.y);
+    context.lineTo(to.x, to.y);
+    context.lineWidth = getStrokePointWidth(to, fallbackSize);
+    context.stroke();
+  }
+}
+
 /** Shared retained-object drawing semantics for the main-thread adapter. */
 export function drawRendererObject(context: RendererDrawingContext, object: RendererDrawing) {
   if (object.hidden || object.properties?.hidden) return;
@@ -92,17 +162,7 @@ export function drawRendererObject(context: RendererDrawingContext, object: Rend
       context.stroke();
       break;
     case 'stroke':
-      if (object.points && object.points.length > 1) {
-        for (let i = 1; i < object.points.length; i++) {
-          const from = object.points[i - 1];
-          const to = object.points[i];
-          context.beginPath();
-          context.moveTo(from.x, from.y);
-          context.lineTo(to.x, to.y);
-          context.lineWidth = to.width ?? object.size;
-          context.stroke();
-        }
-      }
+      drawVariableWidthStroke(context, object.points, object.size);
       break;
     case 'rectangle':
       if (object.filled) context.fillRect(x, y, width, height);

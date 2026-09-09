@@ -15,7 +15,7 @@ export function Layout({ children, hideDrawingTools }: LayoutProps) {
       <TopBar hideProjectControls={hideDrawingTools} />
       <div className="relative flex flex-1 overflow-hidden">
         {!hideDrawingTools && (
-          <div className="hidden sm:block">
+          <div className="hidden lg:block">
             <Sidebar />
           </div>
         )}

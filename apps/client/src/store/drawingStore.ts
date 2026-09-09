@@ -3,11 +3,17 @@ import { devtools, persist } from 'zustand/middleware';
 import { trackToolSelection, trackObjectCreated, trackFeatureUsage } from '../lib/analytics';
 import { FEATURES } from '../config/features';
 import type { DrawingObject } from '../lib/drawingObjectSchema';
+import type { CanvasInputMode, FingerAction } from '../lib/canvasInputPolicy';
+import { generateId } from '../lib/utils';
+import type { ProjectBookmark } from '../lib/projectDocument';
+import type { CollaborationSyncStatus } from '../lib/collaborationPersistence';
 
 export type { DrawingObject } from '../lib/drawingObjectSchema';
+export type SaveStatus = 'saved' | 'failed' | CollaborationSyncStatus;
 
 export type Tool =
   | 'pen'
+  | 'highlighter'
   | 'eraser'
   | 'line'
   | 'rectangle'
@@ -43,16 +49,24 @@ export interface DrawingState {
   projectTitle: string;
   unsavedChanges: boolean;
   documentVersion: number;
-  saveStatus: 'saved' | 'syncing' | 'failed' | 'retrying' | 'conflict';
+  saveStatus: SaveStatus;
   lastSavedAt?: number;
   currentProjectId?: string;
   projectRevision?: number;
   projectRole?: 'owner' | 'editor' | 'viewer' | null;
+  bookmarks: ProjectBookmark[];
   brushSize: number;
   /** Pixel size used when creating new text objects. Kept separate from brush width. */
   textFontSize: number;
   brushColor: string;
   brushOpacity: number;
+  /** Pen settings are kept separate so switching tools never loses either profile. */
+  penSize: number;
+  penColor: string;
+  penOpacity: number;
+  highlighterSize: number;
+  highlighterColor: string;
+  highlighterOpacity: number;
   selectedObjectId?: string;
   selectedObjectIds: string[];
 
@@ -64,6 +78,8 @@ export interface DrawingState {
   triangleMode: 'custom' | 'right' | '45-45-90' | '30-60-90';
   starPoints: 5 | 6 | 8;
   autoDrawing: boolean;
+  inputMode: CanvasInputMode;
+  fingerAction: FingerAction;
   autoDrawingThresholds: {
     closureFactor: number; // 0-1 factor of diag for closure tolerance
     rectCornerMin: number; // integer corners threshold
@@ -107,6 +123,7 @@ export interface DrawingState {
     objects: DrawingObject[];
     title: string;
     revision: number;
+    bookmarks?: ProjectBookmark[];
   }) => boolean;
   hydrateProject: (input: {
     id: string;
@@ -114,6 +131,7 @@ export interface DrawingState {
     title: string;
     revision?: number;
     role: 'owner' | 'editor' | 'viewer';
+    bookmarks?: ProjectBookmark[];
   }) => void;
   replaceHistory: (objects: DrawingObject[]) => void;
   requestFullRedraw: () => void;
@@ -121,7 +139,7 @@ export interface DrawingState {
   setProjectTitle: (title: string) => void;
   markSaved: (documentVersion?: number) => void;
   markDirty: () => void;
-  setSaveStatus: (status: 'saved' | 'syncing' | 'failed' | 'retrying' | 'conflict') => void;
+  setSaveStatus: (status: SaveStatus) => void;
   newProject: () => void;
   setCurrentProject: (id: string | undefined) => void;
   setProjectRevision: (revision: number | undefined) => void;
@@ -146,6 +164,8 @@ export interface DrawingState {
   setTriangleMode: (mode: 'custom' | 'right' | '45-45-90' | '30-60-90') => void;
   setStarPoints: (points: 5 | 6 | 8) => void;
   setAutoDrawing: (enabled: boolean) => void;
+  setInputMode: (mode: CanvasInputMode) => void;
+  setFingerAction: (action: FingerAction) => void;
   setAutoDrawingThresholds: (t: Partial<DrawingState['autoDrawingThresholds']>) => void;
 
   updatePerformanceStats: (fps: number) => void;
@@ -165,7 +185,38 @@ export interface DrawingState {
   setZoom: (zoom: number) => void;
   setView: (x: number, y: number) => void;
   resetView: () => void;
+  createBookmark: (name?: string) => ProjectBookmark;
+  addBookmark: (name?: string) => ProjectBookmark;
+  renameBookmark: (id: string, name: string) => boolean;
+  updateBookmark: (id: string, name: string) => boolean;
+  deleteBookmark: (id: string) => boolean;
+  removeBookmark: (id: string) => boolean;
+  restoreBookmark: (id: string) => boolean;
+  jumpToBookmark: (id: string) => boolean;
+  setBookmarks: (bookmarks: ProjectBookmark[]) => void;
 }
+
+type DrawingStorePersistedState = Partial<{
+  customColors: string[];
+  brushSize: number;
+  textFontSize: number;
+  brushColor: string;
+  brushOpacity: number;
+  penSize: number;
+  penColor: string;
+  penOpacity: number;
+  highlighterSize: number;
+  highlighterColor: string;
+  highlighterOpacity: number;
+  currentTool: Tool;
+  eraserMode: 'partial' | 'object';
+  projectTitle: string;
+  drawingFilled: boolean;
+  inputMode: CanvasInputMode;
+  fingerAction: FingerAction;
+  autoDrawing: boolean;
+  autoDrawingThresholds: DrawingState['autoDrawingThresholds'];
+}>;
 
 const defaultColors = [
   '#ffffff',
@@ -182,7 +233,7 @@ const defaultColors = [
 
 export const useDrawingStore = create<DrawingState>()(
   devtools(
-    persist(
+    persist<DrawingState, [], [], DrawingStorePersistedState>(
       (set, get) => ({
         // Initial state
         objects: [],
@@ -194,10 +245,17 @@ export const useDrawingStore = create<DrawingState>()(
         documentVersion: 0,
         saveStatus: 'saved',
         currentProjectId: undefined,
+        bookmarks: [],
         brushSize: 4,
         textFontSize: 24,
         brushColor: '#ffffff',
         brushOpacity: 1,
+        penSize: 4,
+        penColor: '#ffffff',
+        penOpacity: 1,
+        highlighterSize: 18,
+        highlighterColor: '#facc15',
+        highlighterOpacity: 0.35,
         selectedObjectId: undefined,
         selectedObjectIds: [],
 
@@ -209,6 +267,8 @@ export const useDrawingStore = create<DrawingState>()(
         starPoints: 5,
         // Keep freehand drawing predictable until the person explicitly opts in.
         autoDrawing: false,
+        inputMode: 'auto',
+        fingerAction: 'pan',
         autoDrawingThresholds: {
           closureFactor: 0.15,
           rectCornerMin: 2,
@@ -245,7 +305,35 @@ export const useDrawingStore = create<DrawingState>()(
         setTool: (tool) => {
           const previousTool = get().currentTool;
           trackToolSelection(tool, previousTool);
-          set({ currentTool: tool });
+          set((state) => {
+            const leavingHighlighter = previousTool === 'highlighter' && tool !== 'highlighter';
+            const enteringHighlighter = previousTool !== 'highlighter' && tool === 'highlighter';
+            const penSettings = leavingHighlighter
+              ? {
+                  penSize: state.penSize,
+                  penColor: state.penColor,
+                  penOpacity: state.penOpacity,
+                }
+              : {};
+            if (enteringHighlighter) {
+              return {
+                currentTool: tool,
+                brushSize: state.highlighterSize,
+                brushColor: state.highlighterColor,
+                brushOpacity: state.highlighterOpacity,
+              };
+            }
+            if (leavingHighlighter) {
+              return {
+                ...penSettings,
+                currentTool: tool,
+                brushSize: state.penSize,
+                brushColor: state.penColor,
+                brushOpacity: state.penOpacity,
+              };
+            }
+            return { currentTool: tool };
+          });
         },
         setEraserMode: (mode) => set({ eraserMode: mode }),
         setObjects: (objects) =>
@@ -261,7 +349,7 @@ export const useDrawingStore = create<DrawingState>()(
             unsavedChanges: true,
             documentVersion: state.documentVersion + 1,
           })),
-        applyAuthoritativeProject: ({ objects, title, revision }) => {
+        applyAuthoritativeProject: ({ objects, title, revision, bookmarks }) => {
           let applied = false;
           set((state) => {
             // An incoming canonical snapshot must never replace local work that has
@@ -274,6 +362,7 @@ export const useDrawingStore = create<DrawingState>()(
               objects,
               objectCount: objects.length,
               projectTitle: title,
+              bookmarks: bookmarks ?? state.bookmarks,
               projectRevision: revision,
               unsavedChanges: false,
               documentVersion: state.documentVersion + 1,
@@ -283,12 +372,13 @@ export const useDrawingStore = create<DrawingState>()(
           });
           return applied;
         },
-        hydrateProject: ({ id, objects, title, revision, role }) =>
+        hydrateProject: ({ id, objects, title, revision, role, bookmarks }) =>
           set((state) => ({
             currentProjectId: id,
             projectTitle: title,
             projectRevision: revision,
             projectRole: role,
+            bookmarks: bookmarks ?? [],
             objects,
             objectCount: objects.length,
             selectedObjectId: undefined,
@@ -334,6 +424,7 @@ export const useDrawingStore = create<DrawingState>()(
             documentVersion: state.documentVersion + 1,
             needsFullRedraw: true,
             currentProjectId: undefined,
+            bookmarks: [],
             projectRevision: undefined,
             projectRole: 'owner',
           }));
@@ -349,11 +440,28 @@ export const useDrawingStore = create<DrawingState>()(
             };
           }),
         setProjectRevision: (revision) => set({ projectRevision: revision }),
-        setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(100, size)) }),
+        setBrushSize: (size) =>
+          set((state) => {
+            const nextSize = Math.max(1, Math.min(100, size));
+            return state.currentTool === 'highlighter'
+              ? { brushSize: nextSize, highlighterSize: nextSize }
+              : { brushSize: nextSize, penSize: nextSize };
+          }),
         setTextFontSize: (size) =>
           set({ textFontSize: Math.max(12, Math.min(240, Math.round(size))) }),
-        setBrushColor: (color) => set({ brushColor: color }),
-        setBrushOpacity: (opacity) => set({ brushOpacity: Math.max(0.1, Math.min(1, opacity)) }),
+        setBrushColor: (color) =>
+          set((state) =>
+            state.currentTool === 'highlighter'
+              ? { brushColor: color, highlighterColor: color }
+              : { brushColor: color, penColor: color },
+          ),
+        setBrushOpacity: (opacity) =>
+          set((state) => {
+            const nextOpacity = Math.max(0.1, Math.min(1, opacity));
+            return state.currentTool === 'highlighter'
+              ? { brushOpacity: nextOpacity, highlighterOpacity: nextOpacity }
+              : { brushOpacity: nextOpacity, penOpacity: nextOpacity };
+          }),
         setSelectedObject: (id) => set({ selectedObjectId: id, selectedObjectIds: id ? [id] : [] }),
         setSelectedObjects: (ids) =>
           set({ selectedObjectId: ids[0], selectedObjectIds: [...new Set(ids)] }),
@@ -432,6 +540,8 @@ export const useDrawingStore = create<DrawingState>()(
         setTriangleMode: (mode) => set({ triangleMode: mode }),
         setStarPoints: (points) => set({ starPoints: points }),
         setAutoDrawing: (enabled) => set({ autoDrawing: enabled }),
+        setInputMode: (inputMode) => set({ inputMode }),
+        setFingerAction: (fingerAction) => set({ fingerAction }),
         setAutoDrawingThresholds: (t) =>
           set((s) => ({ autoDrawingThresholds: { ...s.autoDrawingThresholds, ...t } })),
 
@@ -522,9 +632,92 @@ export const useDrawingStore = create<DrawingState>()(
           const centerY = 2048 - 300;
           set({ zoom: 1, viewX: centerX, viewY: centerY });
         },
+        createBookmark: (name) => {
+          const state = get();
+          const requestedName = name?.trim().slice(0, 100);
+          const bookmark: ProjectBookmark = {
+            id: generateId(),
+            name: requestedName || `Bookmark ${state.bookmarks.length + 1}`,
+            x: state.viewX,
+            y: state.viewY,
+            zoom: state.zoom,
+          };
+          set((current) => ({
+            bookmarks: [...current.bookmarks, bookmark],
+            unsavedChanges: true,
+            documentVersion: current.documentVersion + 1,
+          }));
+          return bookmark;
+        },
+        addBookmark: (name) => get().createBookmark(name),
+        renameBookmark: (id, name) => {
+          const nextName = name.trim();
+          if (!nextName) return false;
+          let changed = false;
+          set((state) => {
+            if (!state.bookmarks.some((bookmark) => bookmark.id === id)) return state;
+            changed = true;
+            return {
+              bookmarks: state.bookmarks.map((bookmark) =>
+                bookmark.id === id ? { ...bookmark, name: nextName.slice(0, 100) } : bookmark,
+              ),
+              unsavedChanges: true,
+              documentVersion: state.documentVersion + 1,
+            };
+          });
+          return changed;
+        },
+        updateBookmark: (id, name) => get().renameBookmark(id, name),
+        deleteBookmark: (id) => {
+          let changed = false;
+          set((state) => {
+            const bookmarks = state.bookmarks.filter((bookmark) => bookmark.id !== id);
+            if (bookmarks.length === state.bookmarks.length) return state;
+            changed = true;
+            return {
+              bookmarks,
+              unsavedChanges: true,
+              documentVersion: state.documentVersion + 1,
+            };
+          });
+          return changed;
+        },
+        removeBookmark: (id) => get().deleteBookmark(id),
+        restoreBookmark: (id) => {
+          const bookmark = get().bookmarks.find((candidate) => candidate.id === id);
+          if (!bookmark) return false;
+          set({ zoom: bookmark.zoom, viewX: bookmark.x, viewY: bookmark.y });
+          return true;
+        },
+        jumpToBookmark: (id) => get().restoreBookmark(id),
+        setBookmarks: (bookmarks) =>
+          set((state) => ({
+            bookmarks,
+            unsavedChanges: true,
+            documentVersion: state.documentVersion + 1,
+          })),
       }),
       {
         name: 'drawing-store',
+        version: 2,
+        migrate: (persistedState, version) => {
+          // SAFETY: Zustand JSON storage is untyped; this value is the persisted slice
+          // produced by `partialize`, whose fields are all optional during migration.
+          const state = persistedState as DrawingStorePersistedState;
+          if (version >= 2) return state;
+
+          // SAFETY: versions before 2 only had the active brush fields; seed the
+          // new pen profile from those legacy values before highlighter support.
+          return {
+            ...state,
+            penSize: state.penSize ?? state.brushSize ?? 4,
+            penColor: state.penColor ?? state.brushColor ?? '#ffffff',
+            penOpacity: state.penOpacity ?? state.brushOpacity ?? 1,
+            highlighterSize: state.highlighterSize ?? 18,
+            highlighterColor: state.highlighterColor ?? '#facc15',
+            highlighterOpacity: state.highlighterOpacity ?? 0.35,
+          };
+        },
         partialize: (state) => {
           const base = {
             customColors: state.customColors,
@@ -532,10 +725,18 @@ export const useDrawingStore = create<DrawingState>()(
             textFontSize: state.textFontSize,
             brushColor: state.brushColor,
             brushOpacity: state.brushOpacity,
+            penSize: state.penSize,
+            penColor: state.penColor,
+            penOpacity: state.penOpacity,
+            highlighterSize: state.highlighterSize,
+            highlighterColor: state.highlighterColor,
+            highlighterOpacity: state.highlighterOpacity,
             currentTool: state.currentTool,
             eraserMode: state.eraserMode,
             projectTitle: state.projectTitle,
             drawingFilled: state.drawingFilled,
+            inputMode: state.inputMode,
+            fingerAction: state.fingerAction,
           };
 
           // Only persist autoShape settings if feature is enabled

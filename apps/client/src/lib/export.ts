@@ -1,5 +1,6 @@
 import type { DrawingObject } from '@/store/drawingStore';
 import type { jsPDF } from 'jspdf';
+import { drawVariableWidthStroke, getStrokePointWidth } from './canvasRendererCommands';
 
 const WORLD_WIDTH = 4096;
 const WORLD_HEIGHT = 4096;
@@ -217,22 +218,35 @@ export async function exportAsPDF(
   // Calculate scale to fit canvas on page with margins
   const availableWidth = pageWidth - 2 * margin;
   const availableHeight = pageHeight - 2 * margin;
-  const scale = Math.min(availableWidth / width, availableHeight / height);
-
-  // Calculate centered position
+  const widthScale = availableWidth / width;
+  const heightScale = availableHeight / height;
+  const segmentCount = getPdfExportSegmentCount(width, height, pageWidth, pageHeight, margin);
+  const fitsOnOnePage = segmentCount === 1;
+  const scale = fitsOnOnePage ? Math.min(widthScale, heightScale) : widthScale;
   const scaledWidth = width * scale;
-  const scaledHeight = height * scale;
   const offsetX = (pageWidth - scaledWidth) / 2;
-  const offsetY = (pageHeight - scaledHeight) / 2;
+  const segmentHeight = availableHeight / scale;
 
-  // Draw background
-  pdf.setFillColor(background);
-  pdf.rect(offsetX, offsetY, scaledWidth, scaledHeight, 'F');
+  // A tall imported document is split into standard PDF pages. This avoids
+  // jsPDF's 14,400 user-unit page limit while retaining the source scale and
+  // keeping each page's objects in their original z-order.
+  for (let pageIndex = 0; pageIndex < segmentCount; pageIndex++) {
+    if (pageIndex > 0) pdf.addPage();
 
-  // Render each object to PDF
-  for (const obj of objects) {
-    if (obj.hidden) continue;
-    renderObjectToPDF(pdf, obj, offsetX, offsetY, scale);
+    const segmentStart = pageIndex * segmentHeight;
+    const segmentEnd = Math.min(height, segmentStart + segmentHeight);
+    const segmentContentHeight = (segmentEnd - segmentStart) * scale;
+    const offsetY = fitsOnOnePage
+      ? (pageHeight - height * scale) / 2
+      : margin - segmentStart * scale;
+
+    pdf.setFillColor(background);
+    pdf.rect(offsetX, fitsOnOnePage ? offsetY : margin, scaledWidth, segmentContentHeight, 'F');
+
+    for (const obj of objects) {
+      if (obj.hidden || !objectIntersectsVerticalSegment(obj, segmentStart, segmentEnd)) continue;
+      renderObjectToPDF(pdf, obj, offsetX, offsetY, scale);
+    }
   }
 
   // Add metadata
@@ -246,10 +260,48 @@ export async function exportAsPDF(
   return pdf.output('blob');
 }
 
+/** Returns the number of PDF pages required for a document's vertical extent. */
+export function getPdfExportSegmentCount(
+  width: number,
+  height: number,
+  pageWidth: number,
+  pageHeight: number,
+  margin: number,
+): number {
+  const availableWidth = pageWidth - 2 * margin;
+  const availableHeight = pageHeight - 2 * margin;
+  const widthScale = availableWidth / width;
+  const heightScale = availableHeight / height;
+  if (widthScale <= heightScale + 0.001) return 1;
+  return Math.max(1, Math.ceil(height / (availableHeight / widthScale)));
+}
+
+function objectIntersectsVerticalSegment(
+  obj: DrawingObject,
+  segmentStart: number,
+  segmentEnd: number,
+): boolean {
+  const bounds = getObjectVerticalBounds(obj);
+  return bounds === null || (bounds.max >= segmentStart && bounds.min <= segmentEnd);
+}
+
+function getObjectVerticalBounds(obj: DrawingObject): { min: number; max: number } | null {
+  if (obj.points?.length) {
+    return {
+      min: Math.min(...obj.points.map((point) => point.y)),
+      max: Math.max(...obj.points.map((point) => point.y)),
+    };
+  }
+  if (obj.y === undefined) return null;
+
+  const height = obj.height ?? (obj.type === 'text' ? (obj.fontSize ?? 24) : 0);
+  return { min: obj.y, max: obj.y + Math.max(0, height) };
+}
+
 /**
  * Render a single drawing object to PDF
  */
-function renderObjectToPDF(
+export function renderObjectToPDF(
   pdf: jsPDF,
   obj: DrawingObject,
   offsetX: number,
@@ -273,6 +325,19 @@ function renderObjectToPDF(
 
   switch (obj.type) {
     case 'stroke':
+      if (obj.points?.length === 1) {
+        const point = obj.points[0];
+        const width = getStrokePointWidth(point, obj.size);
+        pdf.setLineWidth(width * scale);
+        pdf.ellipse(
+          offsetX + point.x * scale,
+          offsetY + point.y * scale,
+          (width * scale) / 2,
+          (width * scale) / 2,
+          'F',
+        );
+        break;
+      }
       if (obj.points && obj.points.length > 1) {
         const scaledPoints = obj.points.map((p) => ({
           x: offsetX + p.x * scale,
@@ -281,7 +346,7 @@ function renderObjectToPDF(
 
         // Draw as a series of line segments
         for (let i = 1; i < scaledPoints.length; i++) {
-          pdf.setLineWidth((obj.points[i].width ?? obj.size) * scale);
+          pdf.setLineWidth(getStrokePointWidth(obj.points[i], obj.size) * scale);
           pdf.line(
             scaledPoints[i - 1].x,
             scaledPoints[i - 1].y,
@@ -395,7 +460,7 @@ function renderObjectToPDF(
       break;
 
     case 'image':
-      // Images require async handling - would need special handling
+      renderImageToPDF(pdf, obj, offsetX, offsetY, scale);
       break;
   }
 
@@ -404,6 +469,54 @@ function renderObjectToPDF(
     const normalState = pdf.GState({ opacity: 1, 'stroke-opacity': 1 });
     pdf.setGState(normalState);
   }
+}
+
+/**
+ * Add an imported raster page to the PDF. This stays synchronous because
+ * jsPDF accepts data URLs directly; keeping it in the object loop preserves
+ * the canvas z-order, so later annotations are drawn above the page image.
+ */
+export function renderImageToPDF(
+  pdf: jsPDF,
+  obj: DrawingObject,
+  offsetX: number,
+  offsetY: number,
+  scale: number,
+): void {
+  if (
+    !obj.imageData ||
+    obj.x === undefined ||
+    obj.y === undefined ||
+    obj.width === undefined ||
+    obj.height === undefined
+  ) {
+    return;
+  }
+
+  const imageFormat = getPdfImageFormat(obj.imageData);
+  const rotation = obj.rotation ?? 0;
+  pdf.addImage(
+    obj.imageData,
+    imageFormat,
+    offsetX + obj.x * scale,
+    offsetY + obj.y * scale,
+    obj.width * scale,
+    obj.height * scale,
+    undefined,
+    'FAST',
+    rotation,
+  );
+}
+
+function getPdfImageFormat(imageData: string): 'PNG' | 'JPEG' | 'WEBP' {
+  const match = /^data:image\/(png|jpe?g|webp);/i.exec(imageData);
+  if (!match) {
+    throw new Error(
+      'PDF export encountered an image with an unsupported format. Re-import the PDF and try again.',
+    );
+  }
+  const subtype = match[1].toLowerCase();
+  return subtype === 'jpg' || subtype === 'jpeg' ? 'JPEG' : subtype === 'webp' ? 'WEBP' : 'PNG';
 }
 
 /**
@@ -498,7 +611,10 @@ function renderStarToPDF(
 /**
  * Render objects to a 2D canvas context
  */
-function renderObjectsToContext(ctx: CanvasRenderingContext2D, objects: DrawingObject[]): void {
+export function renderObjectsToContext(
+  ctx: CanvasRenderingContext2D,
+  objects: DrawingObject[],
+): void {
   for (const obj of objects) {
     ctx.save();
     ctx.globalAlpha = obj.alpha ?? 1;
@@ -517,14 +633,7 @@ function renderObjectsToContext(ctx: CanvasRenderingContext2D, objects: DrawingO
 
     switch (obj.type) {
       case 'stroke':
-        if (obj.points && obj.points.length > 1) {
-          ctx.beginPath();
-          ctx.moveTo(obj.points[0].x, obj.points[0].y);
-          for (let i = 1; i < obj.points.length; i++) {
-            ctx.lineTo(obj.points[i].x, obj.points[i].y);
-          }
-          ctx.stroke();
-        }
+        drawVariableWidthStroke(ctx, obj.points, obj.size);
         break;
 
       case 'line':
@@ -711,9 +820,21 @@ function objectToSVG(obj: DrawingObject): string | null {
 
   switch (obj.type) {
     case 'stroke':
+      if (obj.points?.length === 1) {
+        const point = obj.points[0];
+        const radius = getStrokePointWidth(point, obj.size) / 2;
+        return `<circle cx="${point.x}" cy="${point.y}" r="${radius}" fill="${obj.color}"${opacity}/>`;
+      }
       if (obj.points && obj.points.length > 1) {
-        const d = obj.points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-        return `<path d="${d}" stroke="${obj.color}" stroke-width="${obj.size}" fill="none" stroke-linecap="round" stroke-linejoin="round"${opacity}/>`;
+        return obj.points
+          .slice(1)
+          .map((point, index) => {
+            const from = obj.points![index];
+            const width = getStrokePointWidth(point, obj.size);
+            const d = `M${from.x},${from.y} L${point.x},${point.y}`;
+            return `<path d="${d}" stroke="${obj.color}" stroke-width="${width}" fill="none" stroke-linecap="round" stroke-linejoin="round"${opacity}/>`;
+          })
+          .join('');
       }
       break;
 

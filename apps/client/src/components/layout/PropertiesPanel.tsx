@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
 import { LayerStack } from '@/components/LayerStack';
 import { SelectionInspector } from '@/components/SelectionInspector';
+import { BookmarksPanel } from '@/components/BookmarksPanel';
 
 export function PropertiesPanel() {
   const {
@@ -26,10 +27,15 @@ export function PropertiesPanel() {
     setTriangleMode,
     starPoints,
     setStarPoints,
+    inputMode,
+    setInputMode,
+    fingerAction,
+    setFingerAction,
   } = useDrawingStore();
 
   const showBrushProps = [
     'pen',
+    'highlighter',
     'line',
     'rectangle',
     'ellipse',
@@ -51,6 +57,8 @@ export function PropertiesPanel() {
       <div className="border-b border-stone-200/90 px-5 py-4 dark:border-white/[0.08]">
         <SelectionInspector />
       </div>
+
+      <BookmarksPanel />
 
       {showBrushProps && (
         <div className="space-y-5 border-b border-stone-200/90 px-5 py-5 dark:border-white/[0.08]">
@@ -306,6 +314,49 @@ export function PropertiesPanel() {
           </div>
         </div>
       )}
+
+      <div className="space-y-4 border-b border-stone-200/90 px-5 py-5 dark:border-white/[0.08]">
+        <div>
+          <div className="text-sm font-medium text-stone-700 dark:text-stone-200">Input</div>
+          <p className="mt-1 text-xs leading-5 text-stone-500 dark:text-stone-400">
+            Choose how pen, mouse, and finger input reaches the canvas.
+          </p>
+        </div>
+        <label className="block space-y-2 text-sm text-stone-700 dark:text-stone-200">
+          <span>Drawing input</span>
+          <select
+            value={inputMode}
+            onChange={(event) => {
+              // SAFETY: The select options below are the complete CanvasInputMode union.
+              setInputMode(event.target.value as typeof inputMode);
+            }}
+            className="h-9 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none focus:border-amber-500 dark:border-white/[0.1] dark:bg-stone-950/30 dark:text-stone-200"
+          >
+            <option value="auto">Auto</option>
+            <option value="stylus-only">Stylus and mouse only</option>
+            <option value="stylus-and-touch">Stylus, mouse, and touch</option>
+          </select>
+        </label>
+        <div className="space-y-2">
+          <span className="text-sm text-stone-700 dark:text-stone-200">Finger behavior</span>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant={fingerAction === 'pan' ? 'default' : 'secondary'}
+              size="sm"
+              onClick={() => setFingerAction('pan')}
+            >
+              Pan
+            </Button>
+            <Button
+              variant={fingerAction === 'ignore' ? 'default' : 'secondary'}
+              size="sm"
+              onClick={() => setFingerAction('ignore')}
+            >
+              Ignore
+            </Button>
+          </div>
+        </div>
+      </div>
 
       <div className="min-h-[220px] space-y-3 px-5 py-5">
         <div className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">

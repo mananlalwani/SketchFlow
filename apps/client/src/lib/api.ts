@@ -23,6 +23,14 @@ export interface ProjectRecord<T extends JsonValue = JsonValue> extends ProjectL
   data: T;
 }
 
+export interface ProjectHistorySnapshot {
+  id: string;
+  revision: number;
+  title: string;
+  createdAt: number;
+  contentHash: string;
+}
+
 export interface PublicProjectRecord<T extends JsonValue = JsonValue> {
   id: string;
   title: string;
@@ -62,6 +70,13 @@ const projectListItemSchema = z.object({
 });
 
 const projectRecordSchema = projectListItemSchema.extend({ data: z.json() });
+const historySnapshotSchema = z.object({
+  id: z.string(),
+  revision: z.number().int().positive(),
+  title: z.string(),
+  createdAt: z.number(),
+  contentHash: z.string(),
+});
 const publicProjectRecordSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -112,7 +127,6 @@ const resolveApiBase = () => {
 
 const API_BASE = resolveApiBase();
 const REQUEST_TIMEOUT_MS = 15_000;
-
 
 async function getAuthHeadersWithToken(token: string | null): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -301,6 +315,34 @@ export async function updateProject(
       method: 'PUT',
       body: JSON.stringify({ title, data, expectedRevision }),
     },
+    token,
+  );
+}
+
+export async function listProjectHistory(
+  id: string,
+  token?: string | null,
+): Promise<ProjectHistorySnapshot[]> {
+  if (!token) return [];
+  return httpWithRetry(
+    `/api/projects/${id}/history`,
+    z.array(historySnapshotSchema),
+    undefined,
+    token,
+  );
+}
+
+export async function restoreProjectHistory(
+  id: string,
+  snapshotId: string,
+  expectedRevision: number,
+  token?: string | null,
+): Promise<{ revision: number; data: JsonValue; title: string }> {
+  if (!token) throw new ValidationError('Sign in to restore project history.');
+  return http(
+    `/api/projects/${id}/history/${snapshotId}/restore`,
+    z.object({ revision: z.number().int().positive(), data: z.json(), title: z.string() }),
+    { method: 'POST', body: JSON.stringify({ expectedRevision }) },
     token,
   );
 }

@@ -24,10 +24,11 @@ import { useCanvasToolReset } from '@/hooks/useCanvasToolReset';
 import { useCanvasKeyboardShortcuts } from '@/hooks/useCanvasKeyboardShortcuts';
 import {
   getAuthoritativeObjects,
+  getAuthoritativeBookmarks,
   useCanvasCollaborationAdapter,
 } from '@/hooks/useCanvasCollaborationAdapter';
 import { useCanvasImageInput } from '@/hooks/useCanvasImageInput';
-import { findCanvasObjectIdAt } from '@/lib/canvasSelection';
+import { findCanvasObjectIdAt, findCanvasObjectIdsInSelection } from '@/lib/canvasSelection';
 import {
   buildStrokePoints,
   constrainDrawingEnd,
@@ -36,12 +37,14 @@ import {
 } from '@/lib/canvasPointer';
 import {
   getObjectDragOffset,
+  canTransformObjects,
   expandObjectIdsWithGroups,
   translateObjectInCollection,
   translateObjectsBy,
 } from '@/lib/canvasObjectTransform';
 import { CanvasPresentation } from '@/lib/canvasPresentation';
 import { drawingObjectsToRendererScene } from '@/lib/canvasRendererObject';
+import { getStrokePointWidth } from '@/lib/canvasRendererCommands';
 import {
   committedStrokeSize,
   getObjectBounds,
@@ -53,11 +56,17 @@ import { useToast } from '@/hooks/use-toast';
 import { FEATURES } from '@/config/features';
 import { captureOperationalSignal } from '@/lib/sentry';
 import {
+  createFreehandStrokeObject,
+  createFreehandTapObject,
+  toRetainedStrokeData,
+} from '@/lib/freehandStroke';
+import {
   enqueueCollaborationOperation,
   getCollaborationOperations,
   markCollaborationOperationAttempt,
   removeCollaborationOperation,
 } from '@/lib/offlineQueue';
+import { CollaborationPersistence } from '@/lib/collaborationPersistence';
 import {
   calculateTriangleVertices,
   panViewportBy,
@@ -65,6 +74,18 @@ import {
   WORLD_WIDTH,
   zoomViewportAtPoint,
 } from '@/lib/canvasViewport';
+import {
+  canPointerDraw,
+  canPointerPan,
+  createPointerPolicyState,
+  interruptPointers,
+  isStylusInput,
+  isTouchInput,
+  observePointerDown,
+  releasePointer,
+  shouldSuppressTouch,
+  type PointerPolicyInput,
+} from '@/lib/canvasInputPolicy';
 
 const BG_COLORS = {
   dark: '#0a0a0a',
@@ -77,6 +98,7 @@ interface ActiveTransform {
   handle: TransformHandle;
   object: DrawingObject;
   preserveAspectRatio: boolean;
+  pointerId: number;
 }
 
 interface ActiveDrag {
@@ -132,6 +154,8 @@ export function DrawingCanvas() {
     setSelectedObjects,
     updateObject,
     projectRole,
+    inputMode,
+    fingerAction,
   } = useDrawingStore();
 
   const [dragPreviewObject, setDragPreviewObject] = useState<DrawingObject | null>(null);
@@ -193,7 +217,7 @@ export function DrawingCanvas() {
   const { canDraw } = useProjectPermissions();
   const { toast } = useToast();
   const deleteSelectedObjects = useCallback(() => {
-    if (projectRole === 'viewer' || selectedObjectIds.length < 2) return;
+    if (projectRole === 'viewer' || selectedObjectIds.length === 0) return;
     const selectedIds = new Set(selectedObjectIds);
     const lockedCount = objects.filter(
       (object) => selectedIds.has(object.id) && object.locked,
@@ -272,6 +296,22 @@ export function DrawingCanvas() {
   const dragRedrawScheduledRef = useRef(false);
   const panViewportScheduledRef = useRef(false);
   const currentPanViewRef = useRef<{ x: number; y: number } | null>(null);
+  const pointerPolicyRef = useRef(createPointerPolicyState());
+  const activeCanvasPointerRef = useRef<number | null>(null);
+  const activeCanvasPointersRef = useRef(new Map<number, string>());
+  const canvasPointerMovedRef = useRef(false);
+  const lastCanvasPointerTypeRef = useRef<string | null>(null);
+  const lastCanvasPointerPressureRef = useRef(0);
+
+  const inputPreferences = useMemo(() => ({ inputMode, fingerAction }), [inputMode, fingerAction]);
+  const pointerPolicyInput = useCallback(
+    (event: Pick<PointerEvent, 'pointerType' | 'pointerId'>, touches = 1): PointerPolicyInput => ({
+      pointerType: event.pointerType,
+      pointerId: event.pointerId,
+      touches,
+    }),
+    [],
+  );
 
   const workerRef = useRef<Worker | null>(null);
   const presentation = useMemo(
@@ -302,8 +342,31 @@ export function DrawingCanvas() {
   const strokeGroupRef = useRef<string | null>(null);
   const collaborationCommitInFlightRef = useRef(false);
   const collaborationReplayInFlightRef = useRef(false);
+  const collaborationPendingRef = useRef(false);
   const collaborationObjectsRef = useRef<DrawingObject[]>([]);
   const collaborationProjectRef = useRef<string | undefined>(undefined);
+
+  const collaborationPersistence = useMemo(
+    () =>
+      new CollaborationPersistence({
+        queue: {
+          enqueueCollaborationOperation,
+          getCollaborationOperations,
+          removeCollaborationOperation,
+          markCollaborationOperationAttempt,
+        },
+        send: (commit) =>
+          new Promise((resolve) => {
+            commitCollaboration(commit, resolve);
+          }),
+        onStatus: (status) => useDrawingStore.getState().setSaveStatus(status),
+      }),
+    [commitCollaboration],
+  );
+
+  useEffect(() => {
+    collaborationPersistence.setConnected(isConnected);
+  }, [collaborationPersistence, isConnected]);
 
   // Canvas mutations are sent as object operations. Distinct objects can be
   // committed from two devices (including two sessions of the same account)
@@ -320,7 +383,6 @@ export function DrawingCanvas() {
     }
     if (
       !canDraw ||
-      !isConnected ||
       !unsavedChanges ||
       projectRevision === undefined ||
       collaborationCommitInFlightRef.current ||
@@ -365,56 +427,68 @@ export function DrawingCanvas() {
       data: z.json().parse(operation.data),
       title: projectTitle,
     };
-    // IndexedDB is the source of truth for unsent edits: a tab close or
-    // transient socket failure cannot turn an optimistic edit into data loss.
-    void enqueueCollaborationOperation({ ...commit, createdAt: Date.now() })
-      .then(() =>
-        commitCollaboration(commit, (result) => {
-          collaborationCommitInFlightRef.current = false;
-          const state = useDrawingStore.getState();
-          if (state.currentProjectId !== projectId) return;
+    collaborationPendingRef.current = true;
+    void collaborationPersistence
+      .persist({ ...commit, createdAt: Date.now() })
+      .then((result) => {
+        collaborationCommitInFlightRef.current = false;
+        if (!result) {
+          collaborationPendingRef.current = true;
+          return;
+        }
+        const state = useDrawingStore.getState();
+        if (state.currentProjectId !== projectId) return;
 
-          if (result.status === 'applied' || result.status === 'duplicate') {
-            void removeCollaborationOperation(operationId);
-            // The server may have rebased this object operation over an edit that
-            // arrived from another device. Adopt that canonical result when this
-            // is still the exact local edit we acknowledged.
-            const canonicalObjects =
-              result.status === 'applied' ? getAuthoritativeObjects(result.data) : null;
-            if (canonicalObjects && state.documentVersion === committedDocumentVersion) {
-              state.setObjects(canonicalObjects);
-              state.setProjectRevision(result.revision);
-              state.markSaved(useDrawingStore.getState().documentVersion);
-              return;
-            }
+        if (result.status === 'applied' || result.status === 'duplicate') {
+          void collaborationPersistence
+            .getPendingOperationCount(projectId)
+            .then((count) => (collaborationPendingRef.current = count > 0));
+          // The server may have rebased this object operation over an edit that
+          // arrived from another device. Adopt that canonical result when this
+          // is still the exact local edit we acknowledged.
+          const canonicalObjects = result.data ? getAuthoritativeObjects(result.data) : null;
+          if (canonicalObjects && state.documentVersion === committedDocumentVersion) {
+            state.setObjects(canonicalObjects);
+            const canonicalBookmarks = getAuthoritativeBookmarks(result.data!);
+            if (canonicalBookmarks) state.setBookmarks(canonicalBookmarks);
+            if (result.title !== undefined) state.setProjectTitle(result.title);
             state.setProjectRevision(result.revision);
+            state.markSaved();
+            state.setSaveStatus('synced');
+            return;
+          }
+          state.setProjectRevision(result.revision);
+          if (result.status === 'applied' || result.data) {
             state.markSaved(committedDocumentVersion);
-            return;
-          }
-
-          if (result.status === 'conflict') {
-            captureOperationalSignal('collaboration_replay_conflict', { replay: false });
-            void markCollaborationOperationAttempt(operationId);
-            state.setSaveStatus('conflict');
+          } else {
             requestCanonicalHydration(projectId);
-            return;
           }
+          state.setSaveStatus('synced');
+          return;
+        }
 
-          state.setSaveStatus(result.status === 'unavailable' ? 'retrying' : 'failed');
-          captureOperationalSignal('collaboration_queue_failed', {
-            unavailable: result.status === 'unavailable',
-          });
-          void markCollaborationOperationAttempt(operationId);
-        }),
-      )
+        collaborationPendingRef.current = true;
+        if (result.status === 'conflict') {
+          captureOperationalSignal('collaboration_replay_conflict', { replay: false });
+          state.setSaveStatus('conflict');
+          requestCanonicalHydration(projectId);
+          return;
+        }
+
+        captureOperationalSignal('collaboration_queue_failed', {
+          unavailable: result.status === 'unavailable',
+        });
+      })
       .catch(() => {
         collaborationCommitInFlightRef.current = false;
+        void collaborationPersistence
+          .getPendingOperationCount(projectId)
+          .then((count) => (collaborationPendingRef.current = count > 0));
         captureOperationalSignal('collaboration_queue_failed', { durableWrite: true });
-        useDrawingStore.getState().setSaveStatus('failed');
       });
   }, [
     canDraw,
-    commitCollaboration,
+    collaborationPersistence,
     currentProjectId,
     documentVersion,
     isConnected,
@@ -440,33 +514,48 @@ export function DrawingCanvas() {
     collaborationReplayInFlightRef.current = true;
     void (async () => {
       const queued = await getCollaborationOperations(currentProjectId);
-      for (const operation of queued) {
-        if (cancelled || !isConnected) break;
-        await new Promise<void>((resolve) => {
-          commitCollaboration({ protocolVersion: 1, ...operation }, (result) => {
-            if (result.status === 'applied' || result.status === 'duplicate') {
-              void removeCollaborationOperation(operation.operationId);
-              useDrawingStore.getState().setProjectRevision(result.revision);
-            } else {
-              void markCollaborationOperationAttempt(operation.operationId);
-              if (result.status === 'conflict') {
-                captureOperationalSignal('collaboration_replay_conflict', { replay: true });
-                requestCanonicalHydration(currentProjectId);
-              }
-            }
-            resolve();
-          });
-        });
+      collaborationPendingRef.current = queued.length > 0;
+      const replayDocumentVersion = useDrawingStore.getState().documentVersion;
+      const results = await collaborationPersistence.replay(currentProjectId);
+      const latest = results.at(-1);
+      if (latest && (latest.status === 'applied' || latest.status === 'duplicate')) {
+        const state = useDrawingStore.getState();
+        const replayData = 'data' in latest ? latest.data : undefined;
+        const canonicalObjects = replayData ? getAuthoritativeObjects(replayData) : null;
+        const canonicalBookmarks = replayData ? getAuthoritativeBookmarks(replayData) : undefined;
+        if (
+          canonicalObjects &&
+          state.currentProjectId === currentProjectId &&
+          state.documentVersion === replayDocumentVersion
+        ) {
+          state.setObjects(canonicalObjects);
+          if (canonicalBookmarks) state.setBookmarks(canonicalBookmarks);
+          state.setProjectRevision(latest.revision);
+          state.markSaved(useDrawingStore.getState().documentVersion);
+          state.setSaveStatus('synced');
+        } else {
+          state.setProjectRevision(latest.revision);
+        }
       }
     })()
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) useDrawingStore.getState().setSaveStatus('retrying');
+      })
       .finally(() => {
+        void getCollaborationOperations(currentProjectId).then((remaining) => {
+          if (!cancelled) {
+            collaborationPendingRef.current = remaining.length > 0;
+            if (remaining.length === 0) requestCanonicalHydration(currentProjectId);
+          }
+        });
         collaborationReplayInFlightRef.current = false;
       });
     return () => {
       cancelled = true;
     };
-  }, [canDraw, commitCollaboration, currentProjectId, isConnected, requestCanonicalHydration]);
+  }, [canDraw, collaborationPersistence, currentProjectId, isConnected, requestCanonicalHydration]);
+
+  const hasPendingLocalOperations = useCallback(() => collaborationPendingRef.current, []);
 
   useEffect(() => {
     if (!needsFullRedraw) return;
@@ -618,6 +707,7 @@ export function DrawingCanvas() {
     currentProjectId,
     projectRevision,
     requestCanonicalHydration,
+    hasPendingLocalOperations,
     applyAuthoritativeProject,
     replaceHistory,
     requestFullRedraw,
@@ -756,7 +846,7 @@ export function DrawingCanvas() {
 
   useEffect(() => {
     if (!activeTransform) return;
-    const { object, handle, preserveAspectRatio } = activeTransform;
+    const { object, handle, preserveAspectRatio, pointerId } = activeTransform;
     if (
       object.x === undefined ||
       object.y === undefined ||
@@ -770,6 +860,7 @@ export function DrawingCanvas() {
     const objectHeight = object.height;
 
     const onMove = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
       const worldPoint = screenToWorld(event.clientX, event.clientY);
       if (handle === 'rotate') {
         const centerX = objectX + objectWidth / 2;
@@ -816,25 +907,48 @@ export function DrawingCanvas() {
         height: nextBottom - nextTop,
       });
     };
-    const onUp = () => setActiveTransform(null);
+    const onEnd = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      releasePointer(pointerPolicyRef.current, pointerPolicyInput(event));
+      setActiveTransform(null);
+    };
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp, { once: true });
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+    window.addEventListener('lostpointercapture', onEnd);
     return () => {
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      window.removeEventListener('lostpointercapture', onEnd);
     };
-  }, [activeTransform, screenToWorld, updateObject]);
+  }, [activeTransform, pointerPolicyInput, screenToWorld, updateObject]);
 
   const startTransform = (event: React.PointerEvent<SVGElement>, handle: TransformHandle) => {
     if (!selectedObject || selectedObject.locked || projectRole === 'viewer') return;
+    const input = pointerPolicyInput(event);
+    observePointerDown(pointerPolicyRef.current, input);
+    if (isTouchInput(event) && !canPointerDraw(inputPreferences, pointerPolicyRef.current, input)) {
+      releasePointer(pointerPolicyRef.current, input);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     saveHistory();
-    setActiveTransform({ handle, object: selectedObject, preserveAspectRatio: event.shiftKey });
+    setActiveTransform({
+      handle,
+      object: selectedObject,
+      preserveAspectRatio: event.shiftKey,
+      pointerId: event.pointerId,
+    });
   };
 
   const startDrawing = useCallback(
     (e: React.PointerEvent | React.MouseEvent | PointerEvent) => {
+      if ('pointerType' in e && isTouchInput(e)) {
+        const input = pointerPolicyInput(e);
+        if (!canPointerDraw(inputPreferences, pointerPolicyRef.current, input)) return;
+      }
       if (!canDraw && currentTool !== 'hand' && currentTool !== 'select') {
         toast({
           title: 'View Only',
@@ -848,6 +962,7 @@ export function DrawingCanvas() {
 
       const worldPos = screenToWorld(e.clientX, e.clientY);
       if ('pointerId' in e) {
+        activeCanvasPointerRef.current = e.pointerId;
         try {
           if (e.currentTarget instanceof Element) {
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -886,27 +1001,15 @@ export function DrawingCanvas() {
             if (!selectedObjectIds.includes(hitId) || ids.length !== selectedObjectIds.length) {
               setSelectedObjects(ids);
             }
-            if ('pointerType' in e && e.pointerType === 'touch' && 'vibrate' in navigator) {
+            if ('pointerType' in e && isTouchInput(e) && 'vibrate' in navigator) {
               navigator.vibrate(12);
             }
-            // Selection is intentionally non-destructive. It can activate
-            // resize/rotate handles, but only the Move tool starts a drag.
-            if (currentTool === 'select') {
-              setIsDrawing(true);
-              return;
-            }
-            if (obj.locked) return;
-            // Locked objects remain selected so their state is clear, but never
-            // join a transform started from an unlocked group member.
-            const movableIds = ids.filter(
-              (id) => !objects.find((candidate) => candidate.id === id)?.locked,
-            );
-            if (!movableIds.length) return;
+            if (obj.locked || !canTransformObjects(objects, ids)) return;
             const offset = getObjectDragOffset(obj, worldPos);
-            const drag = { id: hitId, ids: movableIds, offsetX: offset.x, offsetY: offset.y };
+            const drag = { id: hitId, ids, offsetX: offset.x, offsetY: offset.y };
             activeDragRef.current = drag;
             setDragPreviewObject(obj);
-            setDragPreviewObjects(objects.filter((candidate) => movableIds.includes(candidate.id)));
+            setDragPreviewObjects(objects.filter((candidate) => ids.includes(candidate.id)));
             setDraggedObject(drag);
             saveHistory();
             return;
@@ -938,21 +1041,26 @@ export function DrawingCanvas() {
           includeImages: true,
         });
         if (hitId) {
-          saveHistory();
           const removed = objects.find((o) => o.id === hitId);
+          if (!removed || removed.locked) return;
+          saveHistory();
           const remaining = objects.filter((o) => o.id !== hitId);
           removeObject(hitId);
 
-          if (removed) {
+          {
             let minX = 0,
               minY = 0,
               maxX = 0,
               maxY = 0;
             if (removed.type === 'stroke' && removed.points && removed.points.length) {
-              minX = Math.min(...removed.points.map((p) => p.x)) - removed.size;
-              minY = Math.min(...removed.points.map((p) => p.y)) - removed.size;
-              maxX = Math.max(...removed.points.map((p) => p.x)) + removed.size;
-              maxY = Math.max(...removed.points.map((p) => p.y)) + removed.size;
+              const maxStrokeWidth = removed.points.reduce(
+                (maxWidth, point) => Math.max(maxWidth, getStrokePointWidth(point, removed.size)),
+                removed.size,
+              );
+              minX = Math.min(...removed.points.map((p) => p.x)) - maxStrokeWidth;
+              minY = Math.min(...removed.points.map((p) => p.y)) - maxStrokeWidth;
+              maxX = Math.max(...removed.points.map((p) => p.x)) + maxStrokeWidth;
+              maxY = Math.max(...removed.points.map((p) => p.y)) + maxStrokeWidth;
             } else if (
               (removed.type === 'line' ||
                 removed.type === 'rectangle' ||
@@ -1002,10 +1110,14 @@ export function DrawingCanvas() {
                 ox2 = 0,
                 oy2 = 0;
               if (obj.type === 'stroke' && obj.points && obj.points.length) {
-                ox1 = Math.min(...obj.points.map((p) => p.x)) - obj.size;
-                oy1 = Math.min(...obj.points.map((p) => p.y)) - obj.size;
-                ox2 = Math.max(...obj.points.map((p) => p.x)) + obj.size;
-                oy2 = Math.max(...obj.points.map((p) => p.y)) + obj.size;
+                const maxStrokeWidth = obj.points.reduce(
+                  (maxWidth, point) => Math.max(maxWidth, getStrokePointWidth(point, obj.size)),
+                  obj.size,
+                );
+                ox1 = Math.min(...obj.points.map((p) => p.x)) - maxStrokeWidth;
+                oy1 = Math.min(...obj.points.map((p) => p.y)) - maxStrokeWidth;
+                ox2 = Math.max(...obj.points.map((p) => p.x)) + maxStrokeWidth;
+                oy2 = Math.max(...obj.points.map((p) => p.y)) + maxStrokeWidth;
               } else if (
                 (obj.type === 'line' ||
                   obj.type === 'rectangle' ||
@@ -1058,7 +1170,7 @@ export function DrawingCanvas() {
                     x1: b.x,
                     y1: b.y,
                     color: obj.color,
-                    size: obj.size,
+                    size: getStrokePointWidth(b, obj.size),
                     alpha: obj.alpha ?? 1,
                     groupId: objGroupId,
                     timestamp: Date.now(),
@@ -1070,6 +1182,23 @@ export function DrawingCanvas() {
                     data: strokes,
                   });
                 }
+              } else if (obj.type === 'stroke' && obj.points?.length === 1) {
+                presentation.send({
+                  type: 'shape',
+                  data: {
+                    id: obj.id,
+                    type: 'stroke',
+                    x: 0,
+                    y: 0,
+                    width: 0,
+                    height: 0,
+                    color: obj.color,
+                    size: getStrokePointWidth(obj.points[0], obj.size),
+                    alpha: obj.alpha ?? 1,
+                    points: obj.points,
+                    timestamp: Date.now(),
+                  },
+                });
               } else if (
                 (obj.type === 'line' ||
                   obj.type === 'rectangle' ||
@@ -1148,7 +1277,7 @@ export function DrawingCanvas() {
         return;
       }
 
-      if (currentTool === 'pen' || currentTool === 'eraser') {
+      if (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'eraser') {
         setIsDrawing(true);
         setLastPoint(worldPos);
         setCurrentStroke([]);
@@ -1235,6 +1364,8 @@ export function DrawingCanvas() {
       setDraggedObject,
       textInputPos,
       canDraw,
+      inputPreferences,
+      pointerPolicyInput,
       toast,
       setSelectedObject,
       setSelectedObjects,
@@ -1245,6 +1376,7 @@ export function DrawingCanvas() {
 
   const draw = useCallback(
     (e: React.PointerEvent | PointerEvent) => {
+      canvasPointerMovedRef.current = true;
       if (canvasRef.current) {
         const worldPos = screenToWorld(e.clientX, e.clientY);
         emitCursor(worldPos.x, worldPos.y);
@@ -1423,7 +1555,11 @@ export function DrawingCanvas() {
       if (!isDrawing) return;
       const events = getPointerSamples(e instanceof PointerEvent ? e : e.nativeEvent);
 
-      if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
+      if (
+        currentTool === 'pen' ||
+        currentTool === 'highlighter' ||
+        (currentTool === 'eraser' && eraserMode === 'partial')
+      ) {
         let lp = lastPoint;
         for (let i = 0; i < events.length; i++) {
           const ev = events[i];
@@ -1522,31 +1658,102 @@ export function DrawingCanvas() {
 
   const handleCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const pointerType = lastCanvasPointerTypeRef.current ?? 'mouse';
+      const input = { pointerType };
+      if (
+        isTouchInput(input) &&
+        !canPointerDraw(inputPreferences, pointerPolicyRef.current, input)
+      ) {
+        lastCanvasPointerTypeRef.current = null;
+        return;
+      }
+      lastCanvasPointerTypeRef.current = null;
+
+      if ((currentTool === 'select' || currentTool === 'move') && !canvasPointerMovedRef.current) {
+        const worldPos = screenToWorld(event.clientX, event.clientY);
+        const hitId = findCanvasObjectIdAt(objects, worldPos.x, worldPos.y, {
+          includeImages: true,
+        });
+        if (!hitId) {
+          if (!event.shiftKey) setSelectedObject(undefined);
+          return;
+        }
+        const object = objects.find((candidate) => candidate.id === hitId);
+        if (!object) return;
+        const groupIds = expandObjectIdsWithGroups(objects, [hitId]);
+        if (event.shiftKey) {
+          const groupIsSelected = groupIds.every((id) => selectedObjectIds.includes(id));
+          setSelectedObjects(
+            groupIsSelected
+              ? selectedObjectIds.filter((id) => !groupIds.includes(id))
+              : [...selectedObjectIds, ...groupIds],
+          );
+        } else {
+          setSelectedObjects(groupIds);
+        }
+        return;
+      }
+
+      if (currentTool === 'pen' || currentTool === 'highlighter') {
+        if (!canDraw || canvasPointerMovedRef.current) return;
+        const worldPos = screenToWorld(event.clientX, event.clientY);
+        const drawingObject = createFreehandTapObject({
+          id: generateId(),
+          x: worldPos.x,
+          y: worldPos.y,
+          baseSize: brushSize,
+          pointerType,
+          pressure: lastCanvasPointerPressureRef.current,
+          color: brushColor,
+          alpha: brushOpacity,
+        });
+        saveHistory();
+        addObject(drawingObject);
+        presentation.send({
+          type: 'shape',
+          data: {
+            id: drawingObject.id,
+            type: 'stroke',
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            color: drawingObject.color,
+            size: drawingObject.size,
+            alpha: drawingObject.alpha ?? 1,
+            points: drawingObject.points,
+            timestamp: Date.now(),
+          },
+        });
+        return;
+      }
+
       if (currentTool !== 'triangle' || triangleMode !== 'custom') return;
       startDrawing(event);
     },
-    [currentTool, startDrawing, triangleMode],
+    [
+      addObject,
+      brushColor,
+      brushOpacity,
+      brushSize,
+      canDraw,
+      currentTool,
+      objects,
+      selectedObjectIds,
+      setSelectedObject,
+      setSelectedObjects,
+      inputPreferences,
+      presentation,
+      saveHistory,
+      screenToWorld,
+      startDrawing,
+      triangleMode,
+    ],
   );
 
   const stopDrawing = useCallback(() => {
     if (selectionRect) {
-      const left = Math.min(selectionRect.startX, selectionRect.endX);
-      const right = Math.max(selectionRect.startX, selectionRect.endX);
-      const top = Math.min(selectionRect.startY, selectionRect.endY);
-      const bottom = Math.max(selectionRect.startY, selectionRect.endY);
-      const ids = objects
-        .filter((object) => {
-          if (object.hidden || object.locked) return false;
-          const bounds = getObjectBounds(object);
-          return (
-            bounds &&
-            bounds.x >= left &&
-            bounds.y >= top &&
-            bounds.x + bounds.width <= right &&
-            bounds.y + bounds.height <= bottom
-          );
-        })
-        .map((object) => object.id);
+      const ids = findCanvasObjectIdsInSelection(objects, selectionRect);
       setSelectedObjects(expandObjectIdsWithGroups(objects, ids));
       setSelectionRect(null);
       setIsDrawing(false);
@@ -1585,7 +1792,11 @@ export function DrawingCanvas() {
     if (!isDrawing) return;
     presentation.flushStrokes();
 
-    if (currentTool === 'pen' || (currentTool === 'eraser' && eraserMode === 'partial')) {
+    if (
+      currentTool === 'pen' ||
+      currentTool === 'highlighter' ||
+      (currentTool === 'eraser' && eraserMode === 'partial')
+    ) {
       if (currentStroke.length > 0) {
         if (FEATURES.AUTO_DRAWING && autoDrawing && currentTool === 'pen') {
           const pathPoints: { x: number; y: number }[] = [];
@@ -1666,28 +1877,34 @@ export function DrawingCanvas() {
               data: drawingObject,
             });
           } else {
-            const drawingObject = {
+            const drawingObject = createFreehandStrokeObject({
               id: generateId(),
-              type: 'stroke' as const,
               points: buildStrokePoints(currentStroke),
               color: brushColor,
               size: brushSize,
               alpha: brushOpacity,
-            };
+            });
             addObject(drawingObject);
             saveHistory();
+            if (strokeGroupRef.current) {
+              presentation.send({ type: 'remove-group', groupId: strokeGroupRef.current });
+            }
+            presentation.send({ type: 'shape', data: toRetainedStrokeData(drawingObject) });
           }
         } else {
-          const drawingObject = {
+          const drawingObject = createFreehandStrokeObject({
             id: generateId(),
-            type: 'stroke' as const,
             points: buildStrokePoints(currentStroke),
             color: currentTool === 'eraser' ? BG_COLORS[theme] : brushColor,
             size: committedStrokeSize(currentStroke, brushSize),
             alpha: brushOpacity,
-          };
+          });
           addObject(drawingObject);
           saveHistory();
+          if (strokeGroupRef.current) {
+            presentation.send({ type: 'remove-group', groupId: strokeGroupRef.current });
+          }
+          presentation.send({ type: 'shape', data: toRetainedStrokeData(drawingObject) });
         }
       }
     } else if (
@@ -1811,6 +2028,7 @@ export function DrawingCanvas() {
     strokeGroupRef.current = null;
     setStartPoint(null);
     setPreviewDrawing(null);
+    activeCanvasPointerRef.current = null;
   }, [
     isDrawing,
     currentStroke,
@@ -1839,6 +2057,150 @@ export function DrawingCanvas() {
     setSelectedObjects,
     objects,
   ]);
+
+  const cancelActiveGesture = useCallback(() => {
+    const groupId = strokeGroupRef.current;
+    if (groupId) {
+      presentation.flushStrokes();
+      presentation.send({ type: 'remove-group', groupId });
+    }
+    setIsDrawing(false);
+    setLastPoint(null);
+    setCurrentStroke([]);
+    setStartPoint(null);
+    setPreviewDrawing(null);
+    setSelectionRect(null);
+    setIsPanning(false);
+    setPanStart(null);
+    currentPanViewRef.current = null;
+    activeDragRef.current = null;
+    draggedObjectsRef.current = null;
+    setDraggedObject(null);
+    setDragPreviewObject(null);
+    setDragPreviewObjects(null);
+    strokeGroupRef.current = null;
+    activeCanvasPointerRef.current = null;
+    activeCanvasPointersRef.current.clear();
+    interruptPointers(pointerPolicyRef.current);
+  }, [presentation]);
+
+  const handleCanvasPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLCanvasElement>) => {
+      const input = pointerPolicyInput(event);
+      const hasActivePen = pointerPolicyRef.current.activePenPointers.size > 0;
+      const hasActiveTouch = Array.from(activeCanvasPointersRef.current.values()).includes('touch');
+      if (isStylusInput(event) && !hasActivePen && hasActiveTouch) {
+        cancelActiveGesture();
+      }
+      lastCanvasPointerTypeRef.current = event.pointerType;
+      lastCanvasPointerPressureRef.current = event.pressure;
+      canvasPointerMovedRef.current = false;
+      activeCanvasPointersRef.current.set(event.pointerId, event.pointerType);
+      observePointerDown(pointerPolicyRef.current, input);
+    },
+    [cancelActiveGesture, pointerPolicyInput],
+  );
+
+  const handleCanvasPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLCanvasElement>) => {
+      releasePointer(pointerPolicyRef.current, pointerPolicyInput(event));
+      activeCanvasPointersRef.current.delete(event.pointerId);
+      if (activeCanvasPointerRef.current === event.pointerId) {
+        activeCanvasPointerRef.current = null;
+      }
+    },
+    [pointerPolicyInput],
+  );
+
+  const handleCanvasPointerCancel = useCallback(
+    (event: React.PointerEvent<HTMLCanvasElement>) => {
+      const isActiveGesture = activeCanvasPointerRef.current === event.pointerId;
+      const wasActivePen = pointerPolicyRef.current.activePenPointers.has(event.pointerId);
+      releasePointer(pointerPolicyRef.current, pointerPolicyInput(event));
+      activeCanvasPointersRef.current.delete(event.pointerId);
+      lastCanvasPointerTypeRef.current = null;
+      const shouldCancelTouch =
+        isTouchInput(event) &&
+        pointerPolicyRef.current.activePenPointers.size === 0 &&
+        (isActiveGesture || isPanning || isDrawing || activeDragRef.current !== null);
+      const shouldCancelPen =
+        isStylusInput(event) &&
+        (isActiveGesture ||
+          (wasActivePen && pointerPolicyRef.current.activePenPointers.size === 0));
+      const shouldCancelActiveGesture =
+        shouldCancelPen ||
+        (isActiveGesture &&
+          (!isTouchInput(event) || pointerPolicyRef.current.activePenPointers.size === 0)) ||
+        shouldCancelTouch;
+      if (shouldCancelActiveGesture) cancelActiveGesture();
+    },
+    [cancelActiveGesture, isDrawing, isPanning, pointerPolicyInput],
+  );
+
+  const handleCanvasLostPointerCapture = useCallback(
+    (event: React.PointerEvent<HTMLCanvasElement>) => {
+      const isActiveGesture = activeCanvasPointerRef.current === event.pointerId;
+      const wasActivePen = pointerPolicyRef.current.activePenPointers.has(event.pointerId);
+      releasePointer(pointerPolicyRef.current, pointerPolicyInput(event));
+      activeCanvasPointersRef.current.delete(event.pointerId);
+      lastCanvasPointerTypeRef.current = null;
+      const shouldCancelPen =
+        isStylusInput(event) &&
+        (isActiveGesture ||
+          (wasActivePen && pointerPolicyRef.current.activePenPointers.size === 0));
+      const shouldCancelTouch =
+        isTouchInput(event) &&
+        pointerPolicyRef.current.activePenPointers.size === 0 &&
+        (isActiveGesture || isPanning || isDrawing || activeDragRef.current !== null);
+      const shouldCancelGesture =
+        shouldCancelPen ||
+        shouldCancelTouch ||
+        (isActiveGesture &&
+          (!isTouchInput(event) || pointerPolicyRef.current.activePenPointers.size === 0));
+      if (shouldCancelGesture) cancelActiveGesture();
+
+      // use-gesture keeps this pointer in its internal set after lost capture.
+      // Send the equivalent cancellation so a later contact can start cleanly.
+      event.currentTarget.dispatchEvent(
+        new PointerEvent('pointercancel', {
+          bubbles: true,
+          cancelable: true,
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          buttons: 0,
+          pressure: 0,
+        }),
+      );
+      event.currentTarget.dispatchEvent(
+        new PointerEvent('pointerup', {
+          bubbles: true,
+          cancelable: true,
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          buttons: 0,
+          pressure: 0,
+        }),
+      );
+    },
+    [cancelActiveGesture, isDrawing, isPanning, pointerPolicyInput],
+  );
+
+  useEffect(() => {
+    const interrupt = () => cancelActiveGesture();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') interrupt();
+    };
+    window.addEventListener('blur', interrupt);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', interrupt);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [cancelActiveGesture]);
 
   const handleZoomStep = useCallback(
     (factor: number) => {
@@ -1910,11 +2272,30 @@ export function DrawingCanvas() {
         if (currentTool === 'triangle' && triangleMode === 'custom') return;
         if (tap) return;
 
+        const nativeEvent = event instanceof PointerEvent ? event : null;
+        const pointerInput = nativeEvent
+          ? pointerPolicyInput(nativeEvent, touches)
+          : { pointerType: 'mouse', touches };
+        if (nativeEvent) {
+          if (active) observePointerDown(pointerPolicyRef.current, pointerInput);
+          else releasePointer(pointerPolicyRef.current, pointerInput);
+        }
+        const touchSuppressed =
+          nativeEvent !== null &&
+          isTouchInput(nativeEvent) &&
+          shouldSuppressTouch(inputPreferences, pointerPolicyRef.current, pointerInput);
+        const touchCanPan =
+          nativeEvent !== null &&
+          isTouchInput(nativeEvent) &&
+          canPointerPan(inputPreferences, pointerPolicyRef.current, pointerInput);
+        if (touchSuppressed && !touchCanPan) return;
+
         const isMultiTouch = touches > 1;
         const isHandMode = currentTool === 'hand' || isSpacePan;
+        const isPolicyPan = touchCanPan === true;
 
         // Pan logic
-        if (isHandMode || isMultiTouch) {
+        if (isHandMode || isMultiTouch || isPolicyPan) {
           if (!isPanning && active) {
             setIsPanning(true);
             setPanStart({ x: clientX, y: clientY, viewX, viewY });
@@ -1952,8 +2333,7 @@ export function DrawingCanvas() {
 
         // Draw logic (Single touch, not hand mode). use-gesture supplies a
         // native pointer event here; ignore other event families defensively.
-        if (!(event instanceof PointerEvent)) return;
-        const nativeEvent = event;
+        if (!nativeEvent) return;
 
         // Move deliberately does not set `isDrawing`: it is an object transform,
         // not a new canvas mark. Prefer the ref here so every subsequent pointer
@@ -1985,6 +2365,7 @@ export function DrawingCanvas() {
         }
       },
       onPinch: ({ origin: [cx, cy], offset: [s], first, memo }) => {
+        if (pointerPolicyRef.current.activePenPointers.size > 0) return memo;
         if (first) {
           const canvas = canvasRef.current;
           if (!canvas) return { initialZoom: zoom };
@@ -2107,6 +2488,10 @@ export function DrawingCanvas() {
             : 'cursor-crosshair'
         }`}
         onContextMenu={(e) => e.preventDefault()}
+        onPointerDown={handleCanvasPointerDown}
+        onPointerUp={handleCanvasPointerUp}
+        onPointerCancel={handleCanvasPointerCancel}
+        onLostPointerCapture={handleCanvasLostPointerCapture}
         onClick={handleCanvasClick}
       />
       {rendererStatus === 'failed' && (
@@ -2216,8 +2601,8 @@ export function DrawingCanvas() {
           <g
             transform={`translate(${(multiSelectionBounds.x - viewX) * zoom - 5} ${(multiSelectionBounds.y - viewY) * zoom - 28})`}
           >
-            <rect width="128" height="19" rx="4" fill="#2563eb" />
-            <text x="8" y="13" fill="white" fontSize="11" fontWeight="600">
+            <rect width="164" height="44" rx="6" fill="#2563eb" />
+            <text x="10" y="27" fill="white" fontSize="11" fontWeight="600">
               {selectedObjects.length} selected
             </text>
             {projectRole !== 'viewer' && (
@@ -2232,10 +2617,10 @@ export function DrawingCanvas() {
                 }}
               >
                 <title>Delete selected objects</title>
-                <rect x="104" width="24" height="19" rx="4" fill="#1d4ed8" />
+                <rect x="120" width="40" height="44" rx="6" fill="#1d4ed8" />
                 <text
-                  x="116"
-                  y="13"
+                  x="140"
+                  y="28"
                   fill="white"
                   fontSize="14"
                   fontWeight="600"

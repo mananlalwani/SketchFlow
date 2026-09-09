@@ -2,6 +2,7 @@ import { useDrawingStore, type Tool } from '@/store/drawingStore';
 import { Button } from '@/components/ui/button';
 import {
   Pen,
+  Highlighter,
   Eraser,
   Minus,
   Square,
@@ -23,6 +24,7 @@ const tools = [
   { id: 'select', icon: MousePointer2, label: 'Select (V)' },
   { id: 'move', icon: Move, label: 'Move' },
   { id: 'pen', icon: Pen, label: 'Pen' },
+  { id: 'highlighter', icon: Highlighter, label: 'Highlighter' },
   { id: 'eraser', icon: Eraser, label: 'Eraser' },
   { id: 'line', icon: Minus, label: 'Line' },
   { id: 'rectangle', icon: Square, label: 'Rectangle' },

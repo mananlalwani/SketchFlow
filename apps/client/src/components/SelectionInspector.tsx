@@ -13,19 +13,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { generateId } from '@/lib/utils';
-import { expandObjectIdsWithGroups } from '@/lib/canvasObjectTransform';
+import {
+  duplicateDrawingObject,
+  duplicateObjectCollection,
+  expandObjectIdsWithGroups,
+  recolorObjects,
+} from '@/lib/canvasObjectTransform';
+import { getObjectBounds } from '@/lib/canvasObjectGeometry';
 import { useDrawingStore, type DrawingObject } from '@/store/drawingStore';
-
-function duplicateObject(object: DrawingObject): DrawingObject {
-  const offset = 24;
-  return {
-    ...object,
-    id: generateId(),
-    x: object.x === undefined ? undefined : object.x + offset,
-    y: object.y === undefined ? undefined : object.y + offset,
-    points: object.points?.map((point) => ({ ...point, x: point.x + offset, y: point.y + offset })),
-  };
-}
 
 function textDimensions(text: string, fontSize: number) {
   const context = document.createElement('canvas').getContext('2d');
@@ -35,26 +30,6 @@ function textDimensions(text: string, fontSize: number) {
   return {
     width: Math.max(...lines.map((line) => context.measureText(line).width), fontSize),
     height: Math.max(1, lines.length) * fontSize * 1.4,
-  };
-}
-
-function objectBounds(object: DrawingObject) {
-  if (object.type === 'stroke' && object.points?.length) {
-    const xs = object.points.map((point) => point.x);
-    const ys = object.points.map((point) => point.y);
-    return {
-      x: Math.min(...xs) - object.size,
-      y: Math.min(...ys) - object.size,
-      width: Math.max(...xs) - Math.min(...xs) + object.size * 2,
-      height: Math.max(...ys) - Math.min(...ys) + object.size * 2,
-    };
-  }
-  if (object.x === undefined || object.y === undefined) return null;
-  return {
-    x: Math.min(object.x, object.x + (object.width ?? 0)),
-    y: Math.min(object.y, object.y + (object.height ?? 0)),
-    width: Math.abs(object.width ?? 0),
-    height: Math.abs(object.height ?? 0),
   };
 }
 
@@ -91,13 +66,13 @@ export function SelectionInspector() {
     selectedObjects.length > 0 && selectedObjects.every((candidate) => candidate.locked);
   const alignSelected = (axis: 'x' | 'y', edge: 'min' | 'max') => {
     const positioned = selectedObjects
-      .map((object) => ({ object, bounds: objectBounds(object) }))
+      .map((object) => ({ object, bounds: getObjectBounds(object) }))
       .filter(
         (
           candidate,
         ): candidate is {
           object: DrawingObject;
-          bounds: NonNullable<ReturnType<typeof objectBounds>>;
+          bounds: NonNullable<ReturnType<typeof getObjectBounds>>;
         } => candidate.bounds !== null,
       );
     if (!isEditable || hasLockedSelection || positioned.length < 2) return;
@@ -129,13 +104,13 @@ export function SelectionInspector() {
 
   const distributeSelected = (axis: 'x' | 'y') => {
     const positioned = selectedObjects
-      .map((object) => ({ object, bounds: objectBounds(object) }))
+      .map((object) => ({ object, bounds: getObjectBounds(object) }))
       .filter(
         (
           candidate,
         ): candidate is {
           object: DrawingObject;
-          bounds: NonNullable<ReturnType<typeof objectBounds>>;
+          bounds: NonNullable<ReturnType<typeof getObjectBounds>>;
         } => candidate.bounds !== null,
       )
       .sort((a, b) => a.bounds[axis] - b.bounds[axis]);
@@ -160,7 +135,7 @@ export function SelectionInspector() {
       objects.map((candidate) => {
         const position = positions.get(candidate.id);
         if (position === undefined) return candidate;
-        const bounds = objectBounds(candidate);
+        const bounds = getObjectBounds(candidate);
         if (!bounds) return candidate;
         return axis === 'x'
           ? translateObject(candidate, position - bounds.x, 0)
@@ -229,6 +204,24 @@ export function SelectionInspector() {
     requestFullRedraw();
   };
 
+  const duplicateSelected = () => {
+    if (!isEditable || hasLockedSelection || selectedObjectIds.length === 0) return;
+    const ids = expandObjectIdsWithGroups(objects, selectedObjectIds);
+    const copies = duplicateObjectCollection(objects, ids, generateId);
+    if (copies.length === 0) return;
+    saveHistory();
+    setObjects([...objects, ...copies]);
+    setSelectedObjects(copies.map((candidate) => candidate.id));
+    requestFullRedraw();
+  };
+
+  const recolorSelected = (color: string) => {
+    if (!isEditable || hasLockedSelection || selectedObjectIds.length === 0) return;
+    saveHistory();
+    setObjects(recolorObjects(objects, selectedObjectIds, color));
+    requestFullRedraw();
+  };
+
   if (isMultiSelection) {
     return (
       <section className="space-y-3">
@@ -245,6 +238,30 @@ export function SelectionInspector() {
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Button
+            className="min-h-11"
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable || hasLockedSelection}
+            onClick={duplicateSelected}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Duplicate
+          </Button>
+          <label className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-stone-950/30">
+            <span className="sr-only">Recolor selected objects</span>
+            <span>Color</span>
+            <input
+              aria-label="Recolor selected objects"
+              type="color"
+              value={selectedObjects[0]?.color ?? '#000000'}
+              disabled={!isEditable || hasLockedSelection}
+              onClick={saveHistory}
+              onChange={(event) => recolorSelected(event.target.value)}
+              className="h-9 w-10 cursor-pointer rounded border border-slate-200 bg-transparent p-0.5 disabled:cursor-not-allowed dark:border-white/10"
+            />
+          </label>
+          <Button
+            className="min-h-11"
             size="sm"
             variant="secondary"
             disabled={!isEditable || hasLockedSelection}
@@ -253,6 +270,7 @@ export function SelectionInspector() {
             Align left
           </Button>
           <Button
+            className="min-h-11"
             size="sm"
             variant="secondary"
             disabled={!isEditable || hasLockedSelection}
@@ -261,6 +279,7 @@ export function SelectionInspector() {
             Align right
           </Button>
           <Button
+            className="min-h-11"
             size="sm"
             variant="secondary"
             disabled={!isEditable || hasLockedSelection}
@@ -269,6 +288,7 @@ export function SelectionInspector() {
             Align top
           </Button>
           <Button
+            className="min-h-11"
             size="sm"
             variant="secondary"
             disabled={!isEditable || hasLockedSelection}
@@ -277,6 +297,7 @@ export function SelectionInspector() {
             Align bottom
           </Button>
           <Button
+            className="min-h-11"
             size="sm"
             variant="secondary"
             disabled={!isEditable || hasLockedSelection}
@@ -285,6 +306,7 @@ export function SelectionInspector() {
             Space across
           </Button>
           <Button
+            className="min-h-11"
             size="sm"
             variant="secondary"
             disabled={!isEditable || hasLockedSelection}
@@ -292,10 +314,17 @@ export function SelectionInspector() {
           >
             Space down
           </Button>
-          <Button size="sm" variant="secondary" disabled={!isEditable} onClick={groupSelected}>
+          <Button
+            className="min-h-11"
+            size="sm"
+            variant="secondary"
+            disabled={!isEditable}
+            onClick={groupSelected}
+          >
             Group
           </Button>
           <Button
+            className="min-h-11"
             size="sm"
             variant="secondary"
             onClick={ungroupSelected}
@@ -305,7 +334,7 @@ export function SelectionInspector() {
           </Button>
         </div>
         <Button
-          className="w-full"
+          className="min-h-11 w-full"
           size="sm"
           variant="secondary"
           disabled={!isEditable}
@@ -319,7 +348,7 @@ export function SelectionInspector() {
           {allSelectedLocked ? 'Unlock selected objects' : 'Lock selected objects'}
         </Button>
         <Button
-          className="w-full"
+          className="min-h-11 w-full"
           size="sm"
           variant="destructive"
           disabled={!isEditable || hasLockedSelection}
@@ -329,7 +358,7 @@ export function SelectionInspector() {
           Delete selected objects
         </Button>
         <Button
-          className="w-full"
+          className="min-h-11 w-full"
           variant="ghost"
           size="sm"
           onClick={() => setSelectedObject(undefined)}
@@ -391,13 +420,13 @@ export function SelectionInspector() {
 
   const duplicate = () => {
     saveHistory();
-    const copy = duplicateObject(object);
+    const copy = duplicateDrawingObject(object, generateId());
     addObject(copy);
     setSelectedObject(copy.id);
   };
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3 [&_button]:min-h-11">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700 dark:text-blue-300">
@@ -457,7 +486,7 @@ export function SelectionInspector() {
           disabled={isReadOnly}
           onClick={saveHistory}
           onChange={(event) => updateObject(object.id, { color: event.target.value })}
-          className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-transparent p-0.5 disabled:cursor-not-allowed dark:border-white/10"
+          className="h-11 w-11 cursor-pointer rounded border border-slate-200 bg-transparent p-0.5 disabled:cursor-not-allowed dark:border-white/10"
         />
       </div>
 

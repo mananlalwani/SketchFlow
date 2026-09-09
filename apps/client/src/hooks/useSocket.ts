@@ -131,10 +131,12 @@ export class SocketManager {
   emit<T extends keyof ClientToServerEvents>(
     event: T,
     ...args: Parameters<ClientToServerEvents[T]>
-  ) {
+  ): boolean {
     if (this.socket?.connected) {
       this.socket.emit(event, ...args);
+      return true;
     }
+    return false;
   }
 
   on(...args: ServerListenerArgs) {
@@ -306,7 +308,7 @@ export const useSocket = () => {
       event: T,
       ...args: Parameters<ClientToServerEvents[T]>
     ) => {
-      socketManager.emit(event, ...args);
+      return socketManager.emit(event, ...args);
     },
     [],
   );
@@ -346,7 +348,19 @@ export const useDrawingSocket = () => {
 
   const commitCollaboration = useCallback(
     (commit: CollaborationCommit, acknowledge: (result: CollaborationCommitResult) => void) => {
-      emit('collaboration:commit', commit, acknowledge);
+      let settled = false;
+      const settle = (result: CollaborationCommitResult) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        acknowledge(result);
+      };
+      const timeout = window.setTimeout(() => {
+        settle({ status: 'unavailable', operationId: commit.operationId });
+      }, 15_000);
+      if (!emit('collaboration:commit', commit, settle)) {
+        settle({ status: 'unavailable', operationId: commit.operationId });
+      }
     },
     [emit],
   );

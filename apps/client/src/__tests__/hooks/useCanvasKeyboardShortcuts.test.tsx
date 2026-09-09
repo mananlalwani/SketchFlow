@@ -73,4 +73,39 @@ describe('useCanvasKeyboardShortcuts', () => {
       dpr: 1,
     });
   });
+
+  it('deletes only the selected objects and preserves unrelated collaborators', () => {
+    useDrawingStore.setState({
+      projectRole: 'editor',
+      objects: [
+        {
+          id: 'selected-stroke',
+          type: 'stroke',
+          points: [{ x: 10, y: 10 }],
+          color: '#000',
+          size: 4,
+        },
+        {
+          id: 'remote-object',
+          type: 'rectangle',
+          x: 80,
+          y: 80,
+          width: 20,
+          height: 20,
+          color: '#f00',
+          size: 2,
+        },
+      ],
+      selectedObjectId: 'selected-stroke',
+      selectedObjectIds: ['selected-stroke'],
+    });
+    renderShortcuts();
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+
+    expect(useDrawingStore.getState().objects.map((object) => object.id)).toEqual([
+      'remote-object',
+    ]);
+    expect(useDrawingStore.getState().selectedObjectIds).toEqual([]);
+  });
 });

@@ -116,4 +116,46 @@ describe('offline save queue', () => {
     await queue.removeCollaborationOperation('operation_1234567');
     expect(await queue.getCollaborationOperations()).toEqual([]);
   });
+
+  it('keeps queued collaboration edits after reopening the queue', async () => {
+    await queue.enqueueCollaborationOperation({
+      operationId: 'operation_reopen_1',
+      projectId: 'project-1',
+      expectedRevision: 4,
+      kind: 'upsert-object',
+      data: { object: { id: 'stroke-offline' } },
+      createdAt: 10,
+    });
+
+    const reopenedQueue = createOfflineQueue(async () => storage);
+
+    await expect(reopenedQueue.getCollaborationOperations('project-1')).resolves.toEqual([
+      expect.objectContaining({
+        operationId: 'operation_reopen_1',
+        projectId: 'project-1',
+        attempts: 0,
+      }),
+    ]);
+  });
+
+  it('replaces a replayed operation by ID instead of queuing a duplicate object edit', async () => {
+    const operation = {
+      operationId: 'operation_replay_1',
+      projectId: 'project-1',
+      expectedRevision: 4,
+      kind: 'upsert-object' as const,
+      data: { object: { id: 'stroke-replayed' } },
+      createdAt: 10,
+    };
+    await queue.enqueueCollaborationOperation(operation);
+    await queue.enqueueCollaborationOperation({ ...operation, createdAt: 11 });
+
+    await expect(queue.getCollaborationOperations('project-1')).resolves.toEqual([
+      expect.objectContaining({
+        operationId: operation.operationId,
+        createdAt: 11,
+        data: operation.data,
+      }),
+    ]);
+  });
 });

@@ -3,6 +3,7 @@ import { NetworkError } from './errorHandling';
 import type { ProjectWriteCoordinator, ProjectWriteResetError } from './projectWriteCoordinator';
 import type { EmergencyBackup, EmergencyBackupSnapshot } from './emergencyBackup';
 import type { OfflineSaveOperation } from './offlineQueue';
+import { deserializeProjectDocument, type ProjectBookmark } from './projectDocument';
 
 export interface ProjectSaveSnapshot {
   projectId?: string;
@@ -133,11 +134,12 @@ export interface BackupRecoveryOptions {
   getBackup: (projectId: string) => Promise<EmergencyBackup | undefined>;
   removeBackup: (projectId: string, expected?: EmergencyBackupSnapshot) => Promise<void>;
   deserialize: (data: string) => DrawingObject[];
+  deserializeDocument?: (data: string) => ReturnType<typeof deserializeProjectDocument>;
   getCurrentState: () => {
     currentProjectId?: string;
     projectRole?: 'owner' | 'editor' | 'viewer' | null;
   };
-  restore: (objects: DrawingObject[]) => void;
+  restore: (objects: DrawingObject[], bookmarks?: ProjectBookmark[]) => void;
   onRecovered: () => void;
   now?: () => number;
 }
@@ -161,9 +163,10 @@ export async function recoverProjectBackup(options: BackupRecoveryOptions): Prom
     return current.currentProjectId === options.projectId && current.projectRole !== 'viewer';
   };
   if (!isCurrentEditableSession()) return false;
-  const objects = options.deserialize(backup.data);
+  const document = options.deserializeDocument?.(backup.data);
+  const objects = document?.objects ?? options.deserialize(backup.data);
   if (!isCurrentEditableSession()) return false;
-  options.restore(objects);
+  options.restore(objects, document?.metadata.bookmarks);
   options.onRecovered();
   return true;
 }

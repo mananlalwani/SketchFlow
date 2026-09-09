@@ -21,6 +21,8 @@ import {
 } from '@/lib/offlineQueue';
 import type { DrawingObject, DrawingState } from '@/store/drawingStore';
 import type { JsonValue } from '@sketchflow/shared';
+import type { ProjectBookmark } from '@/lib/projectDocument';
+import { deserializeProjectDocument } from '@/lib/projectDocument';
 import {
   isProjectWriteReset,
   isSaveConflict,
@@ -40,10 +42,12 @@ interface AutoSaveDrawingState {
   projectRole?: 'owner' | 'editor' | 'viewer' | null;
   documentVersion: number;
   objects: DrawingObject[];
+  bookmarks?: ProjectBookmark[];
   projectTitle: string;
   markSaved(documentVersion: number): void;
   requestFullRedraw(): void;
   setObjects(objects: DrawingObject[]): void;
+  setBookmarks?(bookmarks: ProjectBookmark[]): void;
   setProjectRevision(revision: number | undefined): void;
   setSaveStatus(status: SaveStatus): void;
 }
@@ -59,8 +63,14 @@ export interface AutoSaveRuntime {
   useAuthStore(): { isGuest: boolean };
   writeCoordinator: Pick<typeof activeProjectWriteCoordinator, 'enqueue' | 'resume'>;
   ProjectWriteResetError: typeof ProjectWriteResetError;
-  serializeProject(objects: DrawingObject[], width: number, height: number): string;
+  serializeProject(
+    objects: DrawingObject[],
+    width: number,
+    height: number,
+    metadata?: { bookmarks?: ProjectBookmark[] },
+  ): string;
   deserializeProject(data: JsonValue | string): DrawingObject[];
+  deserializeProjectDocument?: typeof deserializeProjectDocument;
   getEmergencyBackup: typeof getEmergencyBackup;
   removeEmergencyBackup: typeof removeEmergencyBackup;
   saveEmergencyBackup: typeof saveEmergencyBackup;
@@ -79,6 +89,7 @@ const defaultRuntime: AutoSaveRuntime = {
   ProjectWriteResetError,
   serializeProject,
   deserializeProject,
+  deserializeProjectDocument,
   getEmergencyBackup,
   removeEmergencyBackup,
   saveEmergencyBackup,
@@ -98,6 +109,7 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
     ProjectWriteResetError,
     serializeProject,
     deserializeProject,
+    deserializeProjectDocument: parseProjectDocument = deserializeProjectDocument,
     getEmergencyBackup,
     removeEmergencyBackup,
     saveEmergencyBackup,
@@ -136,7 +148,9 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
         const backup = {
           projectId: currentProjectId,
           title: projectTitle,
-          data: serializeProject(objects, 4096, 4096),
+          data: serializeProject(objects, 4096, 4096, {
+            bookmarks: useDrawingStore.getState().bookmarks,
+          }),
           timestamp: Date.now(),
         };
         await saveEmergencyBackup(backup);
@@ -152,6 +166,7 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
     saveEmergencyBackup,
     serializeProject,
     unsavedChanges,
+    useDrawingStore,
   ]);
 
   const performSave = useCallback(async (): Promise<boolean> => {
@@ -159,7 +174,9 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
     const savedProjectId = currentProjectId;
     const savedDocumentVersion = documentVersion;
     const savedTitle = projectTitle;
-    const payload = serializeProject(objects, 4096, 4096);
+    const payload = serializeProject(objects, 4096, 4096, {
+      bookmarks: useDrawingStore.getState().bookmarks,
+    });
     const revision = projectRevision;
     if (!isGuest && (!userId || revision === undefined)) {
       setSaveStatus('failed');
@@ -203,15 +220,21 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
         setSaveStatus('conflict');
         return false;
       }
-      setSaveStatus('failed');
       if (!isGuest && userId && revision !== undefined) {
-        await enqueueOfflineSave({
-          projectId: savedProjectId,
-          title: savedTitle,
-          data: payload,
-          revision,
-          createdAt: Date.now(),
-        });
+        try {
+          await enqueueOfflineSave({
+            projectId: savedProjectId,
+            title: savedTitle,
+            data: payload,
+            revision,
+            createdAt: Date.now(),
+          });
+          setSaveStatus('saved-locally');
+        } catch {
+          setSaveStatus('error');
+        }
+      } else {
+        setSaveStatus('error');
       }
       return false;
     }
@@ -297,10 +320,13 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
           projectId: currentProjectId,
           projectRole,
           currentTitle: projectTitle,
-          currentData: serializeProject(objects, 4096, 4096),
+          currentData: serializeProject(objects, 4096, 4096, {
+            bookmarks: useDrawingStore.getState().bookmarks,
+          }),
           getBackup: getEmergencyBackup,
           removeBackup: removeEmergencyBackup,
           deserialize: deserializeProject,
+          deserializeDocument: parseProjectDocument,
           getCurrentState: () => {
             const current = useDrawingStore.getState();
             return {
@@ -308,9 +334,12 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
               projectRole: current.projectRole,
             };
           },
-          restore: (recoveredObjects) => {
+          restore: (recoveredObjects, recoveredBookmarks) => {
             skipRecoveredBackupRef.current = true;
             useDrawingStore.getState().setObjects(recoveredObjects);
+            if (recoveredBookmarks) {
+              useDrawingStore.getState().setBookmarks?.(recoveredBookmarks);
+            }
             useDrawingStore.getState().requestFullRedraw();
           },
           onRecovered: () => {
@@ -346,6 +375,7 @@ export function AutoSaveHandler({ runtime = defaultRuntime }: { runtime?: AutoSa
     removeEmergencyBackup,
     objects,
     projectTitle,
+    parseProjectDocument,
     serializeProject,
     toast,
     useDrawingStore,

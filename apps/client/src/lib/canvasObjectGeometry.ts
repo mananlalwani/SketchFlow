@@ -1,6 +1,7 @@
 import type { StrokeData } from '@/types/socket';
 import type { DrawingObject } from '@/store/drawingStore';
 import type { TriangleMode } from './canvasViewport';
+import { getStrokePointWidth } from './canvasRendererCommands';
 
 export function isTriangleMode(value: string): value is TriangleMode {
   return value === 'right' || value === '45-45-90' || value === '30-60-90';
@@ -23,11 +24,15 @@ export function getObjectBounds(object: DrawingObject) {
   if (object.type === 'stroke' && object.points?.length) {
     const xs = object.points.map((point) => point.x);
     const ys = object.points.map((point) => point.y);
+    const maxWidth = object.points.reduce(
+      (max, point) => Math.max(max, getStrokePointWidth(point, object.size)),
+      0,
+    );
     return {
-      x: Math.min(...xs) - object.size,
-      y: Math.min(...ys) - object.size,
-      width: Math.max(...xs) - Math.min(...xs) + object.size * 2,
-      height: Math.max(...ys) - Math.min(...ys) + object.size * 2,
+      x: Math.min(...xs) - maxWidth,
+      y: Math.min(...ys) - maxWidth,
+      width: Math.max(...xs) - Math.min(...xs) + maxWidth * 2,
+      height: Math.max(...ys) - Math.min(...ys) + maxWidth * 2,
     };
   }
   if (

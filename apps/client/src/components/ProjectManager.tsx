@@ -86,7 +86,10 @@ import {
 } from '@/components/ui/drawer';
 import { useMobile } from '@/hooks/useMobile';
 import {
+  ALL_NOTES_FOLDER_ID,
   filterAndSortProjects,
+  getLastProject,
+  getRecentProjects,
   type ProjectSortDirection,
   type ProjectSortOption,
 } from '@/lib/projectList';
@@ -117,6 +120,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   });
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [lastProjectId, setLastProjectId] = useState<string | null>(() =>
+    localStorage.getItem('lastProjectId'),
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('updated');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -133,7 +139,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   }, [isMobile]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(ALL_NOTES_FOLDER_ID);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [folderRenameValue, setFolderRenameValue] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -265,22 +271,22 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   }, [isAuthenticated]);
 
   const filteredProjects = useMemo(
-    () =>
-      filterAndSortProjects(
-        projects,
-        searchQuery,
-        showFolderNavigation ? selectedFolderId : null,
-        sortBy,
-        sortDirection,
-      ),
-    [projects, searchQuery, showFolderNavigation, sortBy, sortDirection, selectedFolderId],
+    () => filterAndSortProjects(projects, searchQuery, selectedFolderId, sortBy, sortDirection),
+    [projects, searchQuery, sortBy, sortDirection, selectedFolderId],
+  );
+
+  const recentProjects = useMemo(() => getRecentProjects(projects), [projects]);
+  const lastProject = useMemo(
+    () => getLastProject(projects, lastProjectId),
+    [projects, lastProjectId],
   );
 
   const currentFolderName = useMemo(() => {
-    if (!showFolderNavigation || selectedFolderId === null) return 'Projects';
+    if (selectedFolderId === ALL_NOTES_FOLDER_ID) return 'All notes';
+    if (selectedFolderId === null) return 'Unfiled notes';
     const folder = folders.find((folder) => folder.id === selectedFolderId);
-    return folder?.name || 'Projects';
-  }, [folders, selectedFolderId, showFolderNavigation]);
+    return folder?.name || 'All notes';
+  }, [folders, selectedFolderId]);
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
@@ -313,7 +319,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   };
 
   const handleDeleteFolder = async (id: string) => {
-    if (!confirm('Delete this folder? Projects inside will be moved to "All Projects".')) return;
+    if (!confirm('Delete this folder? Notes inside will be moved to "Unfiled notes".')) return;
     try {
       const token = await getToken();
       await deleteFolder(id, token);
@@ -351,9 +357,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         }),
       );
 
-      toast({ title: folderId ? 'Moved to folder' : 'Moved to All Projects' });
+      toast({ title: folderId ? 'Moved to folder' : 'Moved to Unfiled notes' });
     } catch {
-      toast({ title: 'Failed to move project', variant: 'destructive' });
+      toast({ title: 'Failed to move note', variant: 'destructive' });
     }
   };
 
@@ -362,9 +368,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
     setShowNewProjectDialog(true);
   };
 
+  const getActiveFolderId = () =>
+    selectedFolderId && selectedFolderId !== ALL_NOTES_FOLDER_ID ? selectedFolderId : null;
+
   // Guest-friendly: Create a local project and start drawing immediately
   const handleCreateGuestProject = async () => {
-    const projectName = 'My Drawing';
+    const projectName = 'Untitled note';
     setCreating(true);
     try {
       const emptyProjectData = serializeProject([], 4096, 4096);
@@ -374,7 +383,31 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       if (onSelect) onSelect();
     } catch (e) {
       console.error('Create local project error:', e);
-      toast({ title: 'Failed to create project', variant: 'destructive' });
+      toast({ title: 'Failed to create note', variant: 'destructive' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleQuickCreate = async () => {
+    if (!userId) {
+      await handleCreateGuestProject();
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const token = await getToken();
+      const emptyProjectData = serializeProject([], 4096, 4096);
+      const newProj = await createProject('Untitled note', emptyProjectData, token);
+      const activeFolderId = getActiveFolderId();
+      if (activeFolderId) {
+        await moveProjectToFolder(newProj.id, activeFolderId, token);
+      }
+      await handleLoad(newProj.id);
+    } catch (e) {
+      console.error('Quick note creation error:', e);
+      toast({ title: 'Failed to create note', variant: 'destructive' });
     } finally {
       setCreating(false);
     }
@@ -386,7 +419,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       await handleCreateGuestProject();
       return;
     }
-    const projectName = newProjectName.trim() || 'Untitled Project';
+    const projectName = newProjectName.trim() || 'Untitled note';
     setCreating(true);
     setShowNewProjectDialog(false);
     try {
@@ -394,14 +427,15 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       const emptyProjectData = serializeProject([], 4096, 4096);
       const newProj = await createProject(projectName, emptyProjectData, token);
 
-      if (showFolderNavigation && selectedFolderId) {
-        await moveProjectToFolder(newProj.id, selectedFolderId, token);
+      const activeFolderId = getActiveFolderId();
+      if (activeFolderId) {
+        await moveProjectToFolder(newProj.id, activeFolderId, token);
       }
 
       await handleLoad(newProj.id);
     } catch (e) {
-      console.error('Create project error:', e);
-      toast({ title: 'Failed to create project', variant: 'destructive' });
+      console.error('Create note error:', e);
+      toast({ title: 'Failed to create note', variant: 'destructive' });
     } finally {
       setCreating(false);
       setNewProjectName('');
@@ -415,11 +449,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       installProjectSession(record, isGuest ? 'owner' : record.role || 'owner');
 
       localStorage.setItem('lastProjectId', record.id);
+      setLastProjectId(record.id);
 
       if (onSelect) onSelect();
     } catch (e) {
       console.error(e);
-      toast({ title: 'Failed to load project', variant: 'destructive' });
+      toast({ title: 'Failed to load note', variant: 'destructive' });
     }
   };
 
@@ -446,7 +481,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       );
       if (currentProjectId === id) setProjectRevision(updated.revision);
       setRenamingId(null);
-      toast({ title: 'Project renamed' });
+      toast({ title: 'Note renamed' });
     } catch {
       toast({ title: 'Failed to rename', variant: 'destructive' });
     }
@@ -476,7 +511,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       );
       if (currentProjectId === mobileRenameProject.id) setProjectRevision(updated.revision);
       setMobileRenameProject(null);
-      toast({ title: 'Project renamed' });
+      toast({ title: 'Note renamed' });
     } catch {
       toast({ title: 'Failed to rename', variant: 'destructive' });
     } finally {
@@ -485,13 +520,17 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
   };
 
   const handleDeleteProject = async (project: ProjectListItem) => {
-    if (!confirm('Are you sure you want to delete this project?')) return;
+    if (!confirm('Are you sure you want to delete this note?')) return;
     try {
       const token = await getToken();
       await deleteProject(project.id, token);
       setProjects((previous) => previous.filter((candidate) => candidate.id !== project.id));
+      if (lastProjectId === project.id) {
+        localStorage.removeItem('lastProjectId');
+        setLastProjectId(null);
+      }
       if (currentProjectId === project.id) useDrawingStore.getState().newProject();
-      toast({ title: 'Project deleted' });
+      toast({ title: 'Note deleted' });
     } catch {
       toast({ title: 'Failed to delete', variant: 'destructive' });
     }
@@ -527,7 +566,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
         const token = await getToken();
         await importProjectFile(file, token);
         await loadData();
-        toast({ title: 'Project imported successfully' });
+        toast({ title: 'Note imported successfully' });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Invalid file format';
         toast({ title: 'Import failed', description: message, variant: 'destructive' });
@@ -607,7 +646,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     You're in Guest Mode
                   </p>
                   <p className="text-xs text-stone-600 dark:text-stone-400">
-                    Projects are saved locally. Sign in to sync and collaborate.
+                    Notes are saved locally. Sign in to sync and collaborate.
                   </p>
                 </div>
               </div>
@@ -633,10 +672,10 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-stone-600 dark:text-stone-400">
-                    Library
+                    Notes
                   </p>
                   <p className="mt-1 text-sm font-semibold tracking-[-0.02em] text-stone-900 dark:text-stone-100">
-                    {isGuest ? 'Local projects' : 'Folders'}
+                    {isGuest ? 'Local notes' : 'Folders'}
                   </p>
                 </div>
                 {!isGuest && (
@@ -656,6 +695,22 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
             <div className="flex-1 space-y-1 overflow-y-auto p-2.5">
               <button
+                onClick={() => setSelectedFolderId(ALL_NOTES_FOLDER_ID)}
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                  selectedFolderId === ALL_NOTES_FOLDER_ID && !searchQuery
+                    ? 'bg-stone-900 text-amber-100 shadow-sm dark:bg-amber-300 dark:text-stone-950'
+                    : 'text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 hover:text-stone-950 dark:hover:bg-white/[0.06] dark:hover:text-stone-100'
+                }`}
+              >
+                <Home className="w-4 h-4" />
+                <span className="truncate flex-1">All notes</span>
+                <span className="text-xs font-medium opacity-60">{projects.length}</span>
+                {/* Spacer to align with folder dropdown buttons */}
+                <div className="w-6 h-6" />
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setSelectedFolderId(null)}
                 className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
                   selectedFolderId === null && !searchQuery
@@ -663,12 +718,11 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     : 'text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 hover:text-stone-950 dark:hover:bg-white/[0.06] dark:hover:text-stone-100'
                 }`}
               >
-                <Home className="w-4 h-4" />
-                <span className="truncate flex-1">Unsorted</span>
+                <FileEdit className="h-4 w-4" />
+                <span className="truncate flex-1">Unfiled notes</span>
                 <span className="text-xs font-medium opacity-60">
                   {projects.filter((p) => !p.folderId).length}
                 </span>
-                {/* Spacer to align with folder dropdown buttons */}
                 <div className="w-6 h-6" />
               </button>
 
@@ -794,9 +848,21 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     {currentFolderName}
                   </h2>
                   <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                    {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
+                    {filteredProjects.length} note{filteredProjects.length !== 1 ? 's' : ''}
                     {searchQuery && ` matching "${searchQuery}"`}
                   </p>
+                  {lastProject && lastProject.id !== currentProjectId && (
+                    <button
+                      type="button"
+                      onClick={() => void handleLoad(lastProject.id)}
+                      className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-amber-300/70 bg-amber-100/80 px-3 py-1.5 text-xs font-semibold text-amber-950 transition-colors hover:bg-amber-200 dark:border-amber-300/25 dark:bg-amber-300/10 dark:text-amber-100 dark:hover:bg-amber-300/20"
+                    >
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">
+                        Continue “{lastProject.title || 'Untitled note'}”
+                      </span>
+                    </button>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <DropdownMenu>
@@ -805,8 +871,8 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         variant="outline"
                         size="sm"
                         className="border-stone-300 dark:border-white/10"
-                        title="Import project"
-                        aria-label="Import project"
+                        title="Import note"
+                        aria-label="Import note"
                       >
                         <Upload className="mr-0 h-4 w-4 sm:mr-2" />
                         <span className="hidden sm:inline">Import</span>
@@ -824,6 +890,16 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <Button
+                    variant="outline"
+                    onClick={() => void handleQuickCreate()}
+                    disabled={creating}
+                    className="border-stone-300 dark:border-white/10"
+                    title="Create a note and open it immediately"
+                  >
+                    <Sparkles className="mr-0 h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Quick note</span>
+                  </Button>
+                  <Button
                     onClick={openNewProjectDialog}
                     disabled={creating}
                     className="bg-stone-900 text-stone-50 hover:bg-stone-700 dark:bg-amber-300 dark:text-stone-950 dark:hover:bg-amber-200"
@@ -833,15 +909,26 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                     ) : (
                       <Plus className="mr-2 h-4 w-4" />
                     )}
-                    <span className="sm:hidden">New</span>
-                    <span className="hidden sm:inline">New Project</span>
+                    <span className="sm:hidden">New note</span>
+                    <span className="hidden sm:inline">New note</span>
                   </Button>
                 </div>
               </div>
 
-              {showFolderNavigation && isMobile && (
+              {isMobile && (
                 <div className="mb-3">
                   <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFolderId(ALL_NOTES_FOLDER_ID)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selectedFolderId === ALL_NOTES_FOLDER_ID && !searchQuery
+                          ? 'bg-amber-300 text-stone-950'
+                          : 'bg-stone-100 text-stone-600 dark:bg-stone-900 dark:text-stone-300'
+                      }`}
+                    >
+                      All notes
+                    </button>
                     <button
                       type="button"
                       onClick={() => setSelectedFolderId(null)}
@@ -851,7 +938,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                           : 'bg-stone-100 text-stone-600 dark:bg-stone-900 dark:text-stone-300'
                       }`}
                     >
-                      All projects
+                      Unfiled
                     </button>
                     {folders.map((folder) => (
                       <button
@@ -886,7 +973,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 </div>
               )}
 
-              {/* New Project Dialog */}
+              {/* New Note Dialog */}
               <Dialog open={showNewProjectDialog} onOpenChange={setShowNewProjectDialog}>
                 <DialogContent className="gap-0 overflow-hidden border-stone-200 bg-stone-50 p-0 sm:max-w-md dark:border-white/[0.09] dark:bg-[#211e1b]">
                   <DialogHeader className="border-b border-stone-200 bg-stone-100/80 px-6 pb-5 pt-6 text-left dark:border-white/[0.08] dark:bg-white/[0.025]">
@@ -896,7 +983,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                       </span>
                       <div>
                         <DialogTitle className="text-xl font-semibold tracking-[-0.04em] text-stone-950 dark:text-stone-50">
-                          New project
+                          New note
                         </DialogTitle>
                         <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
                           Start with a clean canvas.
@@ -906,9 +993,9 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   </DialogHeader>
                   <div className="px-6 py-5">
                     <label className="grid gap-2 text-sm font-medium text-stone-700 dark:text-stone-200">
-                      Project name
+                      Note title
                       <Input
-                        placeholder="Untitled project"
+                        placeholder="Untitled note"
                         value={newProjectName}
                         onChange={(e) => setNewProjectName(e.target.value)}
                         onKeyDown={(e) => {
@@ -1012,7 +1099,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                 <div className="relative w-full sm:max-w-md sm:flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                   <Input
-                    placeholder="Search projects..."
+                    placeholder="Search notes..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="border-stone-200 bg-stone-100/80 pl-9 focus:border-amber-500 dark:border-white/[0.08] dark:bg-stone-900/70 dark:focus:border-amber-300"
@@ -1092,6 +1179,64 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto bg-[#f7f5f0] px-4 pb-4 pt-3 transition-colors duration-200 dark:bg-[#171513] sm:p-7">
+              {!loading &&
+                !searchQuery &&
+                selectedFolderId === ALL_NOTES_FOLDER_ID &&
+                recentProjects.length > 0 && (
+                  <section aria-labelledby="recent-notes-heading" className="mb-7">
+                    <div className="mb-3 flex items-end justify-between gap-3">
+                      <div>
+                        <h3
+                          id="recent-notes-heading"
+                          className="text-sm font-semibold uppercase tracking-[0.14em] text-stone-700 dark:text-stone-300"
+                        >
+                          Recent notes
+                        </h3>
+                        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+                          Pick up where you left off.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {recentProjects.map((project) => (
+                        <button
+                          key={project.id}
+                          type="button"
+                          onClick={() => void handleLoad(project.id)}
+                          className="surface-raised group flex min-w-0 items-center gap-3 rounded-xl border-l-2 border-l-amber-300 bg-stone-50 p-3 text-left transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-white dark:bg-stone-900/60 dark:hover:bg-stone-900"
+                        >
+                          <span className="flex h-12 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-stone-200 bg-stone-100 dark:border-white/[0.07] dark:bg-stone-950/60">
+                            {project.thumbnail ? (
+                              <img
+                                src={project.thumbnail}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <FileEdit className="h-5 w-5 text-stone-400 dark:text-stone-600" />
+                            )}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-stone-900 group-hover:text-amber-700 dark:text-stone-100 dark:group-hover:text-amber-200">
+                              {project.title || 'Untitled note'}
+                            </span>
+                            <span className="mt-1 block truncate text-xs text-stone-500 dark:text-stone-400">
+                              {formatDistanceToNow(project.updatedAt, { addSuffix: true })}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              {!loading &&
+                !searchQuery &&
+                selectedFolderId === ALL_NOTES_FOLDER_ID &&
+                recentProjects.length > 0 && (
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-stone-700 dark:text-stone-300">
+                    All notes
+                  </h3>
+                )}
               {loading ? (
                 <div className="flex-1 flex items-center justify-center h-64">
                   <Loader2 className="w-8 h-8 animate-spin text-slate-400 dark:text-slate-500" />
@@ -1101,7 +1246,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   <div className="flex flex-col items-center justify-center h-64 text-center">
                     <Search className="w-12 h-12 text-slate-400 dark:text-slate-600 mb-4" />
                     <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">
-                      No matching projects
+                      No matching notes
                     </h3>
                     <p className="text-slate-500">Try a different search term</p>
                   </div>
@@ -1109,12 +1254,12 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                   <div className="flex h-64 flex-col items-center justify-center rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-12 dark:border-white/[0.12] dark:bg-stone-900/35">
                     <Sparkles className="mb-4 h-12 w-12 text-amber-500 dark:text-amber-300" />
                     <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">
-                      {isGuest ? 'Start Drawing Locally' : 'Start Creating'}
+                      {isGuest ? 'Start a note locally' : 'Start a note'}
                     </h3>
                     <p className="text-slate-900 dark:text-slate-100 mb-6 text-center max-w-sm">
                       {isGuest
-                        ? 'Create a local drawing project. Sign in to sync and collaborate.'
-                        : 'Create your first drawing or import an existing project.'}
+                        ? 'Create a local note. Sign in to sync and collaborate.'
+                        : 'Create your first note or import an existing one.'}
                     </p>
                     <div className="flex gap-3">
                       <Button
@@ -1130,7 +1275,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                         ) : (
                           <>
                             <Plus className="w-4 h-4 mr-2" />
-                            {isGuest ? 'Start Drawing' : 'New Project'}
+                            {isGuest ? 'Start a note' : 'New note'}
                           </>
                         )}
                       </Button>
@@ -1388,7 +1533,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                       onSelect={() => handleMoveToFolder(project.id, null)}
                                     >
                                       <Home className="w-4 h-4 mr-2" />
-                                      All Projects
+                                      Unfiled notes
                                     </DropdownMenuItem>
                                     {folders.length > 0 && <DropdownMenuSeparator />}
                                     {folders.map((f) => (
@@ -1513,8 +1658,16 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                       onClick={(e) => handleCardClick(project.id, e)}
                       className="surface-raised group relative flex cursor-pointer items-center gap-4 rounded-xl bg-stone-50 p-3 transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:bg-white dark:bg-stone-900/60 dark:hover:bg-stone-900"
                     >
-                      <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-100 dark:border-white/[0.07] dark:bg-stone-950/60">
-                        <FileEdit className="w-5 h-5 text-slate-400 dark:text-slate-700" />
+                      <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-stone-200 bg-stone-100 dark:border-white/[0.07] dark:bg-stone-950/60">
+                        {project.thumbnail ? (
+                          <img
+                            src={project.thumbnail}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <FileEdit className="w-5 h-5 text-slate-400 dark:text-slate-700" />
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -1743,7 +1896,7 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
                                       onSelect={() => handleMoveToFolder(project.id, null)}
                                     >
                                       <Home className="w-4 h-4 mr-2" />
-                                      All Projects
+                                      Unfiled notes
                                     </DropdownMenuItem>
                                     {folders.length > 0 && <DropdownMenuSeparator />}
                                     {folders.map((f) => (
@@ -1853,14 +2006,14 @@ export function ProjectManager({ onSelect }: { onSelect?: () => void }) {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Rename project</DialogTitle>
+            <DialogTitle>Rename note</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-3">
             <label
               className="text-sm font-medium text-stone-700 dark:text-stone-200"
               htmlFor="mobile-project-name"
             >
-              Project name
+              Note title
             </label>
             <Input
               id="mobile-project-name"

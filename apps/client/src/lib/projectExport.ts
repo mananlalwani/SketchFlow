@@ -1,7 +1,7 @@
 import { getProject } from './api';
 import { encodeDrawFormat, DRAW_FORMAT_EXTENSION } from './drawFormat';
 import { downloadFile, exportAsPDF, exportAsPNG } from './export';
-import { deserializeProject } from './utils';
+import { deserializeProjectDocument } from './projectDocument';
 
 export type ProjectExportFormat = 'png' | 'pdf' | 'dra';
 
@@ -24,11 +24,13 @@ export async function exportPersistedProject(input: {
     return;
   }
 
-  const objects = deserializeProject(record.data);
+  const document = deserializeProjectDocument(record.data);
+  const objects = document.objects;
+  const dimensions = { width: document.width, height: document.height };
   if (input.format === 'pdf') {
-    downloadFile(await exportAsPDF(objects, { title: filename }), `${filename}.pdf`);
+    downloadFile(await exportAsPDF(objects, { ...dimensions, title: filename }), `${filename}.pdf`);
     return;
   }
 
-  downloadFile(await exportAsPNG(objects), `${filename}.png`);
+  downloadFile(await exportAsPNG(objects, dimensions), `${filename}.png`);
 }

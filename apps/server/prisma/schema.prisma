@@ -60,6 +60,7 @@ model Project {
   updatedAt               DateTime                 @updatedAt
   collaborators           ProjectCollaborator[]
   collaborationOperations CollaborationOperation[]
+  historySnapshots        ProjectHistorySnapshot[]
 
   @@unique([id, revision])
   @@index([userId])
@@ -67,6 +68,22 @@ model Project {
   @@index([shareExpiresAt])
   @@index([folderId])
   @@map("projects")
+}
+
+model ProjectHistorySnapshot {
+  id          String   @id @default(cuid())
+  projectId   String
+  revision    Int
+  title       String
+  data        Json
+  contentHash String
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, contentHash])
+  @@index([projectId, createdAt])
+  @@index([projectId, revision])
+  @@map("project_history_snapshots")
 }
 
 // Accepted canonical commits. This is an idempotency receipt and ordered audit

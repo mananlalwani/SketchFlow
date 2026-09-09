@@ -147,6 +147,9 @@ export function getToolLabel(tool: string, shortcut?: string): string {
     case 'pen':
       label = 'Pen tool';
       break;
+    case 'highlighter':
+      label = 'Highlighter tool';
+      break;
     case 'eraser':
       label = 'Eraser tool';
       break;

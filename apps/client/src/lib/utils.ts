@@ -1,8 +1,13 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { z } from 'zod';
-import { drawingObjectSchema, type DrawingObject } from './drawingObjectSchema';
+import type { DrawingObject } from './drawingObjectSchema';
 import type { JsonValue } from '@sketchflow/shared';
+import {
+  deserializeProjectDocument,
+  serializeProjectDocument,
+  type ProjectMetadata,
+} from './projectDocument';
 
 type OfflineProjectRecord = {
   id: string;
@@ -11,11 +16,6 @@ type OfflineProjectRecord = {
   createdAt: number;
   updatedAt: number;
 };
-
-const projectObjectsSchema = z.union([
-  z.array(drawingObjectSchema),
-  z.object({ objects: z.array(drawingObjectSchema) }).passthrough(),
-]);
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -33,27 +33,17 @@ export function isIOS() {
   );
 }
 
-export function serializeProject(objects: DrawingObject[], width: number, height: number) {
-  return JSON.stringify({
-    version: 1,
-    objects,
-    width,
-    height,
-    timestamp: Date.now(),
-  });
+export function serializeProject(
+  objects: DrawingObject[],
+  width: number,
+  height: number,
+  metadata?: Partial<ProjectMetadata>,
+) {
+  return serializeProjectDocument(objects, width, height, metadata);
 }
 
 export function deserializeProject(data: JsonValue | string): DrawingObject[] {
-  try {
-    const serialized = z.string().safeParse(data);
-    const candidate = serialized.success ? JSON.parse(serialized.data) : data;
-    const parsed = projectObjectsSchema.safeParse(candidate);
-    if (!parsed.success) return [];
-    return Array.isArray(parsed.data) ? parsed.data : parsed.data.objects;
-  } catch (e) {
-    console.warn('Failed to deserialize project:', e);
-    return [];
-  }
+  return deserializeProjectDocument(data).objects;
 }
 export async function saveEncryptedOffline(key: string, data: JsonValue | OfflineProjectRecord) {
   localStorage.setItem(key, JSON.stringify(data));

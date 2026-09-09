@@ -35,6 +35,7 @@ import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { useAuth, useClerk } from '@clerk/clerk-react';
 import { AuthTrigger } from '@/components/auth/AuthTrigger';
 import { User } from 'lucide-react';
+import { ProjectHistoryPanel } from '@/components/ProjectHistoryPanel';
 
 export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean }) {
   const {
@@ -46,6 +47,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     clearCanvas,
     requestFullRedraw,
     objects,
+    bookmarks,
     undo,
     redo,
     canUndo,
@@ -165,7 +167,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
       const token = await getToken();
       const copy = await createProject(
         `${projectTitle || 'Untitled Project'} (Conflict recovery)`,
-        serializeProject(objects, 4096, 4096),
+        serializeProject(objects, 4096, 4096, { bookmarks }),
         token,
       );
       setCurrentProject(copy.id);
@@ -176,7 +178,7 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
     } catch {
       toast({ title: 'Could not create recovery copy', variant: 'destructive' });
     }
-  }, [getToken, objects, projectTitle, setCurrentProject, toast, userId]);
+  }, [bookmarks, getToken, objects, projectTitle, setCurrentProject, toast, userId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -226,18 +228,26 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
               <div className="flex items-center gap-2 text-xs">
                 {isSaving || saveStatus === 'syncing' ? (
                   <span className="flex items-center text-emerald-600 dark:text-emerald-400">
-                    <Loader2 className="w-3 h-3 animate-spin mr-1" /> Saving...
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" /> Syncing...
                   </span>
                 ) : saveStatus === 'retrying' ? (
                   <span className="flex items-center text-orange-500 dark:text-orange-400">
                     <Loader2 className="w-3 h-3 animate-spin mr-1" /> Retrying...
                   </span>
-                ) : saveStatus === 'failed' ? (
+                ) : saveStatus === 'saved-locally' ? (
+                  <span className="flex items-center text-amber-600 dark:text-amber-400">
+                    <Cloud className="w-3 h-3 mr-1" /> Saved locally
+                  </span>
+                ) : saveStatus === 'offline' ? (
+                  <span className="flex items-center text-amber-600 dark:text-amber-400">
+                    <Cloud className="w-3 h-3 mr-1" /> Offline
+                  </span>
+                ) : saveStatus === 'error' || saveStatus === 'failed' ? (
                   <span
                     className="flex items-center text-red-500 dark:text-red-400"
                     title="Auto-save failed. Changes are backed up locally."
                   >
-                    <AlertCircle className="w-3 h-3 mr-1" /> Failed
+                    <AlertCircle className="w-3 h-3 mr-1" /> Error
                   </span>
                 ) : saveStatus === 'conflict' ? (
                   <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
@@ -267,6 +277,10 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
                       Export
                     </Button>
                   </div>
+                ) : saveStatus === 'synced' ? (
+                  <span className="flex items-center text-green-600 dark:text-green-400">
+                    <Cloud className="w-3 h-3 mr-1" /> Synced
+                  </span>
                 ) : unsavedChanges ? (
                   <span className="text-yellow-600 dark:text-yellow-500 flex items-center">
                     <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" /> Unsaved
@@ -280,6 +294,8 @@ export function TopBar({ hideProjectControls }: { hideProjectControls?: boolean 
             </div>
           </div>
         )}
+
+        {!hideProjectControls && <ProjectHistoryPanel />}
       </div>
 
       <div className="hidden items-center gap-1 rounded-xl border border-stone-200/80 bg-stone-100/65 p-1 shadow-sm shadow-stone-950/[0.04] dark:border-[#3b352f] dark:bg-black/15 dark:shadow-none lg:flex">

@@ -1,5 +1,6 @@
 import type { DrawingObject } from '@/store/drawingStore';
 import type { DrawingData, StrokeData } from '@/types/socket';
+import { compareCanvasObjects } from './canvasObjectOrder';
 
 export interface RendererScene {
   drawings: DrawingData[];
@@ -13,11 +14,10 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
 
   const orderedObjects = objects
     .map((object, index) => ({ object, index }))
-    .sort((a, b) => (a.object.zIndex ?? a.index) - (b.object.zIndex ?? b.index));
+    .sort(compareCanvasObjects);
 
   for (const { object } of orderedObjects) {
     if (object.type === 'stroke') {
-      if (!object.points || object.points.length < 2) continue;
       // Keep a stroke in the same retained scene sequence as shapes. The
       // worker's old separate stroke pass made every shape visually topmost,
       // even when the Layers panel placed a stroke above it.

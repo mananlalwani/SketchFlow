@@ -21,7 +21,9 @@ export async function saveActiveProject({
 
   const projectId = snapshot.currentProjectId;
   const documentVersion = snapshot.documentVersion;
-  const payload = serializeProject(snapshot.objects, 4096, 4096);
+  const payload = serializeProject(snapshot.objects, 4096, 4096, {
+    bookmarks: snapshot.bookmarks,
+  });
   return saveProjectSnapshot({
     snapshot: {
       projectId,

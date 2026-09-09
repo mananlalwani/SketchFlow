@@ -215,7 +215,9 @@ export function SettingsDropdown() {
   };
 
   const exportCurrentDocument = () => {
-    const data = serializeProject(drawingState.objects, 4096, 4096);
+    const data = serializeProject(drawingState.objects, 4096, 4096, {
+      bookmarks: drawingState.bookmarks,
+    });
     downloadFile(
       data,
       `${drawingState.projectTitle || 'sketchflow-draft'}.json`,

@@ -57,6 +57,25 @@ describe('viewport culling', () => {
     ).toBe(false);
   });
 
+  it('uses the widest point width when culling variable-width strokes', () => {
+    expect(
+      objectIntersectsViewport(
+        {
+          type: 'stroke',
+          size: 1,
+          points: [
+            { x: 105, y: 50, width: 1 },
+            { x: 105, y: 50, width: 12 },
+          ],
+        },
+        0,
+        0,
+        100,
+        100,
+      ),
+    ).toBe(true);
+  });
+
   it('culls a 10,000-object board to the visible subset within the frame budget', () => {
     const objects = Array.from({ length: 10_000 }, (_, index) => ({
       type: 'rectangle',

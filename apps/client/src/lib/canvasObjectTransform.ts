@@ -8,6 +8,61 @@ export interface ObjectDrag {
   offsetY: number;
 }
 
+/** Makes a translated copy without changing stroke point pressure/width data. */
+export function duplicateDrawingObject(
+  object: DrawingObject,
+  id: string,
+  offset = 24,
+  groupId = object.groupId,
+): DrawingObject {
+  return {
+    ...object,
+    id,
+    groupId,
+    x: object.x === undefined ? undefined : object.x + offset,
+    y: object.y === undefined ? undefined : object.y + offset,
+    points: object.points?.map((point) => ({
+      ...point,
+      x: point.x + offset,
+      y: point.y + offset,
+    })),
+  };
+}
+
+/** Applies one color to a selection while preserving every other object field. */
+export function recolorObjects(
+  objects: readonly DrawingObject[],
+  ids: readonly string[],
+  color: string,
+): DrawingObject[] {
+  const selected = new Set(ids);
+  return objects.map((object) => (selected.has(object.id) ? { ...object, color } : object));
+}
+
+/** Duplicates a selection and keeps selected group members together as a new group. */
+export function duplicateObjectCollection(
+  objects: readonly DrawingObject[],
+  ids: readonly string[],
+  createId: () => string,
+  offset = 24,
+): DrawingObject[] {
+  const selected = new Set(ids);
+  const groupIds = new Map<string, string>();
+  return objects
+    .filter((object) => selected.has(object.id))
+    .map((object) => {
+      let nextGroupId: string | undefined;
+      if (object.groupId) {
+        nextGroupId = groupIds.get(object.groupId);
+        if (!nextGroupId) {
+          nextGroupId = createId();
+          groupIds.set(object.groupId, nextGroupId);
+        }
+      }
+      return duplicateDrawingObject(object, createId(), offset, nextGroupId);
+    });
+}
+
 export function getObjectDragOffset(object: DrawingObject, pointer: CanvasPoint): CanvasPoint {
   if (object.x !== undefined && object.y !== undefined) {
     return { x: pointer.x - object.x, y: pointer.y - object.y };
@@ -31,7 +86,11 @@ export function translateDrawingObject(
     const deltaY = y - object.points[0].y;
     return {
       ...object,
-      points: object.points.map((point) => ({ x: point.x + deltaX, y: point.y + deltaY })),
+      points: object.points.map((point) => ({
+        ...point,
+        x: point.x + deltaX,
+        y: point.y + deltaY,
+      })),
     };
   }
 
@@ -47,6 +106,15 @@ export function translateDrawingObject(
   }
 
   return { ...object, x, y };
+}
+
+/** A transform is all-or-nothing when any member of the selected set is locked. */
+export function canTransformObjects(
+  objects: readonly DrawingObject[],
+  ids: readonly string[],
+): boolean {
+  const selected = new Set(ids);
+  return objects.every((object) => !selected.has(object.id) || !object.locked);
 }
 
 export function translateObjectInCollection(

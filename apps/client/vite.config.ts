@@ -77,6 +77,7 @@ export default defineConfig({
           'assets/app/html2canvas.*.js',
           'assets/app/purify.*.js',
           'assets/app/index.es-*.js',
+          'assets/app/ProjectManager-*.js',
           'assets/workers/pdf.worker.*',
           'assets/app/DrawingCanvas-*.js',
           'assets/rendererWorker-*.js',

@@ -67,6 +67,27 @@ export function useCanvasKeyboardShortcuts({
       if (event.key === 'Shift') setIsShiftPressed(true);
       if (isEditableKeyboardTarget(event.target)) return;
 
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        if (state.selectedObjectIds.length > 0) {
+          const selectedIds = new Set(state.selectedObjectIds);
+          const hasLockedSelection = state.objects.some(
+            (object) => selectedIds.has(object.id) && object.locked,
+          );
+          if (state.projectRole !== 'viewer' && !hasLockedSelection) {
+            state.saveHistory();
+            state.setObjects(state.objects.filter((object) => !selectedIds.has(object.id)));
+            state.setSelectedObject(undefined);
+            state.requestFullRedraw();
+          }
+        } else if (window.confirm('Are you sure you want to clear the canvas?')) {
+          state.clearCanvas();
+          if (presentation) presentation.clear();
+          else workerRef.current?.postMessage({ type: 'clear' });
+        }
+        return;
+      }
+
       if (event.ctrlKey || event.metaKey) {
         if (event.key.toLowerCase() === 'z') {
           event.preventDefault();
@@ -102,13 +123,6 @@ export function useCanvasKeyboardShortcuts({
                 viewY: 0,
               });
             }
-          }
-        } else if (event.key === 'Delete' || event.key === 'Backspace') {
-          event.preventDefault();
-          if (window.confirm('Are you sure you want to clear the canvas?')) {
-            state.clearCanvas();
-            if (presentation) presentation.clear();
-            else workerRef.current?.postMessage({ type: 'clear' });
           }
         }
         return;

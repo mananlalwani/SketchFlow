@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   getByShareToken: vi.fn(),
   commitCollaborationOperation: vi.fn(),
+  removeCollaborator: vi.fn(),
   disconnectPrisma: vi.fn(),
 }));
 
@@ -37,6 +38,7 @@ vi.mock('../../services/ProjectService.js', () => ({
     get = mocks.get;
     getByShareToken = mocks.getByShareToken;
     commitCollaborationOperation = mocks.commitCollaborationOperation;
+    removeCollaborator = mocks.removeCollaborator;
     cleanupCorruptCollaborators = vi.fn();
   },
 }));
@@ -46,12 +48,21 @@ vi.mock('@clerk/express', () => ({
   getAuth: () => ({ userId: null }),
   clerkClient: {
     authenticateRequest: vi.fn(async (request: Request) => ({
-      toAuth: () =>
-        request.headers.get('Authorization') === 'Bearer valid-token'
-          ? { userId: 'user-1', sessionClaims: {} }
-          : request.headers.get('Authorization') === 'Bearer expired-token'
-            ? { userId: 'user-1', sessionClaims: { exp: Math.floor(Date.now() / 1000) - 1 } }
-            : { userId: null },
+      toAuth: () => {
+        const authorization = request.headers.get('Authorization');
+        if (authorization === 'Bearer valid-token-a') {
+          return { userId: 'user-a', sessionClaims: {} };
+        }
+        if (authorization === 'Bearer valid-token-b') {
+          return { userId: 'user-b', sessionClaims: {} };
+        }
+        if (authorization === 'Bearer valid-token') {
+          return { userId: 'user-1', sessionClaims: {} };
+        }
+        return authorization === 'Bearer expired-token'
+          ? { userId: 'user-1', sessionClaims: { exp: Math.floor(Date.now() / 1000) - 1 } }
+          : { userId: null };
+      },
     })),
     users: { getUser: vi.fn(), getUserList: vi.fn() },
   },
@@ -249,6 +260,27 @@ describe('Socket.IO boundary', () => {
     ).toBe(false);
   });
 
+  it('evicts a revoked collaborator from the realtime project room', async () => {
+    const projectId = 'ckz1h2abc0006qwerty123456';
+    mocks.checkPermission.mockResolvedValue(true);
+    const client = await connect('valid-token');
+    client.emit('room:join', projectId);
+    await vi.waitFor(() => {
+      expect(
+        sketchServer.getSocketServer().sockets.sockets.get(client.id)?.rooms.has(projectId),
+      ).toBe(true);
+    });
+
+    const internals = sketchServer as unknown as {
+      evictProjectUser(project: string, user: string): Promise<void>;
+    };
+    await internals.evictProjectUser(projectId, 'user-1');
+
+    expect(
+      sketchServer.getSocketServer().sockets.sockets.get(client.id)?.rooms.has(projectId),
+    ).toBe(false);
+  });
+
   it('keeps the latest requested room when joins resolve out of order', async () => {
     const firstProject = 'ckz1h2abc0010qwerty123456';
     const secondProject = 'ckz1h2abc0011qwerty123456';
@@ -370,9 +402,46 @@ describe('Socket.IO boundary', () => {
     expect(acknowledgement).toEqual({ status: 'forbidden', operationId: 'viewer_operation_1' });
   });
 
+  it('blocks a viewer at the realtime edit permission boundary', async () => {
+    const projectId = 'ckz1h2abc0020qwerty123456';
+    mocks.checkPermission.mockImplementation(
+      async (_projectId: string, _userId: string, action: string) => action === 'view',
+    );
+    const client = await connect('valid-token');
+    client.emit('room:join', projectId);
+    await vi.waitFor(() =>
+      expect(mocks.checkPermission).toHaveBeenCalledWith(projectId, 'user-1', 'view'),
+    );
+
+    const acknowledgement = await new Promise<unknown>((resolve) => {
+      client.emit(
+        'collaboration:commit',
+        {
+          protocolVersion: 1,
+          projectId,
+          operationId: 'viewer_boundary_operation',
+          expectedRevision: 1,
+          kind: 'upsert-object',
+          data: { object: { id: 'viewer-stroke' } },
+        },
+        resolve,
+      );
+    });
+
+    expect(acknowledgement).toEqual({
+      status: 'forbidden',
+      operationId: 'viewer_boundary_operation',
+    });
+    expect(mocks.checkPermission).toHaveBeenCalledWith(projectId, 'user-1', 'edit');
+    expect(mocks.commitCollaborationOperation).not.toHaveBeenCalled();
+  });
+
   it('commits an editor operation through the canonical persistence service', async () => {
     const projectId = 'ckz1h2abc0005qwerty123456';
-    mocks.checkPermission.mockResolvedValue(true);
+    mocks.checkPermission.mockImplementation(
+      async (_projectId: string, _userId: string, action: string) =>
+        action === 'view' || action === 'edit',
+    );
     const client = await connect('valid-token');
     client.emit('room:join', projectId);
     await vi.waitFor(() =>
@@ -404,7 +473,90 @@ describe('Socket.IO boundary', () => {
         expectedRevision: 1,
       }),
     );
+    expect(mocks.checkPermission).toHaveBeenCalledWith(projectId, 'user-1', 'edit');
     expect(acknowledgement).toMatchObject({ status: 'applied', revision: 2 });
+  });
+
+  it('broadcasts two distinct strokes created concurrently by separate clients', async () => {
+    const projectId = 'ckz1h2abc0021qwerty123456';
+    const canonicalObjects: Array<{
+      id: string;
+      type: 'stroke';
+      points: { x: number; y: number }[];
+    }> = [];
+    let revision = 1;
+    mocks.checkPermission.mockResolvedValue(true);
+    mocks.commitCollaborationOperation.mockImplementation(async (input) => {
+      const object = (input.data as { object: (typeof canonicalObjects)[number] }).object;
+      canonicalObjects.push(object);
+      revision += 1;
+      return {
+        status: 'applied',
+        operationId: input.operationId,
+        revision,
+        title: 'Board',
+        data: { objects: [...canonicalObjects] },
+      };
+    });
+
+    const first = await connect('valid-token-a');
+    const second = await connect('valid-token-b');
+    const join = (client: Socket) =>
+      new Promise<void>((resolve) => {
+        client.once('collaboration:hydrated', () => resolve());
+        client.emit('room:join', projectId);
+      });
+    await Promise.all([join(first), join(second)]);
+
+    const firstBroadcast = new Promise<unknown>((resolve) =>
+      first.once('collaboration:applied', resolve),
+    );
+    const secondBroadcast = new Promise<unknown>((resolve) =>
+      second.once('collaboration:applied', resolve),
+    );
+    const commit = (
+      client: Socket,
+      operationId: string,
+      object: (typeof canonicalObjects)[number],
+    ) =>
+      new Promise<unknown>((resolve) => {
+        client.emit(
+          'collaboration:commit',
+          {
+            protocolVersion: 1,
+            projectId,
+            operationId,
+            expectedRevision: 1,
+            kind: 'upsert-object',
+            data: { object },
+          },
+          resolve,
+        );
+      });
+
+    const strokeA = {
+      id: 'concurrent-stroke-a',
+      type: 'stroke' as const,
+      points: [{ x: 0, y: 0 }],
+    };
+    const strokeB = {
+      id: 'concurrent-stroke-b',
+      type: 'stroke' as const,
+      points: [{ x: 1, y: 1 }],
+    };
+    const [firstAcknowledgement, secondAcknowledgement] = await Promise.all([
+      commit(first, 'concurrent_operation_a', strokeA),
+      commit(second, 'concurrent_operation_b', strokeB),
+    ]);
+
+    expect(firstAcknowledgement).toMatchObject({ status: 'applied' });
+    expect(secondAcknowledgement).toMatchObject({ status: 'applied' });
+    expect(canonicalObjects.map((object) => object.id).sort()).toEqual([
+      'concurrent-stroke-a',
+      'concurrent-stroke-b',
+    ]);
+    await expect(firstBroadcast).resolves.toMatchObject({ projectId, kind: 'upsert-object' });
+    await expect(secondBroadcast).resolves.toMatchObject({ projectId, kind: 'upsert-object' });
   });
 
   it('persists a canonical operation before acknowledging or broadcasting it', async () => {

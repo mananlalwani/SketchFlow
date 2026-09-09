@@ -56,5 +56,18 @@ export function buildStrokePoints(strokes: readonly StrokeData[]): CanvasPoint[]
 
 export function getPointerSamples(event: PointerSample): PointerSample[] {
   const samples = event.getCoalescedEvents?.();
-  return samples && samples.length ? samples : [event];
+  if (!samples?.length) return [event];
+  const last = samples[samples.length - 1];
+  // Browsers commonly omit the dispatched PointerEvent from the coalesced
+  // list. Include it so the visible and retained stroke reaches the endpoint,
+  // while avoiding a duplicate when a browser already included it.
+  if (
+    last.clientX !== event.clientX ||
+    last.clientY !== event.clientY ||
+    last.pointerType !== event.pointerType ||
+    last.pressure !== event.pressure
+  ) {
+    return [...samples, event];
+  }
+  return samples;
 }

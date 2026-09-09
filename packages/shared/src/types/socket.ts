@@ -244,7 +244,14 @@ export type CollaborationCommitResult =
       data: JsonValue;
       title: string;
     }
-  | { status: 'duplicate'; operationId: string; revision: number }
+  | {
+      status: 'duplicate';
+      operationId: string;
+      revision: number;
+      /** Canonical state lets a replayed acknowledgement repair missed broadcasts. */
+      data?: JsonValue;
+      title?: string;
+    }
   | { status: 'conflict'; operationId: string; currentRevision: number }
   | {
       status: 'forbidden' | 'not_found' | 'invalid' | 'too_large' | 'unavailable';

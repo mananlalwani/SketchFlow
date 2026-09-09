@@ -14,7 +14,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { AutoSaveHandler } from '@/components/AutoSaveHandler';
 import { useAuth } from '@clerk/clerk-react';
-import { deserializeProject } from '@/lib/utils';
+import { deserializeProjectDocument } from '@/lib/projectDocument';
 import { useProjectMigration } from '@/hooks/useProjectMigration';
 import { WelcomeTutorial, EmptyStateHint } from '@/components/WelcomeTutorial';
 import { getSharedProject } from '@/lib/api';
@@ -93,9 +93,10 @@ function EditorRoute() {
     if (!userId && localWork) {
       try {
         const { title, data } = JSON.parse(localWork);
-        const objects = deserializeProject(data);
-        setObjects(objects);
-        replaceHistory(objects);
+        const document = deserializeProjectDocument(data);
+        setObjects(document.objects);
+        replaceHistory(document.objects);
+        useDrawingStore.getState().setBookmarks(document.metadata.bookmarks);
         setProjectTitle(title);
         requestFullRedraw();
         // Don't set currentProjectId for local work to keep it "unsaved" relative to cloud

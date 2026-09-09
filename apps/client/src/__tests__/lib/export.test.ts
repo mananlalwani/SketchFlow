@@ -1,11 +1,206 @@
-import { describe, it, expect } from 'vitest';
-import { exportAsSVG } from '@/lib/export';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  exportAsPDF,
+  exportAsSVG,
+  getPdfExportSegmentCount,
+  renderObjectToPDF,
+  renderObjectsToContext,
+} from '@/lib/export';
 import type { DrawingObject } from '@/store/drawingStore';
 
-// Note: exportAsPNG requires canvas which isn't available in jsdom
-// We test it indirectly through the SVG export which shares rendering logic
+// The PNG entry point requires a browser canvas; the shared canvas renderer is
+// tested directly below so this suite remains jsdom-compatible.
 
 describe('export', () => {
+  describe('PDF stroke rendering', () => {
+    it('renders a pressure-width dot as an alpha-aware filled circle', () => {
+      const ellipse = vi.fn();
+      const setLineWidth = vi.fn();
+      const GState = vi.fn((state: unknown) => state);
+      const pdf = {
+        setDrawColor: vi.fn(),
+        setFillColor: vi.fn(),
+        setLineWidth,
+        setLineCap: vi.fn(),
+        setLineJoin: vi.fn(),
+        GState,
+        setGState: vi.fn(),
+        ellipse,
+      } as unknown as Parameters<typeof renderObjectToPDF>[0];
+
+      renderObjectToPDF(
+        pdf,
+        {
+          id: 'pdf-dot',
+          type: 'stroke',
+          points: [{ x: 10, y: 20, width: 8, pressure: 0.75 }],
+          color: '#123456',
+          size: 4,
+          alpha: 0.4,
+        },
+        5,
+        7,
+        2,
+      );
+
+      expect(setLineWidth).toHaveBeenLastCalledWith(16);
+      expect(GState).toHaveBeenCalledWith({ opacity: 0.4, 'stroke-opacity': 0.4 });
+      expect(ellipse).toHaveBeenCalledWith(25, 47, 8, 8, 'F');
+
+      renderObjectToPDF(
+        pdf,
+        {
+          id: 'legacy-pressure-dot',
+          type: 'stroke',
+          points: [{ x: 1, y: 2, pressure: 0.5 }],
+          color: '#123456',
+          size: 8,
+          alpha: 1,
+        },
+        0,
+        0,
+        1,
+      );
+      expect(setLineWidth).toHaveBeenLastCalledWith(5);
+      expect(ellipse).toHaveBeenLastCalledWith(1, 2, 2.5, 2.5, 'F');
+    });
+
+    it('emits image pages in object order so annotations can layer above them', () => {
+      const order: string[] = [];
+      const pdf = {
+        setDrawColor: vi.fn(),
+        setFillColor: vi.fn(),
+        setLineWidth: vi.fn(),
+        setLineCap: vi.fn(),
+        setLineJoin: vi.fn(),
+        addImage: vi.fn(() => order.push('image')),
+        line: vi.fn(() => order.push('annotation')),
+      } as unknown as Parameters<typeof renderObjectToPDF>[0];
+
+      renderObjectToPDF(
+        pdf,
+        {
+          id: 'page',
+          type: 'image',
+          x: 10,
+          y: 20,
+          width: 300,
+          height: 200,
+          imageData: 'data:image/png;base64,cGFnZQ==',
+          color: '#000000',
+          size: 1,
+        },
+        5,
+        7,
+        2,
+      );
+      renderObjectToPDF(
+        pdf,
+        {
+          id: 'ink',
+          type: 'line',
+          x: 10,
+          y: 20,
+          width: 40,
+          height: 0,
+          color: '#ff0000',
+          size: 2,
+        },
+        5,
+        7,
+        2,
+      );
+
+      expect(order).toEqual(['image', 'annotation']);
+      expect(pdf.addImage).toHaveBeenCalledWith(
+        'data:image/png;base64,cGFnZQ==',
+        'PNG',
+        25,
+        47,
+        600,
+        400,
+        undefined,
+        'FAST',
+        0,
+      );
+    });
+
+    it('produces a valid PDF when a project contains an imported page image', async () => {
+      // 1x1 transparent PNG; jsPDF decodes this through its normal image path.
+      const imageData =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+      const blob = await exportAsPDF(
+        [
+          {
+            id: 'page',
+            type: 'image',
+            x: 0,
+            y: 0,
+            width: 80,
+            height: 80,
+            imageData,
+            color: '#000000',
+            size: 1,
+          },
+          {
+            id: 'annotation',
+            type: 'line',
+            x: 10,
+            y: 10,
+            width: 50,
+            height: 0,
+            color: '#ff0000',
+            size: 2,
+          },
+        ],
+        { width: 100, height: 100, pageSize: 'custom', orientation: 'portrait' },
+      );
+
+      expect(blob.type).toBe('application/pdf');
+      expect(blob.size).toBeGreaterThan(0);
+    });
+
+    it.each([10, 50, 150])(
+      'exports every page and the trailing annotation for a %i-page document',
+      async (pageCount) => {
+        const imageData =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+        const objects: DrawingObject[] = Array.from({ length: pageCount }, (_, index) => ({
+          id: `page-${index}`,
+          type: 'image' as const,
+          x: 100,
+          y: index * 100,
+          width: 3000,
+          height: 80,
+          imageData,
+          color: '#000000',
+          size: 1,
+        }));
+        objects.push({
+          id: 'last-annotation',
+          type: 'line',
+          x: 100,
+          y: pageCount * 100 + 10,
+          width: 3000,
+          height: 0,
+          color: '#ff0000',
+          size: 2,
+        });
+
+        const blob = await exportAsPDF(objects, {
+          width: 4096,
+          height: pageCount * 100 + 100,
+        });
+
+        expect(blob.type).toBe('application/pdf');
+        expect(blob.size).toBeGreaterThan(0);
+        expect(getPdfExportSegmentCount(4096, pageCount * 100 + 100, 842, 595, 20)).toBeGreaterThan(
+          pageCount > 10 ? 1 : 0,
+        );
+      },
+    );
+  });
+
   describe('exportAsSVG', () => {
     it('should export empty canvas with background', () => {
       const svg = exportAsSVG([], { width: 100, height: 100, background: '#000' });
@@ -40,6 +235,78 @@ describe('export', () => {
       expect(svg).toContain('L20,0');
       expect(svg).toContain('stroke="#ff0000"');
       expect(svg).toContain('stroke-width="2"');
+    });
+
+    it('preserves per-point widths and dots in SVG stroke output', () => {
+      const svg = exportAsSVG([
+        {
+          id: 'pressure-stroke',
+          type: 'stroke',
+          points: [
+            { x: 0, y: 0, width: 2 },
+            { x: 10, y: 10, width: 8 },
+            { x: 20, y: 0, width: 3 },
+          ],
+          color: '#ff0000',
+          size: 4,
+          alpha: 0.5,
+        },
+        {
+          id: 'dot',
+          type: 'stroke',
+          points: [{ x: 30, y: 30, width: 10 }],
+          color: '#00ff00',
+          size: 2,
+          alpha: 0.75,
+        },
+      ]);
+
+      expect(svg).toContain('stroke-width="8"');
+      expect(svg).toContain('stroke-width="3"');
+      expect(svg).toContain('opacity="0.5"');
+      expect(svg).toContain('<circle cx="30" cy="30" r="5" fill="#00ff00" opacity="0.75"/>');
+    });
+
+    it('uses per-point widths for PNG canvas rendering', () => {
+      const widths: number[] = [];
+      const context = {
+        save: () => undefined,
+        restore: () => undefined,
+        beginPath: () => undefined,
+        moveTo: () => undefined,
+        lineTo: () => undefined,
+        stroke: () => undefined,
+        arc: () => undefined,
+        fill: () => undefined,
+        lineCap: 'round' as CanvasLineCap,
+        lineJoin: 'round' as CanvasLineJoin,
+        globalAlpha: 1,
+        strokeStyle: '#000',
+        fillStyle: '#000',
+        lineWidth: 1,
+        translate: () => undefined,
+        rotate: () => undefined,
+      } as unknown as CanvasRenderingContext2D;
+      Object.defineProperty(context, 'lineWidth', {
+        get: () => widths[widths.length - 1] ?? 1,
+        set: (value: number) => widths.push(value),
+      });
+
+      renderObjectsToContext(context, [
+        {
+          id: 'pressure-stroke',
+          type: 'stroke',
+          points: [
+            { x: 0, y: 0, width: 2 },
+            { x: 10, y: 10, width: 8 },
+            { x: 20, y: 0, width: 3 },
+          ],
+          color: '#ff0000',
+          size: 4,
+        },
+      ]);
+
+      expect(widths).toEqual([4, 8, 3]);
     });
 
     it('should export line objects', () => {

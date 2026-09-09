@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDrawingStore } from '@/store/drawingStore';
 
 describe('drawingStore', () => {
@@ -17,11 +17,19 @@ describe('drawingStore', () => {
       textFontSize: 24,
       brushColor: '#ffffff',
       brushOpacity: 1,
+      penSize: 4,
+      penColor: '#ffffff',
+      penOpacity: 1,
+      highlighterSize: 18,
+      highlighterColor: '#facc15',
+      highlighterOpacity: 0.35,
       isConnected: false,
       showToolbar: true,
       viewMode: 'draw',
       drawingFilled: false,
       autoDrawing: false,
+      inputMode: 'auto',
+      fingerAction: 'pan',
       history: [[]],
       historyIndex: 0,
       zoom: 1,
@@ -52,7 +60,88 @@ describe('drawingStore', () => {
     });
   });
 
+  describe('input preferences', () => {
+    it('defaults to auto input with finger pan and persists updates in the store', () => {
+      expect(useDrawingStore.getState().inputMode).toBe('auto');
+      expect(useDrawingStore.getState().fingerAction).toBe('pan');
+      vi.mocked(localStorage.setItem).mockClear();
+
+      useDrawingStore.getState().setInputMode('stylus-only');
+      useDrawingStore.getState().setFingerAction('ignore');
+
+      expect(useDrawingStore.getState().inputMode).toBe('stylus-only');
+      expect(useDrawingStore.getState().fingerAction).toBe('ignore');
+      expect(localStorage.setItem).toHaveBeenLastCalledWith(
+        'drawing-store',
+        expect.stringContaining('"inputMode":"stylus-only"'),
+      );
+      expect(localStorage.setItem).toHaveBeenLastCalledWith(
+        'drawing-store',
+        expect.stringContaining('"fingerAction":"ignore"'),
+      );
+    });
+  });
+
   describe('brush settings', () => {
+    it('migrates legacy active brush settings into the pen profile', async () => {
+      vi.mocked(localStorage.getItem).mockReturnValue(
+        JSON.stringify({
+          state: {
+            brushSize: 7,
+            brushColor: '#2563eb',
+            brushOpacity: 0.8,
+          },
+          version: 0,
+        }),
+      );
+
+      await useDrawingStore.persist.rehydrate();
+
+      expect(useDrawingStore.getState()).toMatchObject({
+        brushSize: 7,
+        brushColor: '#2563eb',
+        brushOpacity: 0.8,
+        penSize: 7,
+        penColor: '#2563eb',
+        penOpacity: 0.8,
+        highlighterSize: 18,
+        highlighterColor: '#facc15',
+        highlighterOpacity: 0.35,
+      });
+      vi.mocked(localStorage.getItem).mockReturnValue(null);
+    });
+
+    it('keeps pen and highlighter profiles independent when switching tools', () => {
+      const state = useDrawingStore.getState();
+
+      state.setBrushSize(6);
+      state.setBrushColor('#2563eb');
+      state.setBrushOpacity(1);
+      state.setTool('highlighter');
+
+      expect(useDrawingStore.getState()).toMatchObject({
+        currentTool: 'highlighter',
+        brushSize: 18,
+        brushColor: '#facc15',
+        brushOpacity: 0.35,
+      });
+
+      state.setBrushSize(24);
+      state.setBrushColor('#f97316');
+      state.setBrushOpacity(0.4);
+      state.setTool('pen');
+
+      expect(useDrawingStore.getState()).toMatchObject({
+        currentTool: 'pen',
+        brushSize: 6,
+        brushColor: '#2563eb',
+        brushOpacity: 1,
+        highlighterSize: 24,
+        highlighterColor: '#f97316',
+        highlighterOpacity: 0.4,
+      });
+    });
+
     it('should set brush size within bounds', () => {
       const { setBrushSize } = useDrawingStore.getState();
 

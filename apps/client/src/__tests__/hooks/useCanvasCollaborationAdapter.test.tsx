@@ -53,7 +53,7 @@ describe('useCanvasCollaborationAdapter', () => {
     appliedListener = undefined;
   });
 
-  function renderAdapter(projectRevision?: number) {
+  function renderAdapter(projectRevision?: number, hasPendingLocalOperations?: () => boolean) {
     return renderHook(() =>
       useCanvasCollaborationAdapter({
         on,
@@ -61,6 +61,7 @@ describe('useCanvasCollaborationAdapter', () => {
         currentProjectId: 'project-1',
         projectRevision,
         requestCanonicalHydration,
+        hasPendingLocalOperations,
         applyAuthoritativeProject,
         replaceHistory,
         requestFullRedraw,
@@ -131,6 +132,22 @@ describe('useCanvasCollaborationAdapter', () => {
     expect(applyAuthoritativeProject).toHaveBeenCalledOnce();
     expect(replaceHistory).not.toHaveBeenCalled();
     expect(requestFullRedraw).not.toHaveBeenCalled();
+  });
+
+  it('does not hydrate while a durable local operation remains queued', () => {
+    const hasPendingLocalOperations = vi.fn(() => true);
+    renderAdapter(undefined, hasPendingLocalOperations);
+
+    hydratedListener?.({
+      projectId: 'project-1',
+      revision: 3,
+      title: 'Remote board',
+      data: { objects: [remoteObject] },
+    });
+
+    expect(hasPendingLocalOperations).toHaveBeenCalled();
+    expect(applyAuthoritativeProject).not.toHaveBeenCalled();
+    expect(replaceHistory).not.toHaveBeenCalled();
   });
 
   it('ignores duplicate and older remote revisions', () => {
