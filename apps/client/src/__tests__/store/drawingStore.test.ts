@@ -30,6 +30,7 @@ describe('drawingStore', () => {
       autoDrawing: false,
       inputMode: 'auto',
       fingerAction: 'pan',
+      sessionStylusSuppression: false,
       history: [[]],
       historyIndex: 0,
       zoom: 1,
@@ -78,6 +79,17 @@ describe('drawingStore', () => {
       expect(localStorage.setItem).toHaveBeenLastCalledWith(
         'drawing-store',
         expect.stringContaining('"fingerAction":"ignore"'),
+      );
+    });
+
+    it('keeps stylus suppression session-only', () => {
+      vi.mocked(localStorage.setItem).mockClear();
+
+      useDrawingStore.getState().setSessionStylusSuppression(true);
+
+      expect(useDrawingStore.getState().sessionStylusSuppression).toBe(true);
+      expect(vi.mocked(localStorage.setItem).mock.calls.at(-1)?.[1]).not.toContain(
+        'sessionStylusSuppression',
       );
     });
   });

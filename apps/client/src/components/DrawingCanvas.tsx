@@ -156,6 +156,8 @@ export function DrawingCanvas() {
     projectRole,
     inputMode,
     fingerAction,
+    sessionStylusSuppression,
+    setSessionStylusSuppression,
   } = useDrawingStore();
 
   const [dragPreviewObject, setDragPreviewObject] = useState<DrawingObject | null>(null);
@@ -303,7 +305,10 @@ export function DrawingCanvas() {
   const lastCanvasPointerTypeRef = useRef<string | null>(null);
   const lastCanvasPointerPressureRef = useRef(0);
 
-  const inputPreferences = useMemo(() => ({ inputMode, fingerAction }), [inputMode, fingerAction]);
+  const inputPreferences = useMemo(
+    () => ({ inputMode, fingerAction, sessionStylusSuppression }),
+    [fingerAction, inputMode, sessionStylusSuppression],
+  );
   const pointerPolicyInput = useCallback(
     (event: Pick<PointerEvent, 'pointerType' | 'pointerId'>, touches = 1): PointerPolicyInput => ({
       pointerType: event.pointerType,
@@ -311,6 +316,19 @@ export function DrawingCanvas() {
       touches,
     }),
     [],
+  );
+  const observeCanvasPointerDown = useCallback(
+    (input: PointerPolicyInput) => {
+      observePointerDown(pointerPolicyRef.current, input);
+      if (
+        isStylusInput(input) &&
+        useDrawingStore.getState().inputMode === 'auto' &&
+        !useDrawingStore.getState().sessionStylusSuppression
+      ) {
+        setSessionStylusSuppression(true);
+      }
+    },
+    [setSessionStylusSuppression],
   );
 
   const workerRef = useRef<Worker | null>(null);
@@ -927,7 +945,7 @@ export function DrawingCanvas() {
   const startTransform = (event: React.PointerEvent<SVGElement>, handle: TransformHandle) => {
     if (!selectedObject || selectedObject.locked || projectRole === 'viewer') return;
     const input = pointerPolicyInput(event);
-    observePointerDown(pointerPolicyRef.current, input);
+    observeCanvasPointerDown(input);
     if (isTouchInput(event) && !canPointerDraw(inputPreferences, pointerPolicyRef.current, input)) {
       releasePointer(pointerPolicyRef.current, input);
       return;
@@ -2096,9 +2114,9 @@ export function DrawingCanvas() {
       lastCanvasPointerPressureRef.current = event.pressure;
       canvasPointerMovedRef.current = false;
       activeCanvasPointersRef.current.set(event.pointerId, event.pointerType);
-      observePointerDown(pointerPolicyRef.current, input);
+      observeCanvasPointerDown(input);
     },
-    [cancelActiveGesture, pointerPolicyInput],
+    [cancelActiveGesture, observeCanvasPointerDown, pointerPolicyInput],
   );
 
   const handleCanvasPointerUp = useCallback(
@@ -2277,7 +2295,7 @@ export function DrawingCanvas() {
           ? pointerPolicyInput(nativeEvent, touches)
           : { pointerType: 'mouse', touches };
         if (nativeEvent) {
-          if (active) observePointerDown(pointerPolicyRef.current, pointerInput);
+          if (active) observeCanvasPointerDown(pointerInput);
           else releasePointer(pointerPolicyRef.current, pointerInput);
         }
         const touchSuppressed =

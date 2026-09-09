@@ -34,6 +34,35 @@ describe('canvas input policy', () => {
     expect(shouldSuppressTouch(autoPan, state, touch)).toBe(true);
   });
 
+  it('honors the session toggle in auto mode without changing the saved mode', () => {
+    const state = createPointerPolicyState();
+    const touch = { pointerType: 'touch', pointerId: 1 };
+    observePointerDown(state, { pointerType: 'pen', pointerId: 2 });
+    releasePointer(state, { pointerType: 'pen', pointerId: 2 });
+
+    expect(canPointerDraw({ ...autoPan, sessionStylusSuppression: false }, state, touch)).toBe(
+      true,
+    );
+    expect(shouldSuppressTouch({ ...autoPan, sessionStylusSuppression: false }, state, touch)).toBe(
+      false,
+    );
+    expect(canPointerDraw({ ...autoPan, sessionStylusSuppression: true }, state, touch)).toBe(
+      false,
+    );
+  });
+
+  it('re-enables auto stylus suppression when a later pen is observed', () => {
+    const state = createPointerPolicyState();
+    const touch = { pointerType: 'touch' };
+    observePointerDown(state, { pointerType: 'pen', pointerId: 1 });
+    releasePointer(state, { pointerType: 'pen', pointerId: 1 });
+    state.stylusDetected = false;
+    expect(canPointerDraw(autoPan, state, touch)).toBe(true);
+
+    observePointerDown(state, { pointerType: 'pen', pointerId: 2 });
+    expect(canPointerDraw(autoPan, state, touch)).toBe(false);
+  });
+
   it('keeps touch drawing enabled in stylus-and-touch mode', () => {
     const state = createPointerPolicyState();
     const preferences = { inputMode: 'stylus-and-touch' as const, fingerAction: 'ignore' as const };

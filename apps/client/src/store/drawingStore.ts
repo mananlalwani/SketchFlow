@@ -80,6 +80,8 @@ export interface DrawingState {
   autoDrawing: boolean;
   inputMode: CanvasInputMode;
   fingerAction: FingerAction;
+  /** Session-only Auto mode state; intentionally excluded from persistence. */
+  sessionStylusSuppression: boolean;
   autoDrawingThresholds: {
     closureFactor: number; // 0-1 factor of diag for closure tolerance
     rectCornerMin: number; // integer corners threshold
@@ -166,6 +168,7 @@ export interface DrawingState {
   setAutoDrawing: (enabled: boolean) => void;
   setInputMode: (mode: CanvasInputMode) => void;
   setFingerAction: (action: FingerAction) => void;
+  setSessionStylusSuppression: (enabled: boolean) => void;
   setAutoDrawingThresholds: (t: Partial<DrawingState['autoDrawingThresholds']>) => void;
 
   updatePerformanceStats: (fps: number) => void;
@@ -269,6 +272,7 @@ export const useDrawingStore = create<DrawingState>()(
         autoDrawing: false,
         inputMode: 'auto',
         fingerAction: 'pan',
+        sessionStylusSuppression: false,
         autoDrawingThresholds: {
           closureFactor: 0.15,
           rectCornerMin: 2,
@@ -542,6 +546,8 @@ export const useDrawingStore = create<DrawingState>()(
         setAutoDrawing: (enabled) => set({ autoDrawing: enabled }),
         setInputMode: (inputMode) => set({ inputMode }),
         setFingerAction: (fingerAction) => set({ fingerAction }),
+        setSessionStylusSuppression: (sessionStylusSuppression) =>
+          set({ sessionStylusSuppression }),
         setAutoDrawingThresholds: (t) =>
           set((s) => ({ autoDrawingThresholds: { ...s.autoDrawingThresholds, ...t } })),
 

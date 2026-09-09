@@ -56,9 +56,18 @@ import { getEmergencyBackup } from '@/lib/emergencyBackup';
 import { useSocket } from '@/hooks/useSocket';
 
 export function InputSettingsSection({ mobile = false }: { mobile?: boolean }) {
-  const { inputMode, setInputMode, fingerAction, setFingerAction } = useDrawingStore();
+  const {
+    inputMode,
+    setInputMode,
+    fingerAction,
+    setFingerAction,
+    sessionStylusSuppression,
+    setSessionStylusSuppression,
+  } = useDrawingStore();
   const modeHelp = {
-    auto: 'Touch draws until a pen is observed, then fingers pan.',
+    auto: sessionStylusSuppression
+      ? 'Stylus mode is active for this session; fingers follow the behavior below.'
+      : 'Touch draws until a pen is observed or Stylus mode is enabled.',
     'stylus-only': 'Only a pen or mouse draws; finger input follows the setting below.',
     'stylus-and-touch': 'Pen, mouse, and touch can all draw on the canvas.',
   } as const;
@@ -93,6 +102,26 @@ export function InputSettingsSection({ mobile = false }: { mobile?: boolean }) {
       <p className="mt-1.5 text-xs leading-5 text-stone-500 dark:text-stone-400">
         {modeHelp[inputMode]}
       </p>
+      {inputMode === 'auto' && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white/70 p-2.5 dark:border-white/[0.08] dark:bg-white/[0.025]">
+          <div>
+            <p className="text-sm text-stone-700 dark:text-stone-200">Stylus mode</p>
+            <p className="text-xs leading-5 text-stone-500 dark:text-stone-400">
+              {sessionStylusSuppression ? 'Fingers will not draw.' : 'Fingers can draw.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant={sessionStylusSuppression ? 'default' : 'secondary'}
+            size="sm"
+            aria-label="Stylus mode"
+            aria-pressed={sessionStylusSuppression}
+            onClick={() => setSessionStylusSuppression(!sessionStylusSuppression)}
+          >
+            {sessionStylusSuppression ? 'On' : 'Off'}
+          </Button>
+        </div>
+      )}
       <div className="mt-3 space-y-1.5">
         <span className="text-sm text-stone-700 dark:text-stone-200">Finger behavior</span>
         <div className="grid grid-cols-2 gap-2">

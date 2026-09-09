@@ -15,6 +15,8 @@ export interface PointerPolicyInput {
 export interface CanvasInputPreferences {
   inputMode: CanvasInputMode;
   fingerAction: FingerAction;
+  /** Session-only override used by Auto mode after a pen is observed. */
+  sessionStylusSuppression?: boolean;
 }
 
 export function createPointerPolicyState(): PointerPolicyState {
@@ -55,6 +57,15 @@ function isMultiTouch(input: PointerPolicyInput): boolean {
   return isTouchInput(input) && (input.touches ?? 1) > 1;
 }
 
+function stylusSuppressionEnabled(
+  preferences: CanvasInputPreferences,
+  state: PointerPolicyState,
+): boolean {
+  if (preferences.inputMode === 'stylus-only') return true;
+  if (preferences.inputMode === 'stylus-and-touch') return false;
+  return preferences.sessionStylusSuppression ?? state.stylusDetected;
+}
+
 /** Returns true when a touch contact must not create or manipulate canvas content. */
 export function shouldSuppressTouch(
   preferences: CanvasInputPreferences,
@@ -63,8 +74,7 @@ export function shouldSuppressTouch(
 ): boolean {
   if (!isTouchInput(input)) return false;
   if (hasActivePen(state) || isMultiTouch(input)) return true;
-  if (preferences.inputMode === 'stylus-and-touch') return false;
-  return preferences.inputMode === 'stylus-only' || state.stylusDetected;
+  return stylusSuppressionEnabled(preferences, state);
 }
 
 export function canPointerDraw(
@@ -75,9 +85,7 @@ export function canPointerDraw(
   if (isMultiTouch(input) || (hasActivePen(state) && isTouchInput(input))) return false;
   if (input.pointerType === 'mouse' || isStylusInput(input)) return true;
   if (!isTouchInput(input)) return false;
-  if (preferences.inputMode === 'stylus-and-touch') return true;
-  if (preferences.inputMode === 'auto' && !state.stylusDetected) return true;
-  return false;
+  return !stylusSuppressionEnabled(preferences, state);
 }
 
 export function canPointerPan(
