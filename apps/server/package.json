@@ -2,6 +2,11 @@
   "name": "@sketchflow/server",
   "version": "1.0.0",
   "type": "module",
+  "files": [
+    "dist",
+    "prisma",
+    "prisma.config.ts"
+  ],
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=512' tsx watch -r dotenv/config src/index.ts",
     "build": "tsc",

@@ -45,28 +45,30 @@ RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
 # Build the server. Cloudflare Pages builds and serves the client separately.
 RUN pnpm --filter @sketchflow/server build
 
-# Deploy server (isolated production build)
-# This installs prod dependencies into /app/deploy
-RUN pnpm --filter @sketchflow/server --prod deploy --legacy /app/deploy
+# Deploy server (isolated production build). Keep the destination outside the
+# workspace: the repository has a deploy/ directory for VPS unit files, and
+# pnpm requires its destination to be empty.
+ENV SERVER_DEPLOY=/tmp/sketchflow-server-deploy
+RUN pnpm --filter @sketchflow/server --prod deploy --legacy "$SERVER_DEPLOY"
 
 # pnpm records the wall-clock time of its production prune in this otherwise
 # identical metadata file. It is not read at runtime, but would make the entire
 # node_modules image layer receive a new digest on every code-only build.
-RUN sed -i '/^prunedAt: /d' /app/deploy/node_modules/.modules.yaml
+RUN sed -i '/^prunedAt: /d' "$SERVER_DEPLOY/node_modules/.modules.yaml"
 
 # pnpm deploy can include dependency source maps and package env templates. Neither is
 # needed at runtime and retaining either expands the public image surface.
-RUN find /app/deploy -type f \( -name '*.map' -o -name '.env' -o -name '.env.*' \) -delete
+RUN find "$SERVER_DEPLOY" -type f \( -name '*.map' -o -name '.env' -o -name '.env.*' \) -delete
 
 # pnpm deploy might not copy ignored build artifacts like dist, so we copy them explicitly.
-RUN cp -r apps/server/dist /app/deploy/dist
-RUN cp -r apps/server/prisma /app/deploy/prisma
-RUN cp apps/server/prisma.config.ts /app/deploy/prisma.config.ts
+RUN cp -r apps/server/dist "$SERVER_DEPLOY/dist"
+RUN cp -r apps/server/prisma "$SERVER_DEPLOY/prisma"
+RUN cp apps/server/prisma.config.ts "$SERVER_DEPLOY/prisma.config.ts"
 
 # Generate Prisma Data Proxy/Client for the production deploy
-WORKDIR /app/deploy
+WORKDIR $SERVER_DEPLOY
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/sketchflow_build \
-    pnpm db:generate
+    node_modules/.bin/prisma generate
 
 # --- Production Stage ---
 FROM --platform=$TARGETPLATFORM node:24-alpine AS runner
@@ -80,11 +82,11 @@ RUN addgroup --system --gid 1001 nodejs && \
 # Keep production dependencies independent from application code. A normal
 # server edit now replaces only `dist`; Docker reuses the much larger
 # node_modules layer already present on the VPS.
-COPY --from=builder --chown=sketchflow:nodejs /app/deploy/node_modules /app/node_modules
-COPY --from=builder --chown=sketchflow:nodejs /app/deploy/package.json /app/package.json
-COPY --from=builder --chown=sketchflow:nodejs /app/deploy/dist /app/dist
-COPY --from=builder --chown=sketchflow:nodejs /app/deploy/prisma /app/prisma
-COPY --from=builder --chown=sketchflow:nodejs /app/deploy/prisma.config.ts /app/prisma.config.ts
+COPY --from=builder --chown=sketchflow:nodejs /tmp/sketchflow-server-deploy/node_modules /app/node_modules
+COPY --from=builder --chown=sketchflow:nodejs /tmp/sketchflow-server-deploy/package.json /app/package.json
+COPY --from=builder --chown=sketchflow:nodejs /tmp/sketchflow-server-deploy/dist /app/dist
+COPY --from=builder --chown=sketchflow:nodejs /tmp/sketchflow-server-deploy/prisma /app/prisma
+COPY --from=builder --chown=sketchflow:nodejs /tmp/sketchflow-server-deploy/prisma.config.ts /app/prisma.config.ts
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
