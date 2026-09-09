@@ -834,8 +834,9 @@ export class SketchFlowServer {
         ) => {
           if (!commit || commit.protocolVersion !== 1) return;
 
+          const callback = z.function().safeParse(acknowledge);
           const reply = (result: CollaborationCommitResult) => {
-            if (typeof acknowledge === 'function') acknowledge(result);
+            if (callback.success) acknowledge(result);
           };
           try {
             const room = await getEditableRoom();
