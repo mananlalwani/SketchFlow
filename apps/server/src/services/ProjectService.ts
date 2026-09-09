@@ -620,7 +620,7 @@ export class ProjectService {
       }
     } catch (e) {
       this.log.error('Permission check failed', e);
-      return false;
+      throw e;
     }
   }
 

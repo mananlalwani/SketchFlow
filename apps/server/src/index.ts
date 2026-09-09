@@ -91,6 +91,11 @@ import type {
   SocketData,
 } from './types/socket.js';
 
+interface PresenceSocketData extends SocketData {
+  cursor?: CursorData;
+  selection?: SelectionPresence;
+}
+
 export class SketchFlowServer {
   private readonly roomEvictionHandlers = new Map<string, () => void>();
   private app = express();
@@ -99,7 +104,7 @@ export class SketchFlowServer {
     ClientToServerEvents,
     ServerToClientEvents,
     Record<string, never>,
-    SocketData
+    PresenceSocketData
   >;
   private connectionRegistry = new ConnectionRegistry(200);
   private projectService = new ProjectService();
@@ -122,7 +127,7 @@ export class SketchFlowServer {
       ClientToServerEvents,
       ServerToClientEvents,
       Record<string, never>,
-      SocketData
+      PresenceSocketData
     >(this.server, {
       cors: {
         origin: corsOrigins,
@@ -732,24 +737,6 @@ export class SketchFlowServer {
       }
     });
 
-    // Track active cursors per room
-    const roomCursors = new Map<
-      string,
-      Map<
-        string,
-        {
-          clientId: string;
-          userId: string;
-          username: string;
-          x: number;
-          y: number;
-          color: string;
-          timestamp: number;
-        }
-      >
-    >();
-    const roomSelections = new Map<string, Map<string, SelectionPresence>>();
-
     // Generate color for user
     const getUserColor = (userId: string): string => {
       const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
@@ -768,14 +755,10 @@ export class SketchFlowServer {
         roomGeneration++;
         if (!currentRoom) return;
         socket.leave(currentRoom);
-        if (roomCursors.has(currentRoom)) {
-          roomCursors.get(currentRoom)?.delete(clientId);
-          this.io.to(currentRoom).emit('cursor:leave', clientId);
-        }
-        if (roomSelections.has(currentRoom)) {
-          roomSelections.get(currentRoom)?.delete(clientId);
-          this.io.to(currentRoom).emit('selection:leave', clientId);
-        }
+        delete socket.data.cursor;
+        this.io.to(currentRoom).emit('cursor:leave', clientId);
+        delete socket.data.selection;
+        this.io.to(currentRoom).emit('selection:leave', clientId);
         currentRoom = null;
       });
       const sessionExpiryTimer = socket.data.sessionExpiresAt
@@ -851,13 +834,16 @@ export class SketchFlowServer {
         ) => {
           if (!commit || commit.protocolVersion !== 1) return;
 
-          const room = await getEditableRoom();
-          if (!room || room !== commit.projectId || !currentUserId) {
-            acknowledge({ status: 'forbidden', operationId: commit.operationId });
-            return;
-          }
-
+          const reply = (result: CollaborationCommitResult) => {
+            if (typeof acknowledge === 'function') acknowledge(result);
+          };
           try {
+            const room = await getEditableRoom();
+            if (!room || room !== commit.projectId || !currentUserId) {
+              reply({ status: 'forbidden', operationId: commit.operationId });
+              return;
+            }
+
             const result = await this.projectService.commitCollaborationOperation({
               projectId: room,
               userId: currentUserId,
@@ -867,7 +853,6 @@ export class SketchFlowServer {
               data: commit.data,
               title: commit.title,
             });
-            acknowledge(result);
 
             if (result.status === 'applied') {
               socket.to(room).emit('collaboration:applied', {
@@ -879,9 +864,10 @@ export class SketchFlowServer {
                 title: result.title,
               });
             }
+            reply(result);
           } catch (error) {
             logger.error(`Canonical collaboration commit failed for ${clientId}`, error);
-            acknowledge({
+            reply({
               status: 'unavailable',
               operationId: commit.operationId,
             });
@@ -896,69 +882,74 @@ export class SketchFlowServer {
           logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
           return;
         }
-        const canView = currentUserId
-          ? await this.projectService.checkPermission(projectId, currentUserId, 'view')
-          : false;
-        if (!canView || joinGeneration !== roomGeneration) {
-          logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
-          return;
-        }
-        // Hydrate before joining. The read performs a second authorization check,
-        // closing the window where access could be revoked after canView resolved.
-        const canonicalProject = currentUserId
-          ? await this.projectService.get(projectId, currentUserId)
-          : null;
-        if (!canonicalProject || joinGeneration !== roomGeneration) return;
-
-        // Leave previous room if any
-        if (currentRoom) {
-          socket.leave(currentRoom);
-          // Remove cursor from previous room
-          if (roomCursors.has(currentRoom)) {
-            roomCursors.get(currentRoom)?.delete(clientId);
-            this.io.to(currentRoom).emit('cursor:leave', clientId);
+        try {
+          const canView = currentUserId
+            ? await this.projectService.checkPermission(projectId, currentUserId, 'view')
+            : false;
+          if (!canView || joinGeneration !== roomGeneration) {
+            logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
+            return;
           }
-          if (roomSelections.has(currentRoom)) {
-            roomSelections.get(currentRoom)?.delete(clientId);
+          // Hydrate before joining. The read performs a second authorization check,
+          // closing the window where access could be revoked after canView resolved.
+          let canonicalProject = currentUserId
+            ? await this.projectService.get(projectId, currentUserId)
+            : null;
+          if (!canonicalProject || joinGeneration !== roomGeneration) return;
+
+          // Leave previous room if any
+          if (currentRoom) {
+            socket.leave(currentRoom);
+            // Remove cursor from previous room
+            delete socket.data.cursor;
+            this.io.to(currentRoom).emit('cursor:leave', clientId);
+            delete socket.data.selection;
             this.io.to(currentRoom).emit('selection:leave', clientId);
           }
+
+          // Join new room
+          currentRoom = projectId;
+          await socket.join(projectId);
+          // Once subscribed, reread so commits broadcast during the first read
+          // cannot fall between the snapshot and room membership.
+          if (joinGeneration !== roomGeneration || !socket.connected) return;
+          canonicalProject = currentUserId
+            ? await this.projectService.get(projectId, currentUserId)
+            : null;
+          if (joinGeneration !== roomGeneration || !socket.connected) return;
+          if (!canonicalProject) {
+            this.roomEvictionHandlers.get(clientId)?.();
+            return;
+          }
+
+          // New clients hydrate from the one canonical database authority.
+          socket.emit('collaboration:hydrated', {
+            projectId,
+            revision: canonicalProject.revision ?? 1,
+            data: canonicalProject.data,
+            title: canonicalProject.title,
+          });
+
+          // Log room join for debugging
+          logger.debug(`Client ${clientId} joined room ${projectId}`);
+
+          // Socket data is fetched through the adapter, including remote instances.
+          const peers = await this.io.in(projectId).fetchSockets();
+          if (joinGeneration !== roomGeneration || !socket.connected) return;
+          socket.emit(
+            'cursors:all',
+            peers.flatMap((peer) => (peer.data.cursor ? [peer.data.cursor] : [])),
+          );
+          socket.emit(
+            'selections:all',
+            peers.flatMap((peer) => (peer.data.selection ? [peer.data.selection] : [])),
+          );
+
+          logger.info(`Client ${clientId} joined room: ${projectId}`);
+        } catch (error) {
+          logger.error(`Room join failed for ${clientId}`, error);
+          if (joinGeneration === roomGeneration) this.roomEvictionHandlers.get(clientId)?.();
         }
-
-        // Join new room
-        currentRoom = projectId;
-        socket.join(projectId);
-
-        // New clients hydrate from the one canonical database authority.
-        socket.emit('collaboration:hydrated', {
-          projectId,
-          revision: canonicalProject.revision ?? 1,
-          data: canonicalProject.data,
-          title: canonicalProject.title,
-        });
-
-        // Log room join for debugging
-        logger.debug(`Client ${clientId} joined room ${projectId}`);
-
-        // Initialize room cursor map if needed
-        if (!roomCursors.has(projectId)) {
-          roomCursors.set(projectId, new Map());
-        }
-        if (!roomSelections.has(projectId)) {
-          roomSelections.set(projectId, new Map());
-        }
-
-        // Send all existing cursors in room to new joiner
-        const cursorsInRoom = roomCursors.get(projectId);
-        if (cursorsInRoom) {
-          const allCursors = Array.from(cursorsInRoom.values());
-          socket.emit('cursors:all', allCursors);
-        }
-        const selectionsInRoom = roomSelections.get(projectId);
-        if (selectionsInRoom) {
-          socket.emit('selections:all', Array.from(selectionsInRoom.values()));
-        }
-
-        logger.info(`Client ${clientId} joined room: ${projectId}`);
       });
 
       // Handle room leave
@@ -967,14 +958,10 @@ export class SketchFlowServer {
         if (currentRoom && currentUserId) {
           socket.leave(currentRoom);
           // Remove cursor
-          if (roomCursors.has(currentRoom)) {
-            roomCursors.get(currentRoom)?.delete(clientId);
-            this.io.to(currentRoom).emit('cursor:leave', clientId);
-          }
-          if (roomSelections.has(currentRoom)) {
-            roomSelections.get(currentRoom)?.delete(clientId);
-            this.io.to(currentRoom).emit('selection:leave', clientId);
-          }
+          delete socket.data.cursor;
+          this.io.to(currentRoom).emit('cursor:leave', clientId);
+          delete socket.data.selection;
+          this.io.to(currentRoom).emit('selection:leave', clientId);
           currentRoom = null;
         }
       });
@@ -998,18 +985,7 @@ export class SketchFlowServer {
 
         // Update cursor in room
         const normalizedCursor: CursorData = { ...cursor, clientId };
-        const roomCursorMap = roomCursors.get(currentRoom);
-        if (roomCursorMap) {
-          roomCursorMap.set(clientId, {
-            clientId,
-            userId: normalizedCursor.userId,
-            username: normalizedCursor.username,
-            x: normalizedCursor.x,
-            y: normalizedCursor.y,
-            color: normalizedCursor.color,
-            timestamp: Date.now(),
-          });
-        }
+        socket.data.cursor = { ...normalizedCursor, timestamp: Date.now() };
 
         // Broadcast to others in room
         socket.to(currentRoom).emit('cursor:move', normalizedCursor);
@@ -1023,10 +999,8 @@ export class SketchFlowServer {
         const parsedSelection = selectionSchema.safeParse(selection);
         if (!parsedSelection.success) return;
         selection = parsedSelection.data;
-        const selections = roomSelections.get(currentRoom);
-        if (!selections) return;
         if (selection.objectIds.length === 0) {
-          selections.delete(clientId);
+          delete socket.data.selection;
           socket.to(currentRoom).emit('selection:leave', clientId);
           return;
         }
@@ -1038,26 +1012,23 @@ export class SketchFlowServer {
           color: getUserColor(currentUserId),
           timestamp: Date.now(),
         };
-        selections.set(clientId, normalizedSelection);
+        socket.data.selection = normalizedSelection;
         socket.to(currentRoom).emit('selection:change', normalizedSelection);
       });
 
       // Handle disconnection
       socket.on('disconnect', (reason) => {
+        roomGeneration++;
         this.roomEvictionHandlers.delete(clientId);
         if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
         this.connectionRegistry.remove(clientId);
 
         // Clean up cursor from current room
         if (currentRoom && currentUserId) {
-          if (roomCursors.has(currentRoom)) {
-            roomCursors.get(currentRoom)?.delete(clientId);
-            this.io.to(currentRoom).emit('cursor:leave', clientId);
-          }
-          if (roomSelections.has(currentRoom)) {
-            roomSelections.get(currentRoom)?.delete(clientId);
-            this.io.to(currentRoom).emit('selection:leave', clientId);
-          }
+          delete socket.data.cursor;
+          this.io.to(currentRoom).emit('cursor:leave', clientId);
+          delete socket.data.selection;
+          this.io.to(currentRoom).emit('selection:leave', clientId);
         }
 
         // Broadcast updated connection count to all remaining clients

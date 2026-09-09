@@ -114,8 +114,9 @@ describe('Socket.IO boundary', () => {
 
   afterAll(async () => {
     clients.forEach((client) => client.disconnect());
+    const disconnectsBeforeStop = mocks.disconnectPrisma.mock.calls.length;
     await Promise.all([sketchServer.stop(), sketchServer.stop()]);
-    expect(mocks.disconnectPrisma).toHaveBeenCalledTimes(1);
+    expect(mocks.disconnectPrisma).toHaveBeenCalledTimes(disconnectsBeforeStop + 1);
   });
 
   function connect(token?: string, endpoint = url, shareToken?: string): Promise<Socket> {
@@ -230,6 +231,80 @@ describe('Socket.IO boundary', () => {
     await expect(peerEvent).resolves.toMatchObject({ projectId, revision: 4 });
   });
 
+  it('reconciles a snapshot changed while the room join was in flight', async () => {
+    const projectId = 'ckz1h2abc0088qwerty123456';
+    mocks.checkPermission.mockResolvedValue(true);
+    const client = await connect('valid-token');
+    mocks.get.mockResolvedValueOnce({
+      id: projectId,
+      title: 'Old',
+      data: { objects: [] },
+      revision: 1,
+    });
+    mocks.get.mockResolvedValue({
+      id: projectId,
+      title: 'New',
+      data: { objects: [] },
+      revision: 2,
+    });
+    const hydrated = new Promise<unknown>((resolve) =>
+      client.once('collaboration:hydrated', resolve),
+    );
+    client.emit('room:join', projectId);
+    await expect(hydrated).resolves.toMatchObject({ revision: 2, title: 'New' });
+  });
+
+  it('broadcasts a persisted commit even when the sender omits its acknowledgement', async () => {
+    const projectId = 'ckz1h2abc0087qwerty123456';
+    mocks.checkPermission.mockResolvedValue(true);
+    const sender = await connect('valid-token');
+    const peer = await connect('valid-token');
+    for (const client of [sender, peer]) {
+      const hydrated = new Promise((resolve) => client.once('collaboration:hydrated', resolve));
+      client.emit('room:join', projectId);
+      await hydrated;
+    }
+    const received = vi.fn();
+    peer.on('collaboration:applied', received);
+    sender.emit('collaboration:commit', {
+      protocolVersion: 1,
+      projectId,
+      operationId: 'operation_no_ack',
+      expectedRevision: 1,
+      kind: 'replace-project',
+      data: { objects: [] },
+    });
+    await vi.waitFor(() =>
+      expect(received).toHaveBeenCalledWith(expect.objectContaining({ revision: 2 })),
+    );
+  });
+
+  it('reports unavailable when the commit permission lookup fails', async () => {
+    const projectId = 'ckz1h2abc0086qwerty123456';
+    mocks.checkPermission.mockResolvedValue(true);
+    const client = await connect('valid-token');
+    const hydrated = new Promise((resolve) => client.once('collaboration:hydrated', resolve));
+    client.emit('room:join', projectId);
+    await hydrated;
+    mocks.checkPermission.mockRejectedValueOnce(new Error('Database unavailable'));
+    const ack = vi.fn();
+    client.emit(
+      'collaboration:commit',
+      {
+        protocolVersion: 1,
+        projectId,
+        operationId: 'operation_db_down',
+        expectedRevision: 1,
+        kind: 'replace-project',
+        data: { objects: [] },
+      },
+      ack,
+    );
+    await vi.waitFor(() =>
+      expect(ack).toHaveBeenCalledWith({ status: 'unavailable', operationId: 'operation_db_down' }),
+    );
+  });
+
   it('does not join a room when view permission is denied', async () => {
     mocks.checkPermission.mockResolvedValue(false);
     const client = await connect('valid-token');
@@ -258,6 +333,50 @@ describe('Socket.IO boundary', () => {
     expect(
       sketchServer.getSocketServer().sockets.sockets.get(client.id)?.rooms.has(projectId),
     ).toBe(false);
+  });
+
+  it('leaves the room when access disappears during the reconciliation read', async () => {
+    const projectId = 'ckz1h2abc0066qwerty123456';
+    mocks.checkPermission.mockResolvedValue(true);
+    mocks.get.mockResolvedValueOnce({
+      id: projectId,
+      title: 'Board',
+      data: { objects: [] },
+      revision: 1,
+    });
+    mocks.get.mockResolvedValueOnce(null);
+    const client = await connect('valid-token');
+    const hydrated = vi.fn();
+    client.on('collaboration:hydrated', hydrated);
+    client.emit('room:join', projectId);
+    await vi.waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
+    expect(
+      sketchServer.getSocketServer().sockets.sockets.get(client.id)?.rooms.has(projectId),
+    ).toBe(false);
+    expect(hydrated).not.toHaveBeenCalled();
+  });
+
+  it('does not hydrate a room left while reconciliation is pending', async () => {
+    const projectId = 'ckz1h2abc0067qwerty123456';
+    const snapshot = { id: projectId, title: 'Board', data: { objects: [] }, revision: 1 };
+    const reconciliation = deferred<typeof snapshot>();
+    mocks.checkPermission.mockResolvedValue(true);
+    mocks.get.mockResolvedValueOnce(snapshot).mockImplementationOnce(() => reconciliation.promise);
+    const client = await connect('valid-token');
+    const hydrated = vi.fn();
+    client.on('collaboration:hydrated', hydrated);
+    client.emit('room:join', projectId);
+    await vi.waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
+    const serverSocket = sketchServer.getSocketServer().sockets.sockets.get(client.id)!;
+    const left = new Promise((resolve) => serverSocket.once('room:leave', resolve));
+    client.emit('room:leave');
+    await left;
+    reconciliation.resolve(snapshot);
+    // A second join acts as a transport barrier after the abandoned read resumes.
+    const nextHydration = new Promise((resolve) => client.once('collaboration:hydrated', resolve));
+    client.emit('room:join', projectId);
+    await nextHydration;
+    expect(hydrated).toHaveBeenCalledTimes(1);
   });
 
   it('evicts a revoked collaborator from the realtime project room', async () => {
@@ -745,7 +864,7 @@ describe('Socket.IO boundary', () => {
   });
 
   if (process.env.REDIS_TEST_URL) {
-    it('delivers a room mutation across Redis-backed server instances', async () => {
+    it('delivers mutations and hydrates existing presence across Redis-backed server instances', async () => {
       mocks.checkPermission.mockResolvedValue(true);
       const otherServer = new SketchFlowServer();
       const otherHttp = otherServer.getHttpServer();
@@ -783,6 +902,40 @@ describe('Socket.IO boundary', () => {
           () => {},
         );
         await expect(received).resolves.toMatchObject({ projectId, revision: 2 });
+        const cursor = { userId: 'user-1', username: 'User', x: 42, y: 7, color: '#000000' };
+        const selection = {
+          userId: 'user-1',
+          username: 'User',
+          objectIds: ['shape-1'],
+          color: '#000000',
+        };
+        const cursorMoved = new Promise((resolve) => second.once('cursor:move', resolve));
+        const selectionChanged = new Promise((resolve) => second.once('selection:change', resolve));
+        first.emit('cursor:move', cursor);
+        first.emit('selection:change', selection);
+        await Promise.all([cursorMoved, selectionChanged]);
+        const newcomer = await connect('valid-token', otherUrl);
+        const cursors = new Promise((resolve) => newcomer.once('cursors:all', resolve));
+        const selections = new Promise((resolve) => newcomer.once('selections:all', resolve));
+        await joinRoom(newcomer);
+        await expect(cursors).resolves.toEqual(
+          expect.arrayContaining([expect.objectContaining({ clientId: first.id, x: 42 })]),
+        );
+        await expect(selections).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ clientId: first.id, objectIds: ['shape-1'] }),
+          ]),
+        );
+        const left = new Promise((resolve) => newcomer.once('cursor:leave', resolve));
+        first.emit('room:leave');
+        await left;
+        const afterLeaveCursors = new Promise((resolve) => newcomer.once('cursors:all', resolve));
+        const afterLeaveSelections = new Promise((resolve) =>
+          newcomer.once('selections:all', resolve),
+        );
+        await joinRoom(newcomer);
+        await expect(afterLeaveCursors).resolves.toEqual([]);
+        await expect(afterLeaveSelections).resolves.toEqual([]);
       } finally {
         await otherServer.stop();
       }

@@ -53,6 +53,13 @@ describe('ProjectService', () => {
     vi.clearAllMocks();
   });
 
+  it('preserves database failures from permission checks', async () => {
+    vi.mocked(prisma.project.findUnique).mockRejectedValueOnce(new Error('Database unavailable'));
+    await expect(service.checkPermission('proj-1', 'owner', 'edit')).rejects.toThrow(
+      'Database unavailable',
+    );
+  });
+
   describe('permission matrix', () => {
     const project = {
       id: 'proj-1',
