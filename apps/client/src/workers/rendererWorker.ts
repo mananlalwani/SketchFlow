@@ -1,81 +1,22 @@
 /// <reference lib="webworker" />
 
-import { objectIntersectsViewport } from '../lib/viewportCulling';
 import { getMaxStrokeWidth } from '../lib/canvasRendererCommands';
 import { drawWorkerRendererObject, drawWorkerStrokePath } from '../lib/canvasRendererWorkerAdapter';
+import {
+  adjustColorForTheme as mapColorForTheme,
+  hexToRgb,
+  getLuminance,
+  isBackgroundColor,
+} from '../lib/rendererWorkerTheme';
+import type { Drawing, Stroke, PathContext, ParabolaDrawing } from './rendererWorkerTypes';
+import { createRendererRuntime, type RendererRuntime } from './rendererWorkerRuntime';
+import { createWorkerBlit } from './rendererWorkerBlit';
+import { handleRendererMessage } from './rendererWorkerMessages';
 
 export {};
 
 declare const self: DedicatedWorkerGlobalScope;
-/*
-  OffscreenCanvas renderer worker. Handles drawing and compositing off the main thread.
-*/
 
-type InitMessage = {
-  type: 'init';
-  canvas: OffscreenCanvas;
-  worldWidth: number;
-  worldHeight: number;
-};
-
-type Stroke = {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-  color: string;
-  size: number;
-  alpha?: number;
-  groupId?: string;
-  pressure?: number;
-};
-
-type StrokeMessage = {
-  type: 'stroke';
-  data: Stroke;
-};
-type StrokesMessage = { type: 'strokes'; data: Stroke[] };
-
-interface DrawingProperties {
-  pointCount?: number;
-  rotation?: number;
-  hidden?: boolean;
-}
-
-type Drawing = {
-  id: string;
-  type:
-    | 'stroke'
-    | 'line'
-    | 'rectangle'
-    | 'ellipse'
-    | 'circle'
-    | 'triangle'
-    | 'parabola'
-    | 'text'
-    | 'image'
-    | 'arrow'
-    | 'star';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  size: number;
-  alpha: number;
-  filled?: boolean;
-  orientation?: 'up' | 'down' | 'left' | 'right';
-  points?: { x: number; y: number; width?: number }[]; // Strokes, custom triangle vertices, arrows
-  text?: string;
-  fontSize?: number;
-  imageData?: string; // Base64 data URL for images
-  properties?: DrawingProperties;
-};
-
-type PathContext = Pick<OffscreenCanvasRenderingContext2D, 'moveTo' | 'lineTo'>;
-type ParabolaDrawing = Pick<Drawing, 'x' | 'y' | 'width' | 'height' | 'orientation' | 'points'>;
-
-/** Trace an authored parabola path when present, otherwise the legacy preset curve. */
 function traceParabolaPath(context: PathContext, drawing: ParabolaDrawing) {
   if (drawing.points && drawing.points.length > 1) {
     context.moveTo(drawing.points[0].x, drawing.points[0].y);
@@ -111,263 +52,35 @@ function traceParabolaPath(context: PathContext, drawing: ParabolaDrawing) {
   }
 }
 
-// Cache for loaded image bitmaps
-const imageBitmapCache = new Map<string, ImageBitmap>();
+const rt = createRendererRuntime() as RendererRuntime;
 
-async function loadImageBitmap(dataUrl: string): Promise<ImageBitmap | null> {
-  if (imageBitmapCache.has(dataUrl)) {
-    return imageBitmapCache.get(dataUrl)!;
+rt.postMessage = (msg) => {
+  self.postMessage(msg);
+};
+rt.hexToRgb = hexToRgb;
+rt.getLuminance = getLuminance;
+rt.isBackgroundColor = isBackgroundColor;
+rt.getMaxStrokeWidth = getMaxStrokeWidth;
+rt.drawWorkerStrokePath = drawWorkerStrokePath;
+rt.drawWorkerRendererObject = drawWorkerRendererObject;
+rt.traceParabolaPath = traceParabolaPath;
+
+rt.loadImageBitmap = async (dataUrl: string) => {
+  if (rt.imageBitmapCache.has(dataUrl)) {
+    return rt.imageBitmapCache.get(dataUrl)!;
   }
   try {
     const response = await fetch(dataUrl);
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
-    imageBitmapCache.set(dataUrl, bitmap);
+    rt.imageBitmapCache.set(dataUrl, bitmap);
     return bitmap;
   } catch {
     return null;
   }
-}
-
-type DrawingMessage = {
-  type: 'shape';
-  data: Drawing;
-};
-type ClearDrawingMessage = {
-  type: 'clear-shape';
-  data: Drawing;
 };
 
-type ViewportMessage = {
-  type: 'viewport';
-  zoom: number;
-  viewX: number;
-  viewY: number;
-  canvasWidth: number;
-  canvasHeight: number;
-  dpr: number;
-  sequence?: number;
-};
-
-type ClearMessage = { type: 'clear' };
-type ClearRegionMessage = {
-  type: 'clear-region';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-type RemoveGroupMessage = { type: 'remove-group'; groupId: string };
-type SnapshotMessage = { type: 'snapshot' };
-type SnapshotImageMessage = {
-  type: 'snapshot-image';
-  dataUrl: string;
-  worldWidth?: number;
-  worldHeight?: number;
-};
-type ThemeMessage = { type: 'theme'; bgColor: string };
-type LoadObjectsMessage = { type: 'load-objects'; data: Drawing[] };
-type LoadSceneMessage = {
-  type: 'load-scene';
-  requestId: string;
-  drawings: Drawing[];
-  strokes: Stroke[];
-};
-
-type Inbound =
-  | InitMessage
-  | StrokeMessage
-  | StrokesMessage
-  | DrawingMessage
-  | ViewportMessage
-  | ClearMessage
-  | ClearRegionMessage
-  | RemoveGroupMessage
-  | ClearDrawingMessage
-  | SnapshotMessage
-  | SnapshotImageMessage
-  | ThemeMessage
-  | LoadObjectsMessage
-  | LoadSceneMessage;
-
-type Outbound =
-  | { type: 'snapshot'; dataUrl: string }
-  | { type: 'ready' }
-  | { type: 'init-error'; reason: string }
-  | { type: 'scene-applied'; requestId: string; objectCount: number; ingestionMs: number }
-  | {
-      type: 'frame-rendered';
-      requestId?: string;
-      viewportSequence?: number;
-      renderMs: number;
-      retainedObjectCount: number;
-      visibleObjectCount: number;
-      culledObjectCount: number;
-    };
-
-let screenCtx: OffscreenCanvasRenderingContext2D | null = null;
-let world: OffscreenCanvas | null = null;
-let worldCtx: OffscreenCanvasRenderingContext2D | null = null;
-let worldW = 51200; // 20x 1440p width (2560 × 20)
-let worldH = 28800; // 20x 1440p height (1440 × 20)
-
-// Retained vector model for precise zoom rendering
-const retainedDrawings: Drawing[] = [];
-
-// Consolidated stroke paths for efficient rendering
-interface ConsolidatedPath {
-  groupId: string;
-  color: string;
-  size: number;
-  alpha: number;
-  points: { x: number; y: number; width?: number }[];
-  maxWidth: number;
-  bounds: { minX: number; minY: number; maxX: number; maxY: number };
-}
-const consolidatedPaths: Map<string, ConsolidatedPath> = new Map();
-
-let lastViewport: ViewportMessage = {
-  type: 'viewport',
-  zoom: 1,
-  viewX: 0,
-  viewY: 0,
-  canvasWidth: 0,
-  canvasHeight: 0,
-  dpr: 1,
-};
-
-let lastBlitTime = 0;
-let lastSceneRequestId: string | undefined;
-let blitScheduled = false;
-let blitTimer: ReturnType<typeof setTimeout> | null = null;
-const BLIT_INTERVAL_MS = 1000 / 60; // ~60 FPS cap
-
-// Theme-aware background color (default dark - must match canvas wrapper bg)
-let canvasBgColor = '#0a0a0a';
-let isLightMode = false;
-
-// Color contrast adjustment for theme switching
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  // Handle shorthand hex
-  const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-  hex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b);
-
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16),
-      }
-    : null;
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  return (
-    '#' +
-    [r, g, b]
-      .map((x) => {
-        const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-      })
-      .join('')
-  );
-}
-
-function getLuminance(r: number, g: number, b: number): number {
-  // Relative luminance formula
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-}
-
-// Known background colors that should never be adjusted - eraser strokes use these
-// Must match BG_COLORS in DrawingCanvas.tsx
-const BG_COLORS = ['#020617', '#f8fafc', '#0a0a0a', '#e0e0e0'];
-
-function isBackgroundColor(color: string): boolean {
-  const normalized = color.toLowerCase();
-  return BG_COLORS.includes(normalized);
-}
-
-function adjustColorForTheme(color: string): string {
-  // Always convert eraser/background strokes to current background color
-  // This ensures eraser strokes from saved projects (which may have used a different theme's background)
-  // always match the current theme's background
-  const normalizedColor = color.toLowerCase();
-  if (isBackgroundColor(normalizedColor)) {
-    return canvasBgColor;
-  }
-
-  // If we're in dark mode, no adjustment needed (colors drawn as-is)
-  if (!isLightMode) return color;
-
-  // Handle rgba colors
-  const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-  if (rgbaMatch) {
-    const r = parseInt(rgbaMatch[1]);
-    const g = parseInt(rgbaMatch[2]);
-    const b = parseInt(rgbaMatch[3]);
-    const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
-
-    const luminance = getLuminance(r, g, b);
-
-    // Invert colors based on luminance for light mode
-    // High luminance colors (light colors like white) become dark
-    // Low luminance colors (dark colors like black) become light
-    if (luminance > 0.7) {
-      // Light color -> make it dark
-      const factor = 1 - luminance;
-      const newR = Math.round(r * factor * 0.3);
-      const newG = Math.round(g * factor * 0.3);
-      const newB = Math.round(b * factor * 0.3);
-      return a < 1 ? `rgba(${newR}, ${newG}, ${newB}, ${a})` : `rgb(${newR}, ${newG}, ${newB})`;
-    } else if (luminance < 0.15) {
-      // Very dark color -> make it lighter but not too light
-      const newR = Math.min(255, r + 180);
-      const newG = Math.min(255, g + 180);
-      const newB = Math.min(255, b + 180);
-      return a < 1 ? `rgba(${newR}, ${newG}, ${newB}, ${a})` : `rgb(${newR}, ${newG}, ${newB})`;
-    }
-
-    return color;
-  }
-
-  // Handle hex colors
-  const rgb = hexToRgb(color);
-  if (!rgb) return color;
-
-  const luminance = getLuminance(rgb.r, rgb.g, rgb.b);
-
-  // Invert based on luminance
-  if (luminance > 0.7) {
-    // Light color -> make it dark (invert)
-    const factor = 1 - luminance;
-    return rgbToHex(
-      Math.round(rgb.r * factor * 0.3),
-      Math.round(rgb.g * factor * 0.3),
-      Math.round(rgb.b * factor * 0.3),
-    );
-  } else if (luminance < 0.15) {
-    // Very dark color -> make it lighter
-    return rgbToHex(
-      Math.min(255, rgb.r + 180),
-      Math.min(255, rgb.g + 180),
-      Math.min(255, rgb.b + 180),
-    );
-  }
-
-  // Mid-range colors: slight adjustment for better contrast
-  if (luminance > 0.4 && luminance <= 0.7) {
-    // Slightly darken mid-light colors
-    return rgbToHex(Math.round(rgb.r * 0.7), Math.round(rgb.g * 0.7), Math.round(rgb.b * 0.7));
-  }
-
-  return color;
-}
-
-function applyObjectRotation(
-  context: OffscreenCanvasRenderingContext2D,
-  drawing: Pick<Drawing, 'x' | 'y' | 'width' | 'height' | 'properties'>,
-) {
+rt.applyObjectRotation = (context, drawing) => {
   const degrees = Number(drawing.properties?.rotation ?? 0);
   if (!Number.isFinite(degrees) || degrees === 0) return;
   const centerX = drawing.x + drawing.width / 2;
@@ -375,72 +88,29 @@ function applyObjectRotation(
   context.translate(centerX, centerY);
   context.rotate((degrees * Math.PI) / 180);
   context.translate(-centerX, -centerY);
-}
+};
 
-// Supersampled anti-aliased vector rendering
-// Base factor; actual factor is dynamic per frame
-const SSAA_FACTOR = 1; // default, may be overridden dynamically
-const MAX_SSAA_PIXELS = 8000000; // ~8MP budget to avoid OOM
-const MAX_OFFSCREEN_DIM = 8192; // max width/height for offscreen buffers
-let vectorSS: OffscreenCanvas | null = null;
-let vectorSSCtx: OffscreenCanvasRenderingContext2D | null = null;
-function ensureVectorSS(targetW: number, targetH: number, ss: number) {
-  const w = Math.max(1, Math.floor(targetW * ss));
-  const h = Math.max(1, Math.floor(targetH * ss));
-  if (vectorSS && vectorSS.width === w && vectorSS.height === h && vectorSSCtx) return true;
-  try {
-    vectorSS = new OffscreenCanvas(w, h);
-    vectorSSCtx = vectorSS.getContext('2d');
-    if (vectorSSCtx) {
-      vectorSSCtx.imageSmoothingEnabled = false;
-      return true;
-    }
-  } catch {
-    // Allocation failed; drop SSAA
-  }
-  vectorSS = null;
-  vectorSSCtx = null;
-  return false;
-}
+rt.adjustColorForTheme = (color) => mapColorForTheme(color, rt.canvasBgColor, rt.isLightMode);
 
-function getSnappedWorldLineWidth(lineWidthWorld: number, zoom: number, dpr: number) {
-  const deviceWidth = Math.max(0, lineWidthWorld * zoom * dpr);
-  const nearest = Math.round(deviceWidth);
-  const frac = Math.abs(deviceWidth - nearest);
-  // Proximity to integer in [0,1], where 1 means very close to integer
-  const proximity = 1 - Math.min(frac, 1 - frac);
-  // Threshold after which we snap; below we use raw width
-  const SNAP_THRESHOLD = 0.85;
-  if (nearest >= 1 && proximity >= SNAP_THRESHOLD) {
-    const worldWidth = nearest / (zoom * dpr);
-    const offset = (nearest & 1) === 1 ? 0.5 / (dpr * zoom) : 0;
-    return { worldWidth, offset, snapped: true } as const;
-  }
-  return { worldWidth: lineWidthWorld, offset: 0, snapped: false } as const;
-}
-
-function ensureWorld() {
-  if (!world) {
-    world = new OffscreenCanvas(worldW, worldH);
-    worldCtx = world.getContext('2d');
-    if (worldCtx) {
-      worldCtx.imageSmoothingEnabled = false;
-      worldCtx.fillStyle = canvasBgColor;
-      worldCtx.fillRect(0, 0, worldW, worldH);
+rt.ensureWorld = () => {
+  if (!rt.world) {
+    rt.world = new OffscreenCanvas(rt.worldW, rt.worldH);
+    rt.worldCtx = rt.world.getContext('2d');
+    if (rt.worldCtx) {
+      rt.worldCtx.imageSmoothingEnabled = false;
+      rt.worldCtx.fillStyle = rt.canvasBgColor;
+      rt.worldCtx.fillRect(0, 0, rt.worldW, rt.worldH);
     }
   }
-}
+};
 
-function drawStrokeToWorld(stroke: Stroke) {
-  // Every stroke MUST have a unique groupId - don't fall back to 'default'
-  // If no groupId is provided, skip consolidation and just return
+rt.drawStrokeToWorld = (stroke: Stroke) => {
   if (!stroke.groupId) {
     console.warn('Stroke without groupId - skipping consolidation');
     return;
   }
-
   const groupId = stroke.groupId;
-  let path = consolidatedPaths.get(groupId);
+  let path = rt.consolidatedPaths.get(groupId);
   if (!path) {
     path = {
       groupId,
@@ -451,693 +121,37 @@ function drawStrokeToWorld(stroke: Stroke) {
       maxWidth: stroke.size,
       bounds: { minX: stroke.x0, minY: stroke.y0, maxX: stroke.x0, maxY: stroke.y0 },
     };
-    consolidatedPaths.set(groupId, path);
+    rt.consolidatedPaths.set(groupId, path);
   }
   path.points.push({ x: stroke.x1, y: stroke.y1, width: stroke.size });
   path.maxWidth = Math.max(path.maxWidth, stroke.size);
-  // Update bounds
   path.bounds.minX = Math.min(path.bounds.minX, stroke.x1);
   path.bounds.minY = Math.min(path.bounds.minY, stroke.y1);
   path.bounds.maxX = Math.max(path.bounds.maxX, stroke.x1);
   path.bounds.maxY = Math.max(path.bounds.maxY, stroke.y1);
-}
+};
 
-function drawDrawingToWorld(drawing: Drawing) {
-  // Check if shape already exists (for updates during dragging)
-  const existingIndex = retainedDrawings.findIndex((s) => s.id === drawing.id);
+rt.drawDrawingToWorld = (drawing: Drawing) => {
+  const existingIndex = rt.retainedDrawings.findIndex((candidate) => candidate.id === drawing.id);
   if (existingIndex >= 0) {
-    // Update existing shape
-    retainedDrawings[existingIndex] = drawing;
+    rt.retainedDrawings[existingIndex] = drawing;
   } else {
-    // Add new shape
-    retainedDrawings.push(drawing);
+    rt.retainedDrawings.push(drawing);
   }
-
-  // Preload image if it's an image shape - load immediately
   if (drawing.type === 'image' && drawing.imageData) {
-    if (!imageBitmapCache.has(drawing.imageData)) {
-      loadImageBitmap(drawing.imageData)
+    if (!rt.imageBitmapCache.has(drawing.imageData)) {
+      rt.loadImageBitmap(drawing.imageData)
         .then(() => {
-          scheduleBlit(); // Re-render once image is loaded
+          rt.scheduleBlit();
         })
         .catch(() => {
           // Failed to load, but don't block rendering
         });
     }
   }
-}
+};
 
-function blit() {
-  if (!screenCtx) return;
-  const renderStartedAt = performance.now();
+const { scheduleBlit } = createWorkerBlit(rt);
+rt.scheduleBlit = scheduleBlit;
 
-  const { zoom, viewX, viewY, canvasWidth, canvasHeight, dpr } = lastViewport;
-
-  const safeDpr = dpr || 1;
-  const targetW = Math.max(1, Math.floor(canvasWidth * safeDpr));
-  const targetH = Math.max(1, Math.floor(canvasHeight * safeDpr));
-  if (screenCtx.canvas.width !== targetW || screenCtx.canvas.height !== targetH) {
-    screenCtx.canvas.width = targetW;
-    screenCtx.canvas.height = targetH;
-  }
-
-  // Clear in device pixel space
-  screenCtx.save();
-  screenCtx.setTransform(1, 0, 0, 1, 0, 0);
-  screenCtx.fillStyle = canvasBgColor;
-  screenCtx.fillRect(0, 0, targetW, targetH);
-
-  // Determine dynamic SSAA factor with safety caps - keep it low for performance
-  const vectorCount = consolidatedPaths.size + retainedDrawings.length;
-  // Use lower SSAA during active drawing (many paths) for responsiveness
-  const maxSSAA = vectorCount > 50 ? 1 : 2;
-  const dynamicSSAA = Math.max(1, Math.min(maxSSAA, Math.round(zoom * safeDpr)));
-
-  // Compute safe ssaa factor under pixel budget and dimension caps
-  const desiredFactor = Math.max(SSAA_FACTOR, dynamicSSAA);
-  let ssaaFactor = desiredFactor;
-  const capByDim = (dim: number, target: number) =>
-    Math.max(1, Math.floor(dim / Math.max(1, target)));
-  if (Math.floor(targetW * ssaaFactor) > MAX_OFFSCREEN_DIM)
-    ssaaFactor = Math.min(ssaaFactor, capByDim(MAX_OFFSCREEN_DIM, targetW));
-  if (Math.floor(targetH * ssaaFactor) > MAX_OFFSCREEN_DIM)
-    ssaaFactor = Math.min(ssaaFactor, capByDim(MAX_OFFSCREEN_DIM, targetH));
-  while (
-    Math.floor(targetW * ssaaFactor) * Math.floor(targetH * ssaaFactor) > MAX_SSAA_PIXELS &&
-    ssaaFactor > 1
-  )
-    ssaaFactor--;
-
-  // Draw raster world in screen space with adaptive smoothing unless we choose to skip
-  const shouldSkipRaster = vectorCount > 0 && zoom >= 1.15;
-  if (world && !shouldSkipRaster) {
-    const anyCtx = screenCtx;
-    const scale = zoom * safeDpr;
-    const frac = Math.abs(scale - Math.round(scale));
-    const shouldSmooth = frac > 0.05 || scale < 1;
-    anyCtx.imageSmoothingEnabled = shouldSmooth;
-    anyCtx.imageSmoothingQuality = 'high';
-
-    const srcX = viewX;
-    const srcY = viewY;
-    const srcW = canvasWidth / Math.max(zoom, 0.0001);
-    const srcH = canvasHeight / Math.max(zoom, 0.0001);
-
-    screenCtx.drawImage(world, srcX, srcY, srcW, srcH, 0, 0, targetW, targetH);
-
-    anyCtx.imageSmoothingEnabled = false;
-  }
-  screenCtx.restore();
-
-  // Compute current world viewport for culling
-  const vx1 = viewX;
-  const vy1 = viewY;
-  const vx2 = viewX + canvasWidth / Math.max(zoom, 0.0001);
-  const vy2 = viewY + canvasHeight / Math.max(zoom, 0.0001);
-  const visibleDrawingCount = retainedDrawings.filter((drawing) =>
-    objectIntersectsViewport(drawing, vx1, vy1, vx2, vy2),
-  ).length;
-  const visiblePathCount = Array.from(consolidatedPaths.values()).filter((path) => {
-    const margin = Math.max(2, path.maxWidth);
-    return !(
-      path.bounds.maxX + margin < vx1 ||
-      path.bounds.minX - margin > vx2 ||
-      path.bounds.maxY + margin < vy1 ||
-      path.bounds.minY - margin > vy2
-    );
-  }).length;
-
-  // Supersampled vector render, then composite
-  if (ssaaFactor > 1 && ensureVectorSS(targetW, targetH, ssaaFactor) && vectorSSCtx && vectorSS) {
-    // Clear supersampled buffer fully transparent
-    vectorSSCtx.save();
-    vectorSSCtx.setTransform(1, 0, 0, 1, 0, 0);
-    vectorSSCtx.clearRect(0, 0, vectorSS.width, vectorSS.height);
-    vectorSSCtx.restore();
-
-    const ssDpr = safeDpr * ssaaFactor;
-
-    // World transform at supersampled resolution
-    vectorSSCtx.save();
-    vectorSSCtx.scale(ssDpr, ssDpr);
-    const rawTx = -viewX * zoom;
-    const rawTy = -viewY * zoom;
-    const snappedTx = Math.round(rawTx * ssDpr) / ssDpr;
-    const snappedTy = Math.round(rawTy * ssDpr) / ssDpr;
-    vectorSSCtx.translate(snappedTx, snappedTy);
-    vectorSSCtx.scale(zoom, zoom);
-
-    // Draw images first (in background)
-    for (let i = 0; i < retainedDrawings.length; i++) {
-      const sh = retainedDrawings[i];
-      if (sh.type === 'image' && sh.imageData && !sh.properties?.hidden) {
-        // Check viewport intersection for images (they can be large)
-        if (objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) {
-          const bitmap = imageBitmapCache.get(sh.imageData);
-          if (bitmap) {
-            vectorSSCtx.save();
-            vectorSSCtx.globalAlpha = sh.alpha ?? 1;
-            applyObjectRotation(vectorSSCtx, sh);
-            vectorSSCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
-            vectorSSCtx.restore();
-          } else {
-            // Image not loaded yet, try to load it
-            loadImageBitmap(sh.imageData).then(() => {
-              scheduleBlit(); // Re-render once loaded
-            });
-          }
-        }
-      }
-    }
-
-    // Draw consolidated paths first (batched strokes for performance)
-    for (const [, path] of consolidatedPaths) {
-      // Viewport culling using bounds
-      const margin = Math.max(2, path.maxWidth);
-      if (
-        path.bounds.maxX + margin < vx1 ||
-        path.bounds.minX - margin > vx2 ||
-        path.bounds.maxY + margin < vy1 ||
-        path.bounds.minY - margin > vy2
-      )
-        continue;
-
-      const isEraserPath = isBackgroundColor(path.color);
-
-      vectorSSCtx.save();
-      if (isEraserPath) {
-        vectorSSCtx.globalCompositeOperation = 'destination-out';
-      }
-      drawWorkerStrokePath(
-        vectorSSCtx,
-        path,
-        isEraserPath ? '#000000' : adjustColorForTheme(path.color),
-      );
-      vectorSSCtx.restore();
-    }
-
-    for (let i = 0; i < retainedDrawings.length; i++) {
-      const sh = retainedDrawings[i];
-      if (sh.properties?.hidden) continue;
-      // Skip images - already rendered above
-      if (sh.type === 'image') continue;
-      // For text, check position directly (text might have 0 width/height from old projects)
-      if (sh.type === 'stroke') {
-        // Point-based strokes do not have a meaningful x/y bounding box.
-        // Keep them in the ordered scene and let their segment renderer clip.
-      } else if (sh.type === 'text') {
-        if (sh.x < vx1 || sh.x > vx2 || sh.y < vy1 || sh.y > vy2) continue;
-      } else {
-        if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
-      }
-      const adjustedShColor = adjustColorForTheme(sh.color);
-      drawWorkerRendererObject(vectorSSCtx, sh, adjustedShColor);
-    }
-
-    vectorSSCtx.restore();
-
-    // Composite SS buffer to screen at device resolution
-    const anyCtx = screenCtx;
-    anyCtx.imageSmoothingEnabled = true;
-    anyCtx.imageSmoothingQuality = 'high';
-    screenCtx.save();
-    screenCtx.setTransform(1, 0, 0, 1, 0, 0);
-    screenCtx.drawImage(vectorSS, 0, 0, vectorSS.width, vectorSS.height, 0, 0, targetW, targetH);
-    screenCtx.restore();
-    anyCtx.imageSmoothingEnabled = false;
-    const retainedObjectCount = retainedDrawings.length + consolidatedPaths.size;
-    self.postMessage({
-      type: 'frame-rendered',
-      requestId: lastSceneRequestId,
-      viewportSequence: lastViewport.sequence,
-      renderMs: performance.now() - renderStartedAt,
-      retainedObjectCount,
-      visibleObjectCount: visibleDrawingCount + visiblePathCount,
-      culledObjectCount: retainedObjectCount - visibleDrawingCount - visiblePathCount,
-    } satisfies Outbound);
-    return;
-  }
-
-  // Fallback: draw vectors directly (if SSAA disabled or allocation failed), with culling
-  screenCtx.save();
-  screenCtx.scale(safeDpr, safeDpr);
-  const rawTx = -viewX * zoom;
-  const rawTy = -viewY * zoom;
-  const snappedTx = Math.round(rawTx * safeDpr) / safeDpr;
-  const snappedTy = Math.round(rawTy * safeDpr) / safeDpr;
-  screenCtx.translate(snappedTx, snappedTy);
-  screenCtx.scale(zoom, zoom);
-
-  // Draw images first (in background)
-  for (let i = 0; i < retainedDrawings.length; i++) {
-    const sh = retainedDrawings[i];
-    if (
-      sh.type === 'image' &&
-      sh.imageData &&
-      !sh.properties?.hidden &&
-      objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)
-    ) {
-      const bitmap = imageBitmapCache.get(sh.imageData);
-      if (bitmap) {
-        screenCtx.save();
-        screenCtx.globalAlpha = sh.alpha ?? 1;
-        applyObjectRotation(screenCtx, sh);
-        screenCtx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
-        screenCtx.restore();
-      } else {
-        // Image not loaded yet, try to load it
-        loadImageBitmap(sh.imageData).then(() => {
-          scheduleBlit(); // Re-render once loaded
-        });
-      }
-    }
-  }
-
-  // Draw consolidated paths first (batched strokes for performance)
-  for (const [, path] of consolidatedPaths) {
-    // Viewport culling using bounds
-    const margin = Math.max(2, path.maxWidth);
-    if (
-      path.bounds.maxX + margin < vx1 ||
-      path.bounds.minX - margin > vx2 ||
-      path.bounds.maxY + margin < vy1 ||
-      path.bounds.minY - margin > vy2
-    )
-      continue;
-
-    const isEraserPath = isBackgroundColor(path.color);
-
-    screenCtx.save();
-    if (isEraserPath) {
-      screenCtx.globalCompositeOperation = 'destination-out';
-      screenCtx.strokeStyle = '#000000';
-    } else {
-      screenCtx.strokeStyle = adjustColorForTheme(path.color);
-    }
-    const snap = getSnappedWorldLineWidth(path.size, zoom, safeDpr);
-    if (snap.snapped && snap.offset !== 0) {
-      screenCtx.translate(snap.offset, snap.offset);
-    }
-
-    drawWorkerStrokePath(
-      screenCtx,
-      path,
-      isEraserPath ? '#000000' : adjustColorForTheme(path.color),
-    );
-    screenCtx.restore();
-  }
-
-  for (let i = 0; i < retainedDrawings.length; i++) {
-    const sh = retainedDrawings[i];
-    if (sh.properties?.hidden) continue;
-    // Skip images - already rendered above
-    if (sh.type === 'image') continue;
-    // For text, check position directly (text might have 0 width/height from old projects)
-    if (sh.type === 'stroke') {
-      // Point-based strokes do not have a meaningful x/y bounding box.
-      // Keep them in the ordered scene and let their segment renderer clip.
-    } else if (sh.type === 'text') {
-      if (sh.x < vx1 || sh.x > vx2 || sh.y < vy1 || sh.y > vy2) continue;
-    } else {
-      if (!objectIntersectsViewport(sh, vx1, vy1, vx2, vy2)) continue;
-    }
-    const adjustedColor = adjustColorForTheme(sh.color);
-    const snappedSize = getSnappedWorldLineWidth(sh.size, zoom, safeDpr).worldWidth;
-    drawWorkerRendererObject(screenCtx, sh, adjustedColor, snappedSize);
-  }
-
-  screenCtx.restore();
-  const retainedObjectCount = retainedDrawings.length + consolidatedPaths.size;
-  self.postMessage({
-    type: 'frame-rendered',
-    requestId: lastSceneRequestId,
-    viewportSequence: lastViewport.sequence,
-    renderMs: performance.now() - renderStartedAt,
-    retainedObjectCount,
-    visibleObjectCount: visibleDrawingCount + visiblePathCount,
-    culledObjectCount: retainedObjectCount - visibleDrawingCount - visiblePathCount,
-  } satisfies Outbound);
-}
-
-function scheduleBlit() {
-  const now = performance.now();
-  const elapsed = now - lastBlitTime;
-  if (elapsed >= BLIT_INTERVAL_MS) {
-    lastBlitTime = now;
-    if (blitTimer !== null) {
-      clearTimeout(blitTimer);
-      blitTimer = null;
-    }
-    blit();
-    blitScheduled = false;
-    return;
-  }
-  if (blitScheduled) return;
-  blitScheduled = true;
-  const delay = Math.max(0, BLIT_INTERVAL_MS - elapsed);
-  blitTimer = setTimeout(() => {
-    lastBlitTime = performance.now();
-    blit();
-    blitScheduled = false;
-    blitTimer = null;
-  }, delay);
-}
-
-function handleMessage(evt: MessageEvent<Inbound>) {
-  const msg = evt.data;
-  switch (msg.type) {
-    case 'init': {
-      const ctx = msg.canvas.getContext('2d');
-      if (!ctx) {
-        self.postMessage({
-          type: 'init-error',
-          reason: 'Unable to acquire a 2D OffscreenCanvas context.',
-        } satisfies Outbound);
-        return;
-      }
-      screenCtx = ctx;
-      worldW = msg.worldWidth;
-      worldH = msg.worldHeight;
-      ensureWorld();
-      self.postMessage({ type: 'ready' } satisfies Outbound);
-      break;
-    }
-    case 'stroke': {
-      ensureWorld();
-      drawStrokeToWorld(msg.data);
-      scheduleBlit();
-      break;
-    }
-    case 'strokes': {
-      ensureWorld();
-      const arr = msg.data;
-      for (let i = 0; i < arr.length; i++) drawStrokeToWorld(arr[i]);
-      scheduleBlit();
-      break;
-    }
-    case 'shape': {
-      ensureWorld();
-      drawDrawingToWorld(msg.data);
-      scheduleBlit();
-      break;
-    }
-    case 'load-objects': {
-      ensureWorld();
-      // Clear existing retained objects and consolidated paths
-      retainedDrawings.length = 0;
-      consolidatedPaths.clear();
-      // Load all shapes (including images)
-      for (let i = 0; i < msg.data.length; i++) {
-        drawDrawingToWorld(msg.data[i]);
-      }
-      scheduleBlit();
-      break;
-    }
-    case 'load-scene': {
-      ensureWorld();
-      const startedAt = performance.now();
-      retainedDrawings.length = 0;
-      consolidatedPaths.clear();
-      lastSceneRequestId = msg.requestId;
-      for (let i = 0; i < msg.strokes.length; i++) drawStrokeToWorld(msg.strokes[i]);
-      for (let i = 0; i < msg.drawings.length; i++) drawDrawingToWorld(msg.drawings[i]);
-      self.postMessage({
-        type: 'scene-applied',
-        requestId: msg.requestId,
-        objectCount: msg.drawings.length + msg.strokes.length,
-        ingestionMs: performance.now() - startedAt,
-      } satisfies Outbound);
-      scheduleBlit();
-      break;
-    }
-    case 'viewport': {
-      lastViewport = msg;
-      scheduleBlit();
-      break;
-    }
-    case 'clear': {
-      ensureWorld();
-      if (worldCtx) {
-        worldCtx.fillStyle = canvasBgColor;
-        worldCtx.fillRect(0, 0, worldW, worldH);
-      }
-      // Also clear retained vectors and consolidated paths
-      retainedDrawings.length = 0;
-      consolidatedPaths.clear();
-      scheduleBlit();
-      break;
-    }
-    case 'clear-region': {
-      ensureWorld();
-      const m = msg;
-      if (worldCtx) {
-        worldCtx.save();
-        worldCtx.fillStyle = canvasBgColor;
-        worldCtx.fillRect(m.x, m.y, m.width, m.height);
-        worldCtx.restore();
-      }
-      // Remove any retained items whose bbox intersects the cleared region
-      const rx1 = m.x,
-        ry1 = m.y,
-        rx2 = m.x + m.width,
-        ry2 = m.y + m.height;
-      function lineBBox(x0: number, y0: number, x1: number, y1: number) {
-        const minX = Math.min(x0, x1);
-        const minY = Math.min(y0, y1);
-        const maxX = Math.max(x0, x1);
-        const maxY = Math.max(y0, y1);
-        return { minX, minY, maxX, maxY };
-      }
-      function intersects(ax1: number, ay1: number, ax2: number, ay2: number) {
-        return !(ax2 < rx1 || ax1 > rx2 || ay2 < ry1 || ay1 > ry2);
-      }
-      // Remove consolidated paths that intersect the cleared region
-      const groupsToRemove: string[] = [];
-      for (const [groupId, path] of consolidatedPaths) {
-        if (intersects(path.bounds.minX, path.bounds.minY, path.bounds.maxX, path.bounds.maxY)) {
-          groupsToRemove.push(groupId);
-        }
-      }
-      for (const gid of groupsToRemove) {
-        consolidatedPaths.delete(gid);
-      }
-      for (let i = retainedDrawings.length - 1; i >= 0; i--) {
-        const sh = retainedDrawings[i];
-        // Skip images - they are not erasable
-
-        let minX = 0,
-          minY = 0,
-          maxX = 0,
-          maxY = 0;
-        if (sh.type === 'stroke' && sh.points && sh.points.length > 0) {
-          const margin = getMaxStrokeWidth(sh.points, sh.size);
-          minX = Math.min(...sh.points.map((point) => point.x)) - margin;
-          minY = Math.min(...sh.points.map((point) => point.y)) - margin;
-          maxX = Math.max(...sh.points.map((point) => point.x)) + margin;
-          maxY = Math.max(...sh.points.map((point) => point.y)) + margin;
-        } else if (sh.type === 'line') {
-          const bb = lineBBox(sh.x, sh.y, sh.x + sh.width, sh.y + sh.height);
-          minX = bb.minX;
-          minY = bb.minY;
-          maxX = bb.maxX;
-          maxY = bb.maxY;
-        } else {
-          const rx = sh.x + sh.width;
-          const ry = sh.y + sh.height;
-          minX = Math.min(sh.x, rx);
-          minY = Math.min(sh.y, ry);
-          maxX = Math.max(sh.x, rx);
-          maxY = Math.max(sh.y, ry);
-        }
-        if (intersects(minX, minY, maxX, maxY)) {
-          retainedDrawings.splice(i, 1);
-        }
-      }
-      scheduleBlit();
-      break;
-    }
-    case 'clear-shape': {
-      ensureWorld();
-      if (!worldCtx) break;
-      const sh = msg.data;
-      const bg = canvasBgColor;
-      worldCtx.save();
-      if (sh.type === 'rectangle') {
-        if (sh.filled) {
-          worldCtx.beginPath();
-          worldCtx.rect(sh.x, sh.y, sh.width, sh.height);
-          worldCtx.clip();
-          worldCtx.fillStyle = bg;
-          worldCtx.fillRect(sh.x, sh.y, sh.width, sh.height);
-        } else {
-          worldCtx.strokeStyle = bg;
-          worldCtx.lineWidth = sh.size;
-          worldCtx.lineCap = 'square';
-          worldCtx.lineJoin = 'miter';
-          worldCtx.strokeRect(sh.x, sh.y, sh.width, sh.height);
-        }
-      } else if (sh.type === 'ellipse') {
-        const cx = sh.x + sh.width / 2;
-        const cy = sh.y + sh.height / 2;
-        const rx = sh.width / 2;
-        const ry = sh.height / 2;
-        worldCtx.beginPath();
-        worldCtx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-        if (sh.filled) {
-          worldCtx.clip();
-          worldCtx.fillStyle = bg;
-          worldCtx.fillRect(sh.x, sh.y, sh.width, sh.height);
-        } else {
-          worldCtx.strokeStyle = bg;
-          worldCtx.lineWidth = sh.size;
-          worldCtx.lineCap = 'round';
-          worldCtx.lineJoin = 'round';
-          worldCtx.stroke();
-        }
-      } else if (sh.type === 'line') {
-        worldCtx.strokeStyle = bg;
-        worldCtx.lineWidth = sh.size;
-        worldCtx.lineCap = 'round';
-        worldCtx.lineJoin = 'round';
-        worldCtx.beginPath();
-        worldCtx.moveTo(sh.x, sh.y);
-        worldCtx.lineTo(sh.x + sh.width, sh.y + sh.height);
-        worldCtx.stroke();
-      } else if (sh.type === 'parabola') {
-        worldCtx.strokeStyle = bg;
-        worldCtx.lineWidth = sh.size;
-        worldCtx.lineCap = 'round';
-        worldCtx.lineJoin = 'round';
-        worldCtx.beginPath();
-        traceParabolaPath(worldCtx, sh);
-        worldCtx.stroke();
-      }
-      worldCtx.restore();
-      // Do NOT remove other retained items; we only clear raster pixels. Vector items will redraw on top.
-      scheduleBlit();
-      break;
-    }
-    case 'remove-group': {
-      const m = msg;
-      // Remove from consolidated paths
-      consolidatedPaths.delete(m.groupId);
-      scheduleBlit();
-      break;
-    }
-    case 'snapshot-image': {
-      const m = msg;
-      if (m.worldWidth !== undefined && m.worldHeight !== undefined) {
-        worldW = m.worldWidth;
-        worldH = m.worldHeight;
-      }
-      ensureWorld();
-      if (!worldCtx) break;
-      fetch(m.dataUrl)
-        .then((r) => r.blob())
-        .then(async (blob) => {
-          const bmp = await createImageBitmap(blob);
-          if (!worldCtx) return;
-          worldCtx.save();
-          worldCtx.setTransform(1, 0, 0, 1, 0, 0);
-          worldCtx.fillStyle = canvasBgColor;
-          worldCtx.fillRect(0, 0, worldW, worldH);
-          worldCtx.drawImage(bmp, 0, 0, worldW, worldH);
-          worldCtx.restore();
-          // Do NOT clear retained vectors; keep vector state for crisp rendering
-          scheduleBlit();
-        })
-        .catch(() => {});
-      break;
-    }
-    case 'theme': {
-      const m = msg;
-      canvasBgColor = m.bgColor;
-      // Detect if we're in light mode based on background color luminance
-      const bgRgb = hexToRgb(m.bgColor);
-      isLightMode = bgRgb ? getLuminance(bgRgb.r, bgRgb.g, bgRgb.b) > 0.5 : false;
-      // Re-clear world canvas with new background
-      if (worldCtx) {
-        worldCtx.fillStyle = canvasBgColor;
-        worldCtx.fillRect(0, 0, worldW, worldH);
-      }
-      scheduleBlit();
-      break;
-    }
-    case 'snapshot': {
-      // Compose snapshot using raster world (if any) plus retained vectors at 1x in world space
-      const snap = new OffscreenCanvas(worldW, worldH);
-      const ctx = snap.getContext('2d');
-      if (!ctx) break;
-      // Background
-      ctx.fillStyle = canvasBgColor;
-      ctx.fillRect(0, 0, worldW, worldH);
-      if (world) {
-        ctx.drawImage(world, 0, 0);
-      }
-      // Draw vectors in world space
-      // Images first (in background)
-      for (let i = 0; i < retainedDrawings.length; i++) {
-        const sh = retainedDrawings[i];
-        if (
-          sh.type === 'image' &&
-          sh.imageData &&
-          !sh.properties?.hidden &&
-          sh.x !== undefined &&
-          sh.y !== undefined &&
-          sh.width !== undefined &&
-          sh.height !== undefined
-        ) {
-          const bitmap = imageBitmapCache.get(sh.imageData);
-          if (bitmap) {
-            ctx.save();
-            ctx.globalAlpha = sh.alpha ?? 1;
-            applyObjectRotation(ctx, {
-              x: sh.x,
-              y: sh.y,
-              width: sh.width,
-              height: sh.height,
-              properties: sh.properties,
-            });
-            ctx.drawImage(bitmap, sh.x, sh.y, sh.width, sh.height);
-            ctx.restore();
-          }
-        }
-      }
-      // Draw consolidated paths first (batched strokes)
-      for (const [, path] of consolidatedPaths) {
-        const isEraserPath = isBackgroundColor(path.color);
-
-        ctx.save();
-        if (isEraserPath) {
-          ctx.globalCompositeOperation = 'destination-out';
-        }
-        drawWorkerStrokePath(ctx, path, isEraserPath ? '#000000' : path.color);
-        ctx.restore();
-      }
-      // Shapes (skip images - already rendered above)
-      for (let i = 0; i < retainedDrawings.length; i++) {
-        const sh = retainedDrawings[i];
-        if (sh.properties?.hidden) continue;
-        if (sh.type === 'image') continue;
-        drawWorkerRendererObject(ctx, sh, sh.color);
-      }
-      snap
-        .convertToBlob({ type: 'image/png' })
-        .then((blob) => {
-          if (!blob) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            self.postMessage({
-              type: 'snapshot',
-              dataUrl: String(reader.result),
-            } satisfies Outbound);
-          };
-          reader.readAsDataURL(blob);
-        })
-        .catch(() => {});
-      break;
-    }
-  }
-}
-
-self.onmessage = (event) => handleMessage(event);
+self.onmessage = (event) => handleRendererMessage(event, rt);
