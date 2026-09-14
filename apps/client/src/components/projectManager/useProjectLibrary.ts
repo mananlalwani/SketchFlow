@@ -214,7 +214,7 @@ export function useProjectLibrary(onSelect?: () => void) {
       localStorage.removeItem('guest-banner-dismissed');
       setGuestBannerDismissed(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, setGuestBannerDismissed]);
 
   const filteredProjects = useMemo(
     () => filterAndSortProjects(projects, searchQuery, selectedFolderId, sortBy, sortDirection),
