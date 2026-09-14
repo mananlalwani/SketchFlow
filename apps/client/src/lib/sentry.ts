@@ -83,9 +83,3 @@ export function captureOperationalSignal(
   });
 }
 
-export function setSentryUser(userId: string | null): void {
-  // A stable app-specific identifier is intentionally not sent. This only retains auth state.
-  void loadSentry().then((Sentry) => {
-    Sentry?.setTag('auth.state', userId ? 'authenticated' : 'anonymous');
-  });
-}

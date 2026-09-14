@@ -1,13 +1,6 @@
-// Initialize observability before React renders.
-import { initOtel } from './lib/otel';
 import { initSentry } from './lib/sentry';
 
-initOtel();
 initSentry();
-
-// Start tool usage analytics
-import { startAnalyticsLogging } from './lib/analytics';
-startAnalyticsLogging();
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';

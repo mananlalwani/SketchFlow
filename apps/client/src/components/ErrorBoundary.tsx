@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppStatePage } from '@/components/AppStatePage';
-import { reportError } from '@/lib/errorReporting';
+import { captureException } from '@/lib/sentry';
 
 interface Props {
   children: React.ReactNode;
@@ -24,8 +24,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Report error to tracking service
-    reportError(error, {
+    captureException(error, {
       componentStack: errorInfo.componentStack || undefined,
     });
   }
