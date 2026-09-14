@@ -5,7 +5,7 @@
 - Use Node.js 24 and the pnpm version pinned in the root `package.json`.
 - Install dependencies with `pnpm install --frozen-lockfile`.
 - Copy only the app-specific `.env.example` files for local configuration. Never commit `.env` files, generated `dist` output, reports, source maps, coverage, or credentials.
-- Keep changes focused and include tests for changed behavior.
+- Keep changes focused and include tests for changed behavior. Canvas splits and gesture rules are documented in [docs/canvas.md](docs/canvas.md).
 
 ## Required local checks
 

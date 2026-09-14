@@ -14,8 +14,8 @@
 - **Monorepo**: Managed with `pnpm` workspaces.
   - `apps/client`: Frontend application.
   - `apps/server`: Backend server.
-  - `packages/shared`: Shared types and utilities.
-- **Shared Utils**: `packages/shared/src/` contains shared logic often used by both client and server (e.g., geometry, validation, socket types).
+  - `packages/shared`: Socket and project TypeScript types.
+- **Shared types**: `packages/shared/src/` is socket and project types used by client and server. Geometry and canvas helpers live in the client.
 - **Server Entry**: `apps/server/src/index.ts`.
 - **Client Entry**: `apps/client/src/main.tsx`.
 
@@ -29,7 +29,8 @@
 
 ## Coding Conventions & Patterns
 
-- **Canvas Rendering**: `DrawingCanvas.tsx` handles raw canvas ops, but logic lies in hooks and utils.
+- **Canvas Rendering**: `DrawingCanvas.tsx` wires input and overlays. Tool math is `apps/client/src/lib/canvas*.ts`. How the layers fit: `docs/canvas.md` (open when changing DrawingCanvas, drawing session, gesture bindings, or `canvas*Gesture` plans).
+- **Server**: `apps/server/src/index.ts` wires Express, Redis, and shutdown. HTTP lives in `routes/`, sockets in `realtime/collaborationSocket.ts`, object apply math in `lib/collaborationDocument.ts`. Persistence is `ProjectService` and `FolderService`. Layout: `docs/server.md` (open when changing index, project routes, sockets, or collaboration apply).
 - **State Sync**:
   - **Local First**: UI updates immediately via Zustand key `objects`.
   - **Optimistic UI**: Canvas edits update locally, are persisted as idempotent socket operations,
@@ -39,16 +40,16 @@
 - **Component Pattern**:
   - Use Radix UI primitives for accessible interactive components.
   - Compose complex UI from `apps/client/src/components/ui/` (shadcn/ui style).
-- **Environment**: Access env vars via `src/config/env.ts` (client) or `src/config/env.js` (server) for type safety.
+- **Environment**: Access env vars via `apps/client/src/config/env.ts` or `apps/server/src/config/env.ts`.
 - **Error Handling**:
-  - Frontend: `ErrorBoundary.tsx` + `useErrorHandler` hook.
+  - Frontend: `ErrorBoundary.tsx`.
   - Backend: `errorHandlerMiddleware`.
 
 ## Testing Guidelines
 
 - **Structure**: Mirror source structure for tests.
 - **Mocking**: Use `vi.mock()` for external dependencies (Socket.IO, Clerk).
-- **Canvas Tests**: Focus on logic/state transformations rather than pixel-perfect canvas assertions.
+- **Canvas Tests**: Logic/state plans in `lib/`, not pixel-perfect canvas assertions. See `docs/canvas.md`.
 
 ## Common Pitfalls
 

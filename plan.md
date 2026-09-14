@@ -13,7 +13,8 @@ This is a current-state roadmap, not evidence that every production control is c
   hydration for revision gaps.
 - Live cursors keyed by browser session so multiple devices under the same account remain visible.
 - Pressure-point stroke widths retained through save/load/render/export, worker rendering with a
-  main-thread fallback, PWA shell recovery, and opt-in auto-shape detection.
+  main-thread fallback, PWA shell recovery, and opt-in auto-shape detection. Client split:
+  `docs/canvas.md`.
 - GitHub Actions checks for build, unit/server integration tests, lint, type checks, secret scanning,
   Docker build/smoke, and GHCR publication from `main`.
 - `v*` tags validate, publish versioned GHCR images plus `latest`, and create GitHub Releases.

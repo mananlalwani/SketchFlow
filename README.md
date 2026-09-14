@@ -1,29 +1,15 @@
 # SketchFlow
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org/)
-[![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+A collaborative whiteboard: React, TypeScript, Socket.IO, PostgreSQL, Prisma, and Clerk. MIT licensed.
 
-A real-time collaborative whiteboard application built with React, TypeScript, Socket.IO, PostgreSQL, and Prisma. SketchFlow supports drawing, shapes, presence, project sharing, and an installable web experience.
-
-Collaboration behavior is covered by unit and server integration tests. Browser benchmarks and provider-side monitoring remain release-owner validation work; see [`docs/performance.md`](docs/performance.md) and the release checklist before making deployment claims.
+Collaboration is covered by unit and server integration tests. Browser benchmarks and provider-side monitoring are release-owner work; see [`docs/performance.md`](docs/performance.md) and the release checklist before making deployment claims.
 
 ## Features
 
-- **Real-time Collaboration**: Socket.IO object operations synchronize instantly; each browser session has its own live cursor, including two devices signed into the same account. Distinct-object edits merge; simultaneous edits to the same object use server-order last-writer-wins.
-- **Advanced Drawing Engine**:
-  - Pressure-sensitive plotting preserved per stroke point through save/load and export.
-  - Smooth rendering with standard and high-DPI support.
-  - Tools: Pen, Eraser, Shapes (Line, Rectangle, Ellipse).
-  - Customizable stroke sizes and colors.
-- **Multi-User Presence**: See other users' cursors and actions in real-time.
-- **PWA Support**: Installable Progressive Web App with offline shell recovery and a durable IndexedDB operation queue.
-- **Performance tooling**:
-  - Worker-backed OffscreenCanvas rendering with a main-thread fallback when transferable OffscreenCanvas is unavailable.
-  - Deterministic large-board benchmark fixtures and performance artifacts.
-  - Performance limits documented with the benchmark.
-- **Secure**: Authentication and user management powered by Clerk.
+- **Collaboration**: Socket.IO object operations; each browser session has its own cursor, including two devices on the same account. Distinct-object edits merge; simultaneous edits to the same object use server-order last-writer-wins.
+- **Drawing**: Pen, highlighter, eraser, line/rectangle/ellipse/star/triangle, text, select/transform. Stroke size, color, and per-point pressure survive save/load and export. Standard and high-DPI canvases.
+- **PWA**: Installable shell with IndexedDB replay of unsent operations.
+- **Rendering**: OffscreenCanvas worker with a main-thread fallback. How the client is split: [`docs/canvas.md`](docs/canvas.md). Large-board fixtures and limits: [`docs/performance.md`](docs/performance.md).
 
 ## Tech Stack
 
@@ -50,17 +36,17 @@ This project is a monorepo managed with `pnpm` workspaces.
 
 ### **Packages**
 
-- **Shared** (`packages/shared`): Common TypeScript types, utility functions, and constants shared between client and server.
+- **Shared** (`packages/shared`): Socket and project TypeScript types used by client and server. Canvas geometry and gesture plans live in `apps/client`.
 
 ## Architecture Overview
 
-1.  **Monorepo**: Code is split into `client`, `server`, and `shared` packages for better modularity and type safety.
+1.  **Monorepo**: `apps/client`, `apps/server`, and `packages/shared`.
 2.  **WebSocket Event Flow**:
     - Clients persist an idempotent object operation locally, then emit a `collaboration:commit` envelope.
     - The server authorizes the room and editor, applies the operation transactionally, and broadcasts canonical state.
     - Different object IDs merge; simultaneous updates to the same ID use server-order last-writer-wins.
     - Cursor movements are keyed by browser session, so two devices under one account remain visible.
-3.  **Persistence**: PostgreSQL/Prisma stores project metadata, permissions, canonical project JSON, revisions, and collaboration-operation receipts. IndexedDB retains unsent client operations for replay.
+3.  **Persistence**: PostgreSQL/Prisma stores project metadata, permissions, canonical project JSON, revisions, and collaboration-operation receipts. IndexedDB retains unsent client operations for replay. Server split: [`docs/server.md`](docs/server.md).
 
 ## Getting Started
 
