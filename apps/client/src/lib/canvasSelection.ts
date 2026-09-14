@@ -2,6 +2,7 @@ import type { DrawingObject } from '@/store/drawingStore';
 import { getObjectBounds } from '@/lib/canvasObjectGeometry';
 import { compareCanvasObjects } from './canvasObjectOrder';
 import { getStrokePointWidth } from './canvasRendererCommands';
+import { expandObjectIdsWithGroups } from './canvasObjectTransform';
 
 /** Returns the shortest distance between a point and a finite line segment. */
 export function distancePointToSegment(
@@ -196,4 +197,23 @@ export function findCanvasObjectIdsInSelection(
       return bounds.x <= right && objectRight >= left && bounds.y <= bottom && objectBottom >= top;
     })
     .map((object) => object.id);
+}
+
+export function selectionIdsForHit(
+  objects: readonly DrawingObject[],
+  selectedObjectIds: readonly string[],
+  hitId: string,
+  shiftKey: boolean,
+): string[] {
+  const groupIds = expandObjectIdsWithGroups(objects, [hitId]);
+  if (shiftKey) {
+    const groupIsSelected = groupIds.every((id) => selectedObjectIds.includes(id));
+    return groupIsSelected
+      ? selectedObjectIds.filter((id) => !groupIds.includes(id))
+      : [...selectedObjectIds, ...groupIds];
+  }
+  return expandObjectIdsWithGroups(
+    objects,
+    selectedObjectIds.includes(hitId) ? selectedObjectIds : groupIds,
+  );
 }

@@ -4,6 +4,7 @@ import {
   buildStrokePoints,
   constrainDrawingEnd,
   getPointerSamples,
+  replayLostPointerCapture,
   screenPointToWorld,
 } from '@/lib/canvasPointer';
 
@@ -96,5 +97,22 @@ describe('canvas pointer helpers', () => {
     const samples = [{ clientX: 10, clientY: 10, pointerType: 'pen', pressure: 0.5 }, endpoint];
 
     expect(getPointerSamples({ ...endpoint, getCoalescedEvents: () => samples })).toBe(samples);
+  });
+
+  it('replays cancel then up after lost pointer capture', () => {
+    const types: string[] = [];
+    const target = {
+      dispatchEvent: (event: Event) => {
+        types.push(event.type);
+        return true;
+      },
+    };
+    replayLostPointerCapture(target, {
+      pointerId: 7,
+      pointerType: 'pen',
+      clientX: 1,
+      clientY: 2,
+    });
+    expect(types).toEqual(['pointercancel', 'pointerup']);
   });
 });

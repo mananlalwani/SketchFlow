@@ -134,3 +134,20 @@ export function calculateTriangleVertices(
     { x: startX, y: startY + signY * Math.abs(height) },
   ];
 }
+
+export function publishCanvasViewport(
+  presentation: {
+    setViewport: (
+      size: { width: number; height: number; left: number; top: number },
+      state: { zoom: number; viewX: number; viewY: number },
+    ) => void;
+  },
+  canvas: HTMLCanvasElement,
+  viewport: { zoom: number; x: number; y: number },
+): void {
+  presentation.setViewport(canvas.getBoundingClientRect(), {
+    zoom: viewport.zoom,
+    viewX: viewport.x,
+    viewY: viewport.y,
+  });
+}

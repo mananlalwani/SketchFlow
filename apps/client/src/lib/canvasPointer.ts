@@ -71,3 +71,21 @@ export function getPointerSamples(event: PointerSample): PointerSample[] {
   }
   return samples;
 }
+
+export function replayLostPointerCapture(
+  target: Pick<EventTarget, 'dispatchEvent'>,
+  event: Pick<PointerEvent, 'pointerId' | 'pointerType' | 'clientX' | 'clientY'>,
+): void {
+  const init: PointerEventInit = {
+    bubbles: true,
+    cancelable: true,
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    buttons: 0,
+    pressure: 0,
+  };
+  target.dispatchEvent(new PointerEvent('pointercancel', init));
+  target.dispatchEvent(new PointerEvent('pointerup', init));
+}

@@ -5,6 +5,10 @@ import {
   isTriangleMode,
   pointInObjectSpace,
   pressureAdjustedSize,
+  unionObjectBounds,
+  canDirectTransformObject,
+  getObjectDirtyRect,
+  rectsOverlap,
 } from '@/lib/canvasObjectGeometry';
 
 describe('canvas object geometry', () => {
@@ -91,5 +95,44 @@ describe('canvas object geometry', () => {
   it('accepts only supported triangle modes', () => {
     expect(isTriangleMode('45-45-90')).toBe(true);
     expect(isTriangleMode('equilateral')).toBe(false);
+  });
+
+  it('unions object bounds and gates direct transforms', () => {
+    expect(
+      unionObjectBounds([
+        { x: 0, y: 0, width: 10, height: 10 },
+        { x: 8, y: 8, width: 10, height: 10 },
+      ]),
+    ).toEqual({ x: 0, y: 0, width: 18, height: 18 });
+
+    const rectangle = {
+      id: 'rect-1',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      color: '#fff',
+      size: 1,
+    };
+    expect(canDirectTransformObject(rectangle, 1, 'editor')).toBe(true);
+    expect(canDirectTransformObject(rectangle, 2, 'editor')).toBe(false);
+    expect(canDirectTransformObject({ ...rectangle, locked: true }, 1, 'editor')).toBe(false);
+  });
+
+  it('pads dirty rects with stroke size', () => {
+    const rect = getObjectDirtyRect({
+      id: 'rect-1',
+      type: 'rectangle',
+      x: 10,
+      y: 20,
+      width: 30,
+      height: 40,
+      color: '#fff',
+      size: 2,
+    });
+    expect(rect).toEqual({ x: 8, y: 18, width: 34, height: 44 });
+    expect(rectsOverlap(rect, { x: 40, y: 18, width: 4, height: 4 })).toBe(true);
+    expect(rectsOverlap(rect, { x: 50, y: 80, width: 4, height: 4 })).toBe(false);
   });
 });

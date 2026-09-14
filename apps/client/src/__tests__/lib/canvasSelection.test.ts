@@ -3,6 +3,7 @@ import {
   distancePointToSegment,
   findCanvasObjectIdAt,
   findCanvasObjectIdsInSelection,
+  selectionIdsForHit,
 } from '@/lib/canvasSelection';
 
 describe('canvas selection geometry', () => {
@@ -211,5 +212,16 @@ describe('canvas selection geometry', () => {
         endY: 30,
       }),
     ).toEqual(['inside']);
+  });
+
+  it('toggles grouped members on shift-select', () => {
+    const objects = [
+      { id: 'a', type: 'rectangle' as const, color: '#000', size: 1, groupId: 'g' },
+      { id: 'b', type: 'ellipse' as const, color: '#000', size: 1, groupId: 'g' },
+      { id: 'c', type: 'rectangle' as const, color: '#000', size: 1 },
+    ];
+    expect(selectionIdsForHit(objects, [], 'a', false)).toEqual(['a', 'b']);
+    expect(selectionIdsForHit(objects, ['a', 'b'], 'a', true)).toEqual([]);
+    expect(selectionIdsForHit(objects, ['c'], 'a', true)).toEqual(['c', 'a', 'b']);
   });
 });

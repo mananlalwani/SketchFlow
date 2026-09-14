@@ -66,3 +66,12 @@ export function drawingObjectsToRendererScene(objects: readonly DrawingObject[])
 
   return { drawings, strokes };
 }
+
+export function sendRetainedObjects(
+  send: (message: { type: 'shape'; data: DrawingData }) => void,
+  objects: readonly DrawingObject[],
+): void {
+  for (const drawing of drawingObjectsToRendererScene(objects).drawings) {
+    send({ type: 'shape', data: drawing });
+  }
+}

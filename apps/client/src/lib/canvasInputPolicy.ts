@@ -99,3 +99,30 @@ export function canPointerPan(
   if (canPointerDraw(preferences, state, input)) return false;
   return preferences.fingerAction === 'pan';
 }
+
+/** True when pointer cancel/lost-capture should drop the in-progress canvas gesture. */
+export function shouldCancelActiveCanvasGesture(args: {
+  pointerType: string;
+  pointerId: number;
+  activePointerId: number | null;
+  wasActivePen: boolean;
+  remainingPenCount: number;
+  isPanning: boolean;
+  isDrawing: boolean;
+  hasActiveDrag: boolean;
+}): boolean {
+  const input = { pointerType: args.pointerType };
+  const isActiveGesture = args.activePointerId === args.pointerId;
+  const shouldCancelPen =
+    isStylusInput(input) &&
+    (isActiveGesture || (args.wasActivePen && args.remainingPenCount === 0));
+  const shouldCancelTouch =
+    isTouchInput(input) &&
+    args.remainingPenCount === 0 &&
+    (isActiveGesture || args.isPanning || args.isDrawing || args.hasActiveDrag);
+  return (
+    shouldCancelPen ||
+    shouldCancelTouch ||
+    (isActiveGesture && (!isTouchInput(input) || args.remainingPenCount === 0))
+  );
+}

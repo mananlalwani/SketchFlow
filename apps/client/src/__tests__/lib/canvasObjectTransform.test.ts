@@ -10,6 +10,7 @@ import {
   translateDrawingObject,
   translateObjectInCollection,
   translateObjectsBy,
+  patchFromTransformHandle,
 } from '@/lib/canvasObjectTransform';
 
 describe('canvas object transforms', () => {
@@ -260,5 +261,27 @@ describe('canvas object transforms', () => {
         expect.objectContaining({ id: 'other', color: '#000' }),
       ]),
     );
+  });
+
+  it('rotates and resizes from transform handles', () => {
+    const rectangle = {
+      id: 'rectangle',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 10,
+      color: '#000',
+      size: 2,
+    };
+    expect(patchFromTransformHandle('rotate', { x: 10, y: 20 }, rectangle, false)).toMatchObject({
+      rotation: 180,
+    });
+    expect(patchFromTransformHandle('se', { x: 40, y: 30 }, rectangle, false)).toMatchObject({
+      x: 0,
+      y: 0,
+      width: 40,
+      height: 30,
+    });
   });
 });

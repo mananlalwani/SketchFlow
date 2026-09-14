@@ -5,6 +5,7 @@ import { postRendererViewport } from '@/lib/canvasRendererViewport';
 import type { RendererWorkerPort } from '@/lib/canvasRendererViewport';
 import { zoomViewportAtPoint } from '@/lib/canvasViewport';
 import type { CanvasPresentation } from '@/lib/canvasPresentation';
+import { planDeleteSelection } from '@/lib/canvasSelectGesture';
 
 export type { RendererWorkerPort } from '@/lib/canvasRendererViewport';
 
@@ -70,13 +71,14 @@ export function useCanvasKeyboardShortcuts({
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
         if (state.selectedObjectIds.length > 0) {
-          const selectedIds = new Set(state.selectedObjectIds);
-          const hasLockedSelection = state.objects.some(
-            (object) => selectedIds.has(object.id) && object.locked,
-          );
-          if (state.projectRole !== 'viewer' && !hasLockedSelection) {
+          const plan = planDeleteSelection({
+            projectRole: state.projectRole,
+            selectedObjectIds: state.selectedObjectIds,
+            objects: state.objects,
+          });
+          if (plan.kind === 'delete') {
             state.saveHistory();
-            state.setObjects(state.objects.filter((object) => !selectedIds.has(object.id)));
+            state.setObjects(plan.remaining);
             state.setSelectedObject(undefined);
             state.requestFullRedraw();
           }

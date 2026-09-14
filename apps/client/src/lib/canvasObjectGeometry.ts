@@ -20,7 +20,96 @@ export function committedStrokeSize(strokes: StrokeData[], fallback: number): nu
   return strokes.reduce((sum, stroke) => sum + stroke.size, 0) / strokes.length;
 }
 
-export function getObjectBounds(object: DrawingObject) {
+export type ObjectBounds = { x: number; y: number; width: number; height: number };
+
+export function unionObjectBounds(boundsList: ObjectBounds[]): ObjectBounds | null {
+  return boundsList.reduce<ObjectBounds | null>((combined, bounds) => {
+    if (!combined) return bounds;
+    const x = Math.min(combined.x, bounds.x);
+    const y = Math.min(combined.y, bounds.y);
+    return {
+      x,
+      y,
+      width: Math.max(combined.x + combined.width, bounds.x + bounds.width) - x,
+      height: Math.max(combined.y + combined.height, bounds.y + bounds.height) - y,
+    };
+  }, null);
+}
+
+export function canDirectTransformObject(
+  object: DrawingObject | undefined,
+  selectedCount: number,
+  projectRole: string | null | undefined,
+): boolean {
+  return Boolean(
+    object &&
+      selectedCount === 1 &&
+      !object.locked &&
+      projectRole !== 'viewer' &&
+      object.type !== 'stroke' &&
+      object.type !== 'text' &&
+      !object.points?.length &&
+      object.x !== undefined &&
+      object.y !== undefined &&
+      object.width !== undefined &&
+      object.height !== undefined,
+  );
+}
+
+export function rectsOverlap(a: ObjectBounds, b: ObjectBounds): boolean {
+  return !(
+    a.x + a.width < b.x ||
+    a.x > b.x + b.width ||
+    a.y + a.height < b.y ||
+    a.y > b.y + b.height
+  );
+}
+
+export function getObjectDirtyRect(object: DrawingObject): ObjectBounds {
+  if (object.type === 'stroke' && object.points && object.points.length) {
+    const maxStrokeWidth = object.points.reduce(
+      (maxWidth, point) => Math.max(maxWidth, getStrokePointWidth(point, object.size)),
+      object.size,
+    );
+    const xs = object.points.map((point) => point.x);
+    const ys = object.points.map((point) => point.y);
+    return {
+      x: Math.min(...xs) - maxStrokeWidth,
+      y: Math.min(...ys) - maxStrokeWidth,
+      width: Math.max(...xs) - Math.min(...xs) + maxStrokeWidth * 2,
+      height: Math.max(...ys) - Math.min(...ys) + maxStrokeWidth * 2,
+    };
+  }
+  if (
+    object.x === undefined ||
+    object.y === undefined ||
+    object.width === undefined ||
+    object.height === undefined
+  ) {
+    return { x: 0, y: 0, width: 0, height: 0 };
+  }
+  const pad = object.size;
+  if (object.type === 'text') {
+    return {
+      x: object.x - pad,
+      y: object.y - object.height / 2 - pad,
+      width: object.width + pad * 2,
+      height: object.height + pad * 2,
+    };
+  }
+  const x2 = object.x + object.width;
+  const y2 = object.y + object.height;
+  const minX = Math.min(object.x, x2) - pad;
+  const minY = Math.min(object.y, y2) - pad;
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(object.x, x2) + pad - minX,
+    height: Math.max(object.y, y2) + pad - minY,
+  };
+}
+
+export function getObjectBounds(object: DrawingObject): ObjectBounds | null {
   if (object.type === 'stroke' && object.points?.length) {
     const xs = object.points.map((point) => point.x);
     const ys = object.points.map((point) => point.y);

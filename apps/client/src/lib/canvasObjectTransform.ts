@@ -1,6 +1,72 @@
 import type { DrawingObject } from '@/store/drawingStore';
 
 import type { CanvasPoint } from './canvasPointer';
+import { pointInObjectSpace } from './canvasObjectGeometry';
+
+export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate';
+
+export function patchFromTransformHandle(
+  handle: TransformHandle,
+  worldPoint: CanvasPoint,
+  object: DrawingObject,
+  preserveAspectRatio: boolean,
+): Partial<DrawingObject> | null {
+  if (
+    object.x === undefined ||
+    object.y === undefined ||
+    object.width === undefined ||
+    object.height === undefined
+  ) {
+    return null;
+  }
+  const objectX = object.x;
+  const objectY = object.y;
+  const objectWidth = object.width;
+  const objectHeight = object.height;
+
+  if (handle === 'rotate') {
+    const centerX = objectX + objectWidth / 2;
+    const centerY = objectY + objectHeight / 2;
+    return {
+      rotation:
+        ((Math.atan2(worldPoint.y - centerY, worldPoint.x - centerX) * 180) / Math.PI + 90 + 360) %
+        360,
+    };
+  }
+
+  const point = pointInObjectSpace(worldPoint, object);
+  const left = objectX;
+  const top = objectY;
+  const right = objectX + objectWidth;
+  const bottom = objectY + objectHeight;
+  let nextLeft = left;
+  let nextTop = top;
+  let nextRight = right;
+  let nextBottom = bottom;
+  if (handle.includes('w')) nextLeft = Math.min(point.x, right - 8);
+  if (handle.includes('e')) nextRight = Math.max(point.x, left + 8);
+  if (handle.includes('n')) nextTop = Math.min(point.y, bottom - 8);
+  if (handle.includes('s')) nextBottom = Math.max(point.y, top + 8);
+
+  let width = nextRight - nextLeft;
+  let height = nextBottom - nextTop;
+  if (preserveAspectRatio && !['n', 'e', 's', 'w'].includes(handle)) {
+    const ratio = Math.abs(objectWidth / objectHeight) || 1;
+    if (width / height > ratio) height = width / ratio;
+    else width = height * ratio;
+    if (handle.includes('w')) nextLeft = nextRight - width;
+    else nextRight = nextLeft + width;
+    if (handle.includes('n')) nextTop = nextBottom - height;
+    else nextBottom = nextTop + height;
+  }
+
+  return {
+    x: nextLeft,
+    y: nextTop,
+    width: nextRight - nextLeft,
+    height: nextBottom - nextTop,
+  };
+}
 
 export interface ObjectDrag {
   id: string;
@@ -158,6 +224,14 @@ export function translateObjectsBy(
           : object.points,
     };
   });
+}
+
+export function translateObject(
+  object: DrawingObject,
+  deltaX: number,
+  deltaY: number,
+): DrawingObject {
+  return translateObjectsBy([object], [object.id], deltaX, deltaY)[0];
 }
 
 /**
