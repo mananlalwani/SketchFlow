@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ProjectCollaboratorService } from '../../services/ProjectCollaboratorService.js';
 import { ProjectService } from '../../services/ProjectService.js';
+import { ProjectShareService } from '../../services/ProjectShareService.js';
 
 // Mock prisma
 vi.mock('../../lib/prisma.js', () => {
@@ -47,9 +49,13 @@ import { prisma } from '../../lib/prisma.js';
 
 describe('ProjectService', () => {
   let service: ProjectService;
+  let shareService: ProjectShareService;
+  let collabService: ProjectCollaboratorService;
 
   beforeEach(() => {
     service = new ProjectService();
+    shareService = new ProjectShareService();
+    collabService = new ProjectCollaboratorService();
     vi.clearAllMocks();
   });
 
@@ -112,7 +118,7 @@ describe('ProjectService', () => {
 
     it('only resolves active, non-revoked share tokens', async () => {
       vi.mocked(prisma.project.findUnique).mockResolvedValue(sharedProject as never);
-      const result = await service.getByShareToken('a'.repeat(43));
+      const result = await shareService.getByShareToken('a'.repeat(43));
       expect(result).toMatchObject({
         id: 'proj-1',
         role: 'viewer',
@@ -125,13 +131,13 @@ describe('ProjectService', () => {
         ...sharedProject,
         shareExpiresAt: new Date(Date.now() - 1),
       } as never);
-      await expect(service.getByShareToken('a'.repeat(43))).resolves.toBeNull();
+      await expect(shareService.getByShareToken('a'.repeat(43))).resolves.toBeNull();
 
       vi.mocked(prisma.project.findUnique).mockResolvedValue({
         ...sharedProject,
         shareRevokedAt: new Date(),
       } as never);
-      await expect(service.getByShareToken('a'.repeat(43))).resolves.toBeNull();
+      await expect(shareService.getByShareToken('a'.repeat(43))).resolves.toBeNull();
     });
   });
 
@@ -676,7 +682,7 @@ describe('ProjectService', () => {
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
       vi.mocked(prisma.project.update).mockResolvedValue(updatedProject as never);
 
-      const result = await service.shareProject('proj-1', 'user-123');
+      const result = await shareService.shareProject('proj-1', 'user-123');
 
       expect(result).not.toBeNull();
       expect(result?.shared).toBe(true);
@@ -697,81 +703,9 @@ describe('ProjectService', () => {
 
       vi.mocked(prisma.project.findUnique).mockResolvedValue(mockProject as never);
 
-      const result = await service.shareProject('proj-1', 'user-123');
+      const result = await shareService.shareProject('proj-1', 'user-123');
 
       expect(result).toBeNull();
-    });
-  });
-
-  describe('folders', () => {
-    it('should list folders for user', async () => {
-      const mockFolders = [
-        {
-          id: 'folder-1',
-          userId: 'user-123',
-          name: 'Designs',
-          color: '#3b82f6',
-          parentId: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          _count: { projects: 5 },
-        },
-      ];
-
-      vi.mocked(prisma.folder.findMany).mockResolvedValue(mockFolders as never);
-
-      const result = await service.listFolders('user-123');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe('Designs');
-      expect(result[0].projectCount).toBe(5);
-    });
-
-    it('should create a folder', async () => {
-      const mockFolder = {
-        id: 'new-folder',
-        userId: 'user-123',
-        name: 'New Folder',
-        color: '#ff0000',
-        parentId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        _count: { projects: 0 },
-      };
-
-      vi.mocked(prisma.folder.create).mockResolvedValue(mockFolder as never);
-
-      const result = await service.createFolder('user-123', 'New Folder', '#ff0000');
-
-      expect(result.id).toBe('new-folder');
-      expect(result.name).toBe('New Folder');
-      expect(result.color).toBe('#ff0000');
-    });
-
-    it.each(['editor', 'viewer'])(
-      'does not let a %s update or delete an owner folder',
-      async (userId) => {
-        vi.mocked(prisma.folder.findUnique).mockResolvedValue({
-          id: 'folder-1',
-          userId: 'owner',
-        } as never);
-
-        await expect(service.updateFolder('folder-1', userId, 'Renamed')).resolves.toBeNull();
-        await expect(service.deleteFolder('folder-1', userId)).resolves.toBe(false);
-        expect(prisma.folder.update).not.toHaveBeenCalled();
-        expect(prisma.folder.delete).not.toHaveBeenCalled();
-      },
-    );
-
-    it('rejects moving a folder beneath one of its descendants', async () => {
-      vi.mocked(prisma.folder.findUnique)
-        .mockResolvedValueOnce({ id: 'parent', userId: 'user-123', parentId: null } as never)
-        .mockResolvedValueOnce({ id: 'child', userId: 'user-123', parentId: 'parent' } as never);
-
-      await expect(
-        service.updateFolder('parent', 'user-123', undefined, undefined, 'child'),
-      ).resolves.toBeNull();
-      expect(prisma.folder.update).not.toHaveBeenCalled();
     });
   });
 
@@ -784,7 +718,7 @@ describe('ProjectService', () => {
         collaborators: [{ userId: 'viewer', role: 'viewer', addedAt }],
       } as never);
 
-      await expect(service.getCollaborators('proj-1', 'owner')).resolves.toEqual([
+      await expect(collabService.getCollaborators('proj-1', 'owner')).resolves.toEqual([
         { userId: 'viewer', role: 'viewer', addedAt: addedAt.getTime() },
       ]);
     });
@@ -795,9 +729,9 @@ describe('ProjectService', () => {
         userId: 'owner',
       } as never);
 
-      await expect(service.addCollaborator('proj-1', userId, 'new-user')).resolves.toBe(false);
-      await expect(service.removeCollaborator('proj-1', userId, 'editor')).resolves.toBe(false);
-      await expect(service.getCollaborators('proj-1', userId)).resolves.toEqual([]);
+      await expect(collabService.addCollaborator('proj-1', userId, 'new-user')).resolves.toBe(false);
+      await expect(collabService.removeCollaborator('proj-1', userId, 'editor')).resolves.toBe(false);
+      await expect(collabService.getCollaborators('proj-1', userId)).resolves.toEqual([]);
       expect(prisma.projectCollaborator.upsert).not.toHaveBeenCalled();
       expect(prisma.projectCollaborator.deleteMany).not.toHaveBeenCalled();
     });

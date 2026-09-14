@@ -1,16 +1,11 @@
-// Load environment variables in development only (gracefully skip if dotenv missing in production image)
 import fs from 'fs';
-import { randomUUID } from 'crypto';
-import { z } from 'zod';
 
 if (process.env.NODE_ENV !== 'production') {
   const dotenvPath = process.cwd() + '/node_modules/dotenv';
   if (fs.existsSync(dotenvPath)) {
     try {
-      // Top-level await is supported on Node 20+ and TypeScript targeting ES2022+ compiles this correctly
       await import('dotenv/config');
     } catch (e) {
-      // It's OK if dotenv fails to load — env vars should be provided by the runtime in production
       // eslint-disable-next-line no-console
       console.warn('dotenv not loaded (continuing without .env):', String(e));
     }
@@ -20,11 +15,9 @@ if (process.env.NODE_ENV !== 'production') {
   }
 }
 
-// Monitoring must initialize before Express and application imports.
 import { initSentry } from './sentry.js';
 initSentry();
 
-// OpenTelemetry must be initialized before other app imports for auto-instrumentation
 import './otel.js';
 import express from 'express';
 import cors from 'cors';
@@ -33,46 +26,20 @@ import { Server as SocketIOServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
 import cookieParser from 'cookie-parser';
-import { clerkMiddleware, getAuth, clerkClient } from '@clerk/express';
+import { clerkMiddleware, getAuth } from '@clerk/express';
 import { ConnectionRegistry } from './services/ConnectionRegistry.js';
+import { FolderService } from './services/FolderService.js';
+import { ProjectCollaboratorService } from './services/ProjectCollaboratorService.js';
+import { ProjectShareService } from './services/ProjectShareService.js';
 import { ProjectService } from './services/ProjectService.js';
 import { logger } from './utils/logger.js';
 import { env, isProd, clerkPublishableKey } from './config/env.js';
 import { disconnectPrisma, prisma } from './lib/prisma.js';
-import {
-  collaboratorInputSchema,
-  collaboratorUserIdSchema,
-  moveProjectSchema,
-  projectInputSchema,
-  resourceIdSchema,
-  shareTokenSchema,
-} from './validation/project.js';
 import { registerFolderRoutes } from './routes/folders.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerProjectRoutes } from './routes/projects.js';
 import { renderDrawApiPage, renderDrawApiScript } from './routes/drawApi.js';
-import { requireAuthenticatedUser } from './middleware/auth.js';
 import type { AuthenticatedRequest } from './types/http.js';
-
-const socketCredentialSchema = z.string().trim().min(1);
-const sessionClaimsSchema = z.object({ exp: z.number().optional() }).nullable();
-const cursorSchema = z.object({
-  clientId: z.string().optional(),
-  userId: z.string(),
-  username: z.string(),
-  x: z.number(),
-  y: z.number(),
-  color: z.string(),
-  timestamp: z.number().optional(),
-});
-const selectionSchema = z.object({
-  clientId: z.string().optional(),
-  userId: z.string(),
-  username: z.string(),
-  objectIds: z.array(z.string().min(1).max(200)).max(100),
-  color: z.string(),
-  timestamp: z.number().optional(),
-});
-const projectConflictSchema = z.object({ currentRevision: z.number().optional() });
 import {
   requestIdMiddleware,
   requestLoggingMiddleware,
@@ -81,20 +48,12 @@ import {
   errorHandlerMiddleware,
   notFoundMiddleware,
 } from './middleware/index.js';
-import type {
-  CursorData,
-  SelectionPresence,
-  CollaborationCommit,
-  CollaborationCommitResult,
-  ClientToServerEvents,
-  ServerToClientEvents,
-  SocketData,
-} from './types/socket.js';
-
-interface PresenceSocketData extends SocketData {
-  cursor?: CursorData;
-  selection?: SelectionPresence;
-}
+import type { ClientToServerEvents, ServerToClientEvents } from './types/socket.js';
+import {
+  evictProjectUser as disconnectProjectUserSockets,
+  registerCollaborationSockets,
+  type PresenceSocketData,
+} from './realtime/collaborationSocket.js';
 
 export class SketchFlowServer {
   private readonly roomEvictionHandlers = new Map<string, () => void>();
@@ -108,6 +67,9 @@ export class SketchFlowServer {
   >;
   private connectionRegistry = new ConnectionRegistry(200);
   private projectService = new ProjectService();
+  private folderService = new FolderService();
+  private shareService = new ProjectShareService();
+  private collaboratorService = new ProjectCollaboratorService();
   private isShuttingDown = false;
   private redisPublisher: { quit: () => Promise<string> } | null = null;
   private redisSubscriber: { quit: () => Promise<string> } | null = null;
@@ -261,31 +223,11 @@ export class SketchFlowServer {
   }
 
   private setupRoutes(): void {
-    this.app.param('id', (_req, res, next, id) => {
-      if (!resourceIdSchema.safeParse(id).success) {
-        return res.status(400).json({ error: 'Invalid resource id' });
-      }
-      return next();
-    });
-    this.app.param('token', (_req, res, next, token) => {
-      if (!shareTokenSchema.safeParse(token).success) {
-        return res.status(400).json({ error: 'Invalid share token' });
-      }
-      return next();
-    });
-    this.app.param('collaboratorUserId', (_req, res, next, collaboratorUserId) => {
-      if (!collaboratorUserIdSchema.safeParse(collaboratorUserId).success) {
-        return res.status(400).json({ error: 'Invalid collaborator user id' });
-      }
-      return next();
-    });
-
     registerHealthRoutes(this.app, {
       connectionCount: () => this.connectionRegistry.count(),
       isShuttingDown: () => this.isShuttingDown,
     });
 
-    // Auth API - get current user (protected)
     this.app.get('/api/config', (_req, res) => {
       res.json({ clerkPublishableKey });
     });
@@ -316,7 +258,6 @@ export class SketchFlowServer {
       }
     });
 
-    // Auth API - get current user (protected)
     this.app.get('/api/auth/me', async (req: AuthenticatedRequest, res) => {
       const { userId } = getAuth(req);
       if (!userId) {
@@ -325,742 +266,30 @@ export class SketchFlowServer {
       res.json({ userId });
     });
 
-    // Project APIs (require authentication)
-    this.app.get(
-      '/api/projects',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const list = await this.projectService.list(userId);
-          res.json(list);
-        } catch {
-          res.status(500).json({ error: 'Failed to list projects' });
-        }
-      },
-    );
-
-    // Public endpoint for shared projects (no auth required)
-    this.app.get('/api/projects/shared/:token', async (req, res) => {
-      const record = await this.projectService.getByShareToken(req.params.token);
-      if (!record) return res.status(404).json({ error: 'Shared project not found' });
-      res.json(record);
+    registerProjectRoutes(this.app, {
+      projects: this.projectService,
+      folders: this.folderService,
+      shares: this.shareService,
+      collaborators: this.collaboratorService,
+      io: this.io,
+      evictProjectUser: (projectId, userId) => this.evictProjectUser(projectId, userId),
     });
-
-    this.app.get(
-      '/api/projects/:id',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        const userId = req.auth!.userId!;
-        const record = await this.projectService.get(req.params.id, userId);
-        if (!record) return res.status(404).json({ error: 'Not found' });
-        res.json(record);
-      },
-    );
-
-    this.app.post(
-      '/api/projects',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const parsed = projectInputSchema.safeParse(req.body);
-          if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
-          const { title, data } = parsed.data;
-          const created = await this.projectService.create(userId, title || 'Untitled', data ?? {});
-          res.json(created);
-        } catch {
-          res.status(500).json({ error: 'Failed to create project' });
-        }
-      },
-    );
-
-    this.app.put(
-      '/api/projects/:id',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const parsed = projectInputSchema.safeParse(req.body);
-          if (!parsed.success) return res.status(400).json({ error: 'Invalid project payload' });
-          const { title, data, expectedRevision } = parsed.data;
-          if (expectedRevision === undefined) {
-            return res
-              .status(400)
-              .json({ error: 'expectedRevision is required when updating a project' });
-          }
-          const result = await this.projectService.commitCollaborationOperation({
-            projectId: req.params.id,
-            userId,
-            operationId: randomUUID(),
-            expectedRevision,
-            kind: 'replace-project',
-            data: data ?? {},
-            title: title || 'Untitled',
-          });
-
-          if (result.status === 'conflict') {
-            return res.status(409).json({
-              error: 'Project was updated by another editor',
-              currentRevision: result.currentRevision,
-            });
-          }
-          if (result.status === 'forbidden')
-            return res.status(403).json({ error: 'Access denied' });
-          if (result.status === 'not_found')
-            return res.status(404).json({ error: 'Project not found' });
-          if (result.status !== 'applied' && result.status !== 'duplicate') {
-            return res.status(400).json({ error: 'Invalid project update' });
-          }
-
-          const saved = await this.projectService.get(req.params.id, userId);
-          if (!saved) return res.status(404).json({ error: 'Project not found' });
-
-          if (result.status === 'applied') {
-            this.io.to(req.params.id).emit('collaboration:applied', {
-              projectId: req.params.id,
-              operationId: result.operationId,
-              revision: result.revision,
-              kind: 'replace-project',
-              data: result.data,
-              title: result.title,
-            });
-          }
-          res.json(saved);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to save project';
-          const status =
-            error instanceof Error && error.name === 'ProjectConflictError'
-              ? 409
-              : error instanceof Error && error.name === 'ProjectAccessError'
-                ? 403
-                : error instanceof Error && error.name === 'ProjectNotFoundError'
-                  ? 404
-                  : 500;
-          const conflict = projectConflictSchema.safeParse(error);
-          res.status(status).json({
-            error: message,
-            currentRevision: conflict.success ? conflict.data.currentRevision : undefined,
-          });
-        }
-      },
-    );
-
-    this.app.get(
-      '/api/projects/:id/history',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const history = await this.projectService.listHistory(req.params.id, req.auth!.userId!);
-          if (!history) return res.status(404).json({ error: 'Project not found' });
-          res.json(history);
-        } catch {
-          res.status(500).json({ error: 'Failed to list project history' });
-        }
-      },
-    );
-
-    this.app.post(
-      '/api/projects/:id/history/:snapshotId/restore',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const parsed = z
-            .object({ expectedRevision: z.number().int().positive() })
-            .safeParse(req.body);
-          if (!parsed.success)
-            return res.status(400).json({ error: 'expectedRevision is required' });
-          const result = await this.projectService.restoreHistory(
-            req.params.id,
-            req.auth!.userId!,
-            req.params.snapshotId,
-            parsed.data.expectedRevision,
-          );
-          if (result.status === 'conflict') {
-            return res.status(409).json({
-              error: 'Project was updated by another editor',
-              currentRevision: result.currentRevision,
-            });
-          }
-          if (result.status === 'forbidden')
-            return res.status(403).json({ error: 'Access denied' });
-          if (result.status === 'not_found')
-            return res.status(404).json({ error: 'Project or snapshot not found' });
-          if (result.status !== 'applied')
-            return res.status(400).json({ error: 'Invalid history restore' });
-          this.io.to(req.params.id).emit('collaboration:applied', {
-            projectId: req.params.id,
-            operationId: result.operationId,
-            revision: result.revision,
-            kind: 'replace-project',
-            data: result.data,
-            title: result.title,
-          });
-          res.json({ revision: result.revision, data: result.data, title: result.title });
-        } catch {
-          res.status(500).json({ error: 'Failed to restore project history' });
-        }
-      },
-    );
-
-    this.app.delete(
-      '/api/projects/:id',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const deleted = await this.projectService.delete(req.params.id, userId);
-          if (deleted) {
-            res.json({ success: true });
-          } else {
-            res.status(404).json({ error: 'Project not found' });
-          }
-        } catch {
-          res.status(500).json({ error: 'Failed to delete project' });
-        }
-      },
-    );
-
-    // Share/unshare endpoints
-    this.app.post(
-      '/api/projects/:id/share',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const shared = await this.projectService.shareProject(req.params.id, userId);
-          if (!shared) {
-            return res.status(404).json({ error: 'Project not found' });
-          }
-          res.json({
-            shareToken: shared.shareToken,
-            expiresAt: shared.shareExpiresAt,
-            shareUrl: `${env.CLIENT_URL || env.CORS_ORIGINS[0] || req.protocol + '://' + req.get('host')}/draw?share=${shared.shareToken}`,
-          });
-        } catch {
-          res.status(500).json({ error: 'Failed to share project' });
-        }
-      },
-    );
-
-    this.app.post(
-      '/api/projects/:id/unshare',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const unshared = await this.projectService.unshareProject(req.params.id, userId);
-          if (!unshared) {
-            return res.status(404).json({ error: 'Project not found' });
-          }
-          res.json({ success: true });
-        } catch {
-          res.status(500).json({ error: 'Failed to unshare project' });
-        }
-      },
-    );
-
-    // Collaborator endpoints
-    this.app.get(
-      '/api/projects/:id/collaborators',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const collaborators = await this.projectService.getCollaborators(req.params.id, userId);
-
-          // Enrich with email addresses from Clerk
-          const enrichedCollaborators = await Promise.all(
-            collaborators.map(async (c) => {
-              try {
-                const user = await clerkClient.users.getUser(c.userId);
-                return {
-                  ...c,
-                  email: user.emailAddresses[0]?.emailAddress || undefined,
-                };
-              } catch {
-                return { ...c, email: undefined };
-              }
-            }),
-          );
-
-          res.json(enrichedCollaborators);
-        } catch {
-          res.status(500).json({ error: 'Failed to get collaborators' });
-        }
-      },
-    );
-
-    this.app.post(
-      '/api/projects/:id/collaborators',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const parsed = collaboratorInputSchema.safeParse(req.body);
-          if (!parsed.success)
-            return res.status(400).json({ error: 'Invalid collaborator payload' });
-          const { email, role } = parsed.data;
-
-          // Look up user by email using Clerk
-          let collaboratorUserId: string | null = null;
-          try {
-            const users = await clerkClient.users.getUserList({
-              emailAddress: [email.trim()],
-            });
-            if (users.data.length > 0) {
-              collaboratorUserId = users.data[0].id;
-            }
-          } catch (e) {
-            logger.error('Failed to look up user by email', e);
-          }
-
-          if (!collaboratorUserId) {
-            return res.status(404).json({ error: 'User not found with that email' });
-          }
-
-          // Extra safety check: prevent adding yourself
-          if (collaboratorUserId === userId) {
-            return res.status(400).json({ error: 'Cannot add yourself as a collaborator' });
-          }
-
-          logger.info(
-            `Adding collaborator ${collaboratorUserId} to project ${req.params.id} by owner ${userId}`,
-          );
-
-          const added = await this.projectService.addCollaborator(
-            req.params.id,
-            userId,
-            collaboratorUserId,
-            role || 'editor',
-          );
-          if (!added) {
-            return res.status(404).json({ error: 'Project not found or unauthorized' });
-          }
-          res.json({ success: true });
-        } catch {
-          res.status(500).json({ error: 'Failed to add collaborator' });
-        }
-      },
-    );
-
-    this.app.delete(
-      '/api/projects/:id/collaborators/:collaboratorUserId',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const removed = await this.projectService.removeCollaborator(
-            req.params.id,
-            userId,
-            req.params.collaboratorUserId,
-          );
-          if (!removed) {
-            return res.status(404).json({ error: 'Project not found or unauthorized' });
-          }
-          // Remove every live session from the realtime room immediately. This
-          // also works through the Redis adapter, so a revoked collaborator
-          // cannot receive ordinary or history-restore broadcasts from a stale
-          // room membership.
-          try {
-            await this.evictProjectUser(req.params.id, req.params.collaboratorUserId);
-          } catch (error) {
-            logger.error('Failed to evict revoked collaborator from project room', error);
-          }
-          res.json({ success: true });
-        } catch {
-          res.status(500).json({ error: 'Failed to remove collaborator' });
-        }
-      },
-    );
-
-    // Move project to folder
-    this.app.post(
-      '/api/projects/:id/move',
-      requireAuthenticatedUser,
-      async (req: AuthenticatedRequest, res) => {
-        try {
-          const userId = req.auth!.userId!;
-          const parsed = moveProjectSchema.safeParse(req.body);
-          if (!parsed.success) return res.status(400).json({ error: 'Invalid move payload' });
-          const moved = await this.projectService.moveToFolder(
-            req.params.id,
-            userId,
-            parsed.data.folderId,
-          );
-          if (!moved) {
-            return res.status(404).json({ error: 'Project not found' });
-          }
-          res.json({ success: true });
-        } catch {
-          res.status(500).json({ error: 'Failed to move project' });
-        }
-      },
-    );
-
-    registerFolderRoutes(this.app, this.projectService);
-
+    registerFolderRoutes(this.app, this.folderService);
     this.app.use('/api', notFoundMiddleware);
-
-    // Error handler (must be last middleware)
     this.app.use(errorHandlerMiddleware);
   }
 
   private setupSocketHandlers(): void {
-    this.io.use(async (socket, next) => {
-      if (this.connectionRegistry.count() >= this.connectionRegistry.max()) {
-        return next(new Error('Server connection limit reached'));
-      }
-      const token = socket.handshake.auth.token;
-      const credential = socketCredentialSchema.safeParse(token);
-      if (!credential.success) {
-        return next(new Error('Authentication required'));
-      }
-
-      try {
-        const request = new Request('http://localhost/socket.io', {
-          headers: { Authorization: `Bearer ${credential.data}` },
-        });
-        const auth = (await clerkClient.authenticateRequest(request)).toAuth();
-        if (!auth?.userId) return next(new Error('Invalid authentication token'));
-        socket.data.userId = auth.userId;
-        const claims = sessionClaimsSchema.safeParse(auth.sessionClaims);
-        if (claims.success && claims.data?.exp !== undefined) {
-          socket.data.sessionExpiresAt = claims.data.exp * 1000;
-        }
-        next();
-      } catch (error) {
-        logger.warn('Socket authentication failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        next(new Error('Invalid authentication token'));
-      }
-    });
-
-    // Generate color for user
-    const getUserColor = (userId: string): string => {
-      const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
-      const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return colors[hash % colors.length];
-    };
-
-    this.io.on('connection', (socket) => {
-      const clientId = socket.id;
-      let currentRoom: string | null = null;
-      // Incremented for every join/leave request so asynchronous authorization
-      // results cannot apply to a room selected after the check started.
-      let roomGeneration = 0;
-      const currentUserId = socket.data.userId ?? null;
-      this.roomEvictionHandlers.set(clientId, () => {
-        roomGeneration++;
-        if (!currentRoom) return;
-        socket.leave(currentRoom);
-        delete socket.data.cursor;
-        this.io.to(currentRoom).emit('cursor:leave', clientId);
-        delete socket.data.selection;
-        this.io.to(currentRoom).emit('selection:leave', clientId);
-        currentRoom = null;
-      });
-      const sessionExpiryTimer = socket.data.sessionExpiresAt
-        ? setTimeout(
-            () => socket.disconnect(true),
-            Math.max(0, socket.data.sessionExpiresAt - Date.now()),
-          )
-        : null;
-      let operationWindowStartedAt = Date.now();
-      let operationCount = 0;
-      let cursorWindowStartedAt = Date.now();
-      let cursorCount = 0;
-
-      socket.use(([eventName], next) => {
-        const now = Date.now();
-        if (eventName === 'cursor:move') {
-          if (now - cursorWindowStartedAt >= 1000) {
-            cursorWindowStartedAt = now;
-            cursorCount = 0;
-          }
-          if (++cursorCount > 60) {
-            socket.emit('error', { status: 429, error: 'Cursor rate limit exceeded' });
-            return next(new Error('Cursor rate limit exceeded'));
-          }
-          return next();
-        }
-
-        if (now - operationWindowStartedAt >= 60_000) {
-          operationWindowStartedAt = now;
-          operationCount = 0;
-        }
-        if (++operationCount > 600) {
-          socket.emit('error', { status: 429, error: 'Socket operation rate limit exceeded' });
-          return next(new Error('Socket operation rate limit exceeded'));
-        }
-        next();
-      });
-
-      logger.info(`Client connected: ${clientId}`);
-
-      this.connectionRegistry.add(clientId);
-
-      // Broadcast updated connection count to all clients
-      this.io.emit('connection:count', this.connectionRegistry.count());
-
-      // Return an immutable room context only if it is still active after the
-      // asynchronous permission check completes.
-      const getEditableRoom = async (): Promise<string | null> => {
-        const room = currentRoom;
-        const generation = roomGeneration;
-        if (!room || !currentUserId) return null;
-
-        const canEdit = await this.projectService.checkPermission(room, currentUserId, 'edit');
-        if (
-          !canEdit ||
-          currentRoom !== room ||
-          roomGeneration !== generation ||
-          !socket.rooms.has(room)
-        ) {
-          return null;
-        }
-        return room;
-      };
-
-      // Versioned canonical collaboration mutations commit Project.data/revision
-      // before either acknowledgement or peer broadcast. This is the only
-      // durable drawing mutation protocol.
-      socket.on(
-        'collaboration:commit',
-        async (
-          commit: CollaborationCommit,
-          acknowledge: (result: CollaborationCommitResult) => void,
-        ) => {
-          if (!commit || commit.protocolVersion !== 1) return;
-
-          const callback = z.function().safeParse(acknowledge);
-          const reply = (result: CollaborationCommitResult) => {
-            if (callback.success) acknowledge(result);
-          };
-          try {
-            const room = await getEditableRoom();
-            if (!room || room !== commit.projectId || !currentUserId) {
-              reply({ status: 'forbidden', operationId: commit.operationId });
-              return;
-            }
-
-            const result = await this.projectService.commitCollaborationOperation({
-              projectId: room,
-              userId: currentUserId,
-              operationId: commit.operationId,
-              expectedRevision: commit.expectedRevision,
-              kind: commit.kind,
-              data: commit.data,
-              title: commit.title,
-            });
-
-            if (result.status === 'applied') {
-              socket.to(room).emit('collaboration:applied', {
-                projectId: room,
-                operationId: result.operationId,
-                revision: result.revision,
-                kind: commit.kind,
-                data: result.data,
-                title: result.title,
-              });
-            }
-            reply(result);
-          } catch (error) {
-            logger.error(`Canonical collaboration commit failed for ${clientId}`, error);
-            reply({
-              status: 'unavailable',
-              operationId: commit.operationId,
-            });
-          }
-        },
-      );
-
-      // Handle room join
-      socket.on('room:join', async (projectId: string) => {
-        const joinGeneration = ++roomGeneration;
-        if (!resourceIdSchema.safeParse(projectId).success) {
-          logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
-          return;
-        }
-        try {
-          const canView = currentUserId
-            ? await this.projectService.checkPermission(projectId, currentUserId, 'view')
-            : false;
-          if (!canView || joinGeneration !== roomGeneration) {
-            logger.warn(`Unauthorized room join by ${currentUserId ?? clientId} for ${projectId}`);
-            return;
-          }
-          // Hydrate before joining. The read performs a second authorization check,
-          // closing the window where access could be revoked after canView resolved.
-          let canonicalProject = currentUserId
-            ? await this.projectService.get(projectId, currentUserId)
-            : null;
-          if (!canonicalProject || joinGeneration !== roomGeneration) return;
-
-          // Leave previous room if any
-          if (currentRoom) {
-            socket.leave(currentRoom);
-            // Remove cursor from previous room
-            delete socket.data.cursor;
-            this.io.to(currentRoom).emit('cursor:leave', clientId);
-            delete socket.data.selection;
-            this.io.to(currentRoom).emit('selection:leave', clientId);
-          }
-
-          // Join new room
-          currentRoom = projectId;
-          await socket.join(projectId);
-          // Once subscribed, reread so commits broadcast during the first read
-          // cannot fall between the snapshot and room membership.
-          if (joinGeneration !== roomGeneration || !socket.connected) return;
-          canonicalProject = currentUserId
-            ? await this.projectService.get(projectId, currentUserId)
-            : null;
-          if (joinGeneration !== roomGeneration || !socket.connected) return;
-          if (!canonicalProject) {
-            this.roomEvictionHandlers.get(clientId)?.();
-            return;
-          }
-
-          // New clients hydrate from the one canonical database authority.
-          socket.emit('collaboration:hydrated', {
-            projectId,
-            revision: canonicalProject.revision ?? 1,
-            data: canonicalProject.data,
-            title: canonicalProject.title,
-          });
-
-          // Log room join for debugging
-          logger.debug(`Client ${clientId} joined room ${projectId}`);
-
-          // Socket data is fetched through the adapter, including remote instances.
-          const peers = await this.io.in(projectId).fetchSockets();
-          if (joinGeneration !== roomGeneration || !socket.connected) return;
-          socket.emit(
-            'cursors:all',
-            peers.flatMap((peer) => (peer.data.cursor ? [peer.data.cursor] : [])),
-          );
-          socket.emit(
-            'selections:all',
-            peers.flatMap((peer) => (peer.data.selection ? [peer.data.selection] : [])),
-          );
-
-          logger.info(`Client ${clientId} joined room: ${projectId}`);
-        } catch (error) {
-          logger.error(`Room join failed for ${clientId}`, error);
-          if (joinGeneration === roomGeneration) this.roomEvictionHandlers.get(clientId)?.();
-        }
-      });
-
-      // Handle room leave
-      socket.on('room:leave', () => {
-        roomGeneration++;
-        if (currentRoom && currentUserId) {
-          socket.leave(currentRoom);
-          // Remove cursor
-          delete socket.data.cursor;
-          this.io.to(currentRoom).emit('cursor:leave', clientId);
-          delete socket.data.selection;
-          this.io.to(currentRoom).emit('selection:leave', clientId);
-          currentRoom = null;
-        }
-      });
-
-      // Handle cursor movement
-      socket.on('cursor:move', (cursor: CursorData) => {
-        if (!currentRoom) return;
-
-        // Validate cursor data
-        const parsedCursor = cursorSchema.safeParse(cursor);
-        if (!parsedCursor.success) return;
-        cursor = parsedCursor.data;
-
-        // The client may choose a display name, but never its identity.
-        if (!currentUserId || cursor.userId !== currentUserId) return;
-
-        // Ensure color is set
-        if (!cursor.color) {
-          cursor.color = getUserColor(cursor.userId);
-        }
-
-        // Update cursor in room
-        const normalizedCursor: CursorData = { ...cursor, clientId };
-        socket.data.cursor = { ...normalizedCursor, timestamp: Date.now() };
-
-        // Broadcast to others in room
-        socket.to(currentRoom).emit('cursor:move', normalizedCursor);
-      });
-
-      // Selection presence is intentionally ephemeral. It lets collaborators
-      // see what another device is working on without changing project data.
-      socket.on('selection:change', (selection: SelectionPresence) => {
-        if (!currentRoom || !currentUserId || !selection || selection.userId !== currentUserId)
-          return;
-        const parsedSelection = selectionSchema.safeParse(selection);
-        if (!parsedSelection.success) return;
-        selection = parsedSelection.data;
-        if (selection.objectIds.length === 0) {
-          delete socket.data.selection;
-          socket.to(currentRoom).emit('selection:leave', clientId);
-          return;
-        }
-        const normalizedSelection: SelectionPresence = {
-          clientId,
-          userId: currentUserId,
-          username: selection.username.slice(0, 100),
-          objectIds: [...new Set(selection.objectIds)],
-          color: getUserColor(currentUserId),
-          timestamp: Date.now(),
-        };
-        socket.data.selection = normalizedSelection;
-        socket.to(currentRoom).emit('selection:change', normalizedSelection);
-      });
-
-      // Handle disconnection
-      socket.on('disconnect', (reason) => {
-        roomGeneration++;
-        this.roomEvictionHandlers.delete(clientId);
-        if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
-        this.connectionRegistry.remove(clientId);
-
-        // Clean up cursor from current room
-        if (currentRoom && currentUserId) {
-          delete socket.data.cursor;
-          this.io.to(currentRoom).emit('cursor:leave', clientId);
-          delete socket.data.selection;
-          this.io.to(currentRoom).emit('selection:leave', clientId);
-        }
-
-        // Broadcast updated connection count to all remaining clients
-        this.io.emit('connection:count', this.connectionRegistry.count());
-        logger.info(`Client disconnected: ${clientId}, reason: ${reason}`);
-      });
-
-      // Handle errors
-      socket.on('error', (error) => {
-        logger.error(`Socket error from ${clientId}:`, error);
-      });
+    registerCollaborationSockets({
+      io: this.io,
+      projects: this.projectService,
+      connectionRegistry: this.connectionRegistry,
+      roomEvictionHandlers: this.roomEvictionHandlers,
     });
   }
 
   private async evictProjectUser(projectId: string, userId: string): Promise<void> {
-    const sockets = await this.io.in(projectId).fetchSockets();
-    await Promise.all(
-      sockets
-        .filter((socket) => socket.data.userId === userId)
-        .map((socket) => {
-          const localCleanup = this.roomEvictionHandlers.get(socket.id);
-          if (localCleanup) {
-            localCleanup();
-          } else {
-            // A Redis adapter may return a socket owned by another instance.
-            // Disconnecting it there runs that instance's presence cleanup.
-            socket.disconnect(true);
-          }
-          return Promise.resolve();
-        }),
-    );
+    await disconnectProjectUserSockets(this.io, this.roomEvictionHandlers, projectId, userId);
   }
 
   private async getLocalIPs(): Promise<string[]> {
@@ -1122,7 +351,7 @@ export class SketchFlowServer {
 
         // Clean up any corrupt collaborator data on startup
         logger.info('Running collaborator data cleanup...');
-        await this.projectService.cleanupCorruptCollaborators();
+        await this.collaboratorService.cleanupCorruptCollaborators();
 
         resolve();
       });

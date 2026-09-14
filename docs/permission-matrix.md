@@ -16,8 +16,8 @@ permission as authority.
 
 ## Enforcement notes
 
-- REST project and folder endpoints require Clerk authentication. `ProjectService` checks ownership
-  or collaborator role for each operation.
+- REST project and folder endpoints require Clerk authentication. `ProjectService` and
+  `FolderService` check ownership or collaborator role for each operation.
 - The public share endpoint accepts only an active, non-revoked, unexpired token and returns a
   viewer role. It never grants write access.
 - Socket.IO requires a verified Clerk token at handshake. A room is joined only after a server-side

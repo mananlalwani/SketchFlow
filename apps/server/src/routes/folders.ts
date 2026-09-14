@@ -1,14 +1,14 @@
 import type express from 'express';
 import { requireAuthenticatedUser } from '../middleware/auth.js';
-import type { ProjectService } from '../services/ProjectService.js';
+import type { FolderService } from '../services/FolderService.js';
 import type { AuthenticatedRequest } from '../types/http.js';
 import { folderInputSchema } from '../validation/project.js';
 
 /** Owns the authenticated folder HTTP interface and its status mapping. */
-export function registerFolderRoutes(app: express.Express, projects: ProjectService): void {
+export function registerFolderRoutes(app: express.Express, folders: FolderService): void {
   app.get('/api/folders', requireAuthenticatedUser, async (req: AuthenticatedRequest, res) => {
     try {
-      res.json(await projects.listFolders(req.auth!.userId!));
+      res.json(await folders.listFolders(req.auth!.userId!));
     } catch {
       res.status(500).json({ error: 'Failed to list folders' });
     }
@@ -21,7 +21,7 @@ export function registerFolderRoutes(app: express.Express, projects: ProjectServ
         return res.status(400).json({ error: 'Invalid folder payload' });
       }
       const { name, color, parentId } = parsed.data;
-      res.json(await projects.createFolder(req.auth!.userId!, name, color, parentId));
+      res.json(await folders.createFolder(req.auth!.userId!, name, color, parentId));
     } catch {
       res.status(500).json({ error: 'Failed to create folder' });
     }
@@ -32,7 +32,7 @@ export function registerFolderRoutes(app: express.Express, projects: ProjectServ
       const parsed = folderInputSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid folder payload' });
       const { name, color, parentId } = parsed.data;
-      const folder = await projects.updateFolder(
+      const folder = await folders.updateFolder(
         req.params.id,
         req.auth!.userId!,
         name,
@@ -51,7 +51,7 @@ export function registerFolderRoutes(app: express.Express, projects: ProjectServ
     requireAuthenticatedUser,
     async (req: AuthenticatedRequest, res) => {
       try {
-        const deleted = await projects.deleteFolder(req.params.id, req.auth!.userId!);
+        const deleted = await folders.deleteFolder(req.params.id, req.auth!.userId!);
         if (!deleted) return res.status(404).json({ error: 'Folder not found' });
         res.json({ success: true });
       } catch {

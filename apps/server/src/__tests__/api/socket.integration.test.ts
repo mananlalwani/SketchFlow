@@ -36,8 +36,19 @@ vi.mock('../../services/ProjectService.js', () => ({
   ProjectService: class {
     checkPermission = mocks.checkPermission;
     get = mocks.get;
-    getByShareToken = mocks.getByShareToken;
     commitCollaborationOperation = mocks.commitCollaborationOperation;
+  },
+}));
+vi.mock('../../services/FolderService.js', () => ({
+  FolderService: class {},
+}));
+vi.mock('../../services/ProjectShareService.js', () => ({
+  ProjectShareService: class {
+    getByShareToken = mocks.getByShareToken;
+  },
+}));
+vi.mock('../../services/ProjectCollaboratorService.js', () => ({
+  ProjectCollaboratorService: class {
     removeCollaborator = mocks.removeCollaborator;
     cleanupCorruptCollaborators = vi.fn();
   },

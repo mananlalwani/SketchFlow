@@ -11,18 +11,26 @@ const mocks = vi.hoisted(() => ({
     commitCollaborationOperation: vi.fn(),
     delete: vi.fn(),
     get: vi.fn(),
-    getByShareToken: vi.fn(),
-    shareProject: vi.fn(),
-    unshareProject: vi.fn(),
-    getCollaborators: vi.fn(),
-    addCollaborator: vi.fn(),
-    removeCollaborator: vi.fn(),
+    checkPermission: vi.fn(),
+    listHistory: vi.fn(),
+    restoreHistory: vi.fn(),
+  },
+  folderService: {
     moveToFolder: vi.fn(),
     listFolders: vi.fn(),
     createFolder: vi.fn(),
     updateFolder: vi.fn(),
     deleteFolder: vi.fn(),
-    checkPermission: vi.fn(),
+  },
+  shareService: {
+    getByShareToken: vi.fn(),
+    shareProject: vi.fn(),
+    unshareProject: vi.fn(),
+  },
+  collaboratorService: {
+    getCollaborators: vi.fn(),
+    addCollaborator: vi.fn(),
+    removeCollaborator: vi.fn(),
     cleanupCorruptCollaborators: vi.fn(),
   },
 }));
@@ -52,6 +60,27 @@ vi.mock('../../services/ProjectService.js', () => ({
   ProjectService: class {
     constructor() {
       return mocks.projectService;
+    }
+  },
+}));
+vi.mock('../../services/FolderService.js', () => ({
+  FolderService: class {
+    constructor() {
+      return mocks.folderService;
+    }
+  },
+}));
+vi.mock('../../services/ProjectShareService.js', () => ({
+  ProjectShareService: class {
+    constructor() {
+      return mocks.shareService;
+    }
+  },
+}));
+vi.mock('../../services/ProjectCollaboratorService.js', () => ({
+  ProjectCollaboratorService: class {
+    constructor() {
+      return mocks.collaboratorService;
     }
   },
 }));
@@ -227,7 +256,7 @@ describe('project REST boundary', () => {
   });
 
   it('returns only an active public share record', async () => {
-    mocks.projectService.getByShareToken.mockResolvedValueOnce({
+    mocks.shareService.getByShareToken.mockResolvedValueOnce({
       id: 'shared-project',
       title: 'Public board',
       data: { objects: [] },
@@ -253,7 +282,7 @@ describe('project REST boundary', () => {
     expect(active.body).not.toHaveProperty('shareToken');
     expect(active.body).not.toHaveProperty('collaborators');
 
-    mocks.projectService.getByShareToken.mockResolvedValueOnce(null);
+    mocks.shareService.getByShareToken.mockResolvedValueOnce(null);
     const expiredOrRevoked = await request(app).get(`/api/projects/shared/${'b'.repeat(43)}`);
     expect(expiredOrRevoked.status).toBe(404);
   });
@@ -267,12 +296,12 @@ describe('project REST boundary', () => {
   });
 
   it('passes authenticated owner actions to the server-side service with the authenticated id', async () => {
-    mocks.projectService.listFolders.mockResolvedValue([]);
-    mocks.projectService.shareProject.mockResolvedValue({
+    mocks.folderService.listFolders.mockResolvedValue([]);
+    mocks.shareService.shareProject.mockResolvedValue({
       shareToken: 'a'.repeat(43),
       shareExpiresAt: Date.now() + 60_000,
     });
-    mocks.projectService.getCollaborators.mockResolvedValue([]);
+    mocks.collaboratorService.getCollaborators.mockResolvedValue([]);
 
     await expect(
       request(app).get('/api/folders').set('x-test-user', 'owner-1'),
@@ -291,12 +320,12 @@ describe('project REST boundary', () => {
         .set('x-test-user', 'owner-1'),
     ).resolves.toMatchObject({ status: 200 });
 
-    expect(mocks.projectService.listFolders).toHaveBeenCalledWith('owner-1');
-    expect(mocks.projectService.shareProject).toHaveBeenCalledWith(
+    expect(mocks.folderService.listFolders).toHaveBeenCalledWith('owner-1');
+    expect(mocks.shareService.shareProject).toHaveBeenCalledWith(
       'ckz1h2abc0000qwerty123456',
       'owner-1',
     );
-    expect(mocks.projectService.getCollaborators).toHaveBeenCalledWith(
+    expect(mocks.collaboratorService.getCollaborators).toHaveBeenCalledWith(
       'ckz1h2abc0000qwerty123456',
       'owner-1',
     );
