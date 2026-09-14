@@ -22,9 +22,9 @@ import { planLiveStrokeCommit, strokeCommitSteps } from '@/lib/canvasStrokeCommi
 import { planPointerDownRoute } from '@/lib/canvasGesturePlan';
 import {
   isLiveInkTool,
-  planDraggedShapeCommit,
+  planDraggedFigureCommit,
   planDrawToolPointerDown,
-  previewForShapeDrag,
+  previewForFigureDrag,
   shouldPlaceInkTap,
 } from '@/lib/canvasDrawGesture';
 import {
@@ -65,7 +65,7 @@ export function useCanvasPointerGestures({
   emitCursor: (x: number, y: number) => void;
   openTextInput: (clientX: number, clientY: number, worldX: number, worldY: number) => void;
   textInputBlocked: boolean;
-  toast: (opts: { title: string; description: string; variant: 'destructive' }) => unknown;
+  toast: (opts: { title: string; description: string; variant: 'destructive' }) => void;
   session: SessionState;
   screenToWorld: (clientX: number, clientY: number) => { x: number; y: number };
   enqueueWorkerStroke: (stroke: StrokeData) => void;
@@ -394,7 +394,7 @@ export function useCanvasPointerGestures({
 
       if (!startPoint) return;
       const lastEv = events[events.length - 1];
-      const preview = previewForShapeDrag({
+      const preview = previewForFigureDrag({
         currentTool,
         triangleMode,
         start: startPoint,
@@ -586,7 +586,7 @@ export function useCanvasPointerGestures({
         }
       }
     } else {
-      const drawingObject = planDraggedShapeCommit({
+      const drawingObject = planDraggedFigureCommit({
         currentTool,
         triangleMode,
         start: startPoint,

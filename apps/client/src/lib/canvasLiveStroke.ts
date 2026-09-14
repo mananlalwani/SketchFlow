@@ -3,6 +3,11 @@ import type { StrokeData } from '@/types/socket';
 import { pressureAdjustedSize } from '@/lib/canvasObjectGeometry';
 import type { CanvasPoint, PointerSample } from '@/lib/canvasPointer';
 
+export interface LiveStrokeAppendResult {
+  segments: StrokeData[];
+  lastPoint: CanvasPoint | null;
+}
+
 export function appendLiveStrokeSegments(args: {
   samples: readonly PointerSample[];
   lastPoint: CanvasPoint | null;
@@ -11,7 +16,7 @@ export function appendLiveStrokeSegments(args: {
   color: string;
   alpha: number;
   brushSize: number;
-}): { segments: StrokeData[]; lastPoint: CanvasPoint | null } {
+}): LiveStrokeAppendResult {
   const segments: StrokeData[] = [];
   let lastPoint = args.lastPoint;
 

@@ -52,6 +52,7 @@ function traceParabolaPath(context: PathContext, drawing: ParabolaDrawing) {
   }
 }
 
+// SAFETY: createRendererRuntime returns the worker's mutable runtime bag; we then fill the host callbacks.
 const rt = createRendererRuntime() as RendererRuntime;
 
 rt.postMessage = (msg) => {

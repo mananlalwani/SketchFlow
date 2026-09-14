@@ -55,24 +55,28 @@ export function createObjectFromFittedDrawing(
     alpha: style.alpha,
   };
   if (drawing.kind === 'parabola') {
-    return {
+    const parabola: DrawingData = {
       ...common,
       type: 'parabola',
       orientation: drawing.orientation,
-      ...(drawing.points?.length ? { points: drawing.points } : {}),
     };
+    if (drawing.points !== undefined && drawing.points.length > 0) {
+      parabola.points = drawing.points;
+    }
+    return parabola;
   }
   if (drawing.kind === 'line') {
     return { ...common, type: 'line' };
   }
-  return {
+  const fitted: DrawingData = {
     ...common,
     type: drawing.kind,
     filled,
-    ...(drawing.kind === 'triangle' && drawing.points?.length === 3
-      ? { points: drawing.points }
-      : {}),
   };
+  if (drawing.kind === 'triangle' && drawing.points?.length === 3) {
+    fitted.points = drawing.points;
+  }
+  return fitted;
 }
 
 export function createFreehandFromStroke(
@@ -89,7 +93,7 @@ export function createFreehandFromStroke(
   });
 }
 
-export function createShapeFromPreview(
+export function createFigureFromPreview(
   tool: 'line' | 'rectangle' | 'ellipse' | 'star' | 'triangle',
   start: { x: number; y: number },
   preview: { endX: number; endY: number },

@@ -1,10 +1,9 @@
-/** Tool pointer-down, live shape preview, and dragged-shape commit (no React). */
+/** Tool pointer-down, live figure preview, and dragged-figure commit (no React). */
 import type { DrawingObject } from '@/store/drawingStore';
 import { findCanvasObjectIdAt } from '@/lib/canvasSelection';
 import { constrainDrawingEnd } from '@/lib/canvasPointer';
-import { createShapeFromPreview } from '@/lib/canvasShapeCommit';
+import { createFigureFromPreview } from '@/lib/canvasShapeCommit';
 import { isTriangleMode } from '@/lib/canvasObjectGeometry';
-import type { TriangleMode } from '@/lib/canvasViewport';
 
 export interface StrokeStyle {
   color: string;
@@ -17,7 +16,7 @@ export interface CanvasPoint {
   y: number;
 }
 
-export interface ShapePreview {
+export interface DraggedFigurePreview {
   type: string;
   startX: number;
   startY: number;
@@ -28,11 +27,14 @@ export interface ShapePreview {
   alpha: number;
 }
 
-const DRAG_SHAPE_TOOLS = ['line', 'rectangle', 'ellipse', 'star'] as const;
-export type DragShapeTool = (typeof DRAG_SHAPE_TOOLS)[number];
+const DRAG_FIGURE_TOOLS = ['line', 'rectangle', 'ellipse', 'star'] as const;
+export type DragFigureTool = (typeof DRAG_FIGURE_TOOLS)[number];
 
-export function isDragShapeTool(tool: string): tool is DragShapeTool {
-  return (DRAG_SHAPE_TOOLS as readonly string[]).includes(tool);
+export function isDragFigureTool(tool: string): tool is DragFigureTool {
+  for (const candidate of DRAG_FIGURE_TOOLS) {
+    if (candidate === tool) return true;
+  }
+  return false;
 }
 
 export function isLiveInkTool(tool: string, eraserMode: string): boolean {
@@ -85,7 +87,7 @@ export function planDrawToolPointerDown(args: {
   if (args.currentTool === 'pen' || args.currentTool === 'highlighter' || args.currentTool === 'eraser') {
     return { kind: 'start-ink' };
   }
-  if (isDragShapeTool(args.currentTool)) {
+  if (isDragFigureTool(args.currentTool)) {
     return { kind: 'start-shape' };
   }
   if (args.currentTool === 'text') {
@@ -102,15 +104,15 @@ export function planDrawToolPointerDown(args: {
   return { kind: 'none' };
 }
 
-export function previewForShapeDrag(args: {
+export function previewForFigureDrag(args: {
   currentTool: string;
   triangleMode: string;
   start: CanvasPoint;
   end: CanvasPoint;
   constrained: boolean;
   style: StrokeStyle;
-}): ShapePreview | null {
-  if (isDragShapeTool(args.currentTool)) {
+}): DraggedFigurePreview | null {
+  if (isDragFigureTool(args.currentTool)) {
     const end = constrainDrawingEnd(args.start, args.end, args.currentTool, args.constrained);
     return {
       type: args.currentTool,
@@ -134,11 +136,11 @@ export function previewForShapeDrag(args: {
   return null;
 }
 
-export function planDraggedShapeCommit(args: {
+export function planDraggedFigureCommit(args: {
   currentTool: string;
   triangleMode: string;
   start: CanvasPoint | null;
-  preview: Pick<ShapePreview, 'endX' | 'endY'> | null;
+  preview: Pick<DraggedFigurePreview, 'endX' | 'endY'> | null;
   style: StrokeStyle;
   filled: boolean;
   generateId: () => string;
@@ -146,8 +148,8 @@ export function planDraggedShapeCommit(args: {
 }): DrawingObject | null {
   if (!args.start || !args.preview) return null;
   if (args.currentTool === 'triangle' && !isTriangleMode(args.triangleMode)) return null;
-  if (!isDragShapeTool(args.currentTool) && args.currentTool !== 'triangle') return null;
-  return createShapeFromPreview(
+  if (!isDragFigureTool(args.currentTool) && args.currentTool !== 'triangle') return null;
+  return createFigureFromPreview(
     args.currentTool,
     args.start,
     args.preview,
@@ -156,7 +158,7 @@ export function planDraggedShapeCommit(args: {
     args.generateId(),
     {
       starPoints: args.starPoints,
-      triangleMode: isTriangleMode(args.triangleMode) ? (args.triangleMode as TriangleMode) : undefined,
+      triangleMode: isTriangleMode(args.triangleMode) ? args.triangleMode : undefined,
     },
   );
 }

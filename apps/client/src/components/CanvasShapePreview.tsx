@@ -9,7 +9,7 @@ interface PreviewDrawing {
   endY: number;
 }
 
-interface CanvasShapePreviewProps {
+interface CanvasFigurePreviewProps {
   theme: 'dark' | 'light';
   viewX: number;
   viewY: number;
@@ -21,7 +21,7 @@ interface CanvasShapePreviewProps {
   currentTool: string;
 }
 
-export function CanvasShapePreview({
+export function CanvasFigurePreview({
   theme,
   viewX,
   viewY,
@@ -31,7 +31,7 @@ export function CanvasShapePreview({
   starPoints,
   triangleVertices,
   currentTool,
-}: CanvasShapePreviewProps) {
+}: CanvasFigurePreviewProps) {
   return (
     <>
       <svg className="absolute inset-0 z-10 h-full w-full pointer-events-none">

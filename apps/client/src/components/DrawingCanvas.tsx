@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useCanvasRendererRuntime } from '@/hooks/useCanvasRendererRuntime';
 import { useCanvasDrawingSession } from '@/hooks/useCanvasDrawingSession';
 import { CanvasZoomControls } from './CanvasZoomControls';
-import { CanvasShapePreview } from './CanvasShapePreview';
+import { CanvasFigurePreview } from './CanvasShapePreview';
 
 export function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -294,7 +294,7 @@ export function DrawingCanvas() {
           canvasHeight={canvasRef.current.getBoundingClientRect().height}
         />
       )}
-      <CanvasShapePreview
+      <CanvasFigurePreview
         theme={theme}
         viewX={viewX}
         viewY={viewY}

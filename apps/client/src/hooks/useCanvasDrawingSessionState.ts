@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { DrawingObject } from '@/store/drawingStore';
 import type { StrokeData } from '@/types/socket';
 import type { ObjectDragSession, SelectionRect } from '@/lib/canvasSelectGesture';
-import type { ShapePreview } from '@/lib/canvasDrawGesture';
+import type { DraggedFigurePreview } from '@/lib/canvasDrawGesture';
 import { createPointerPolicyState } from '@/lib/canvasInputPolicy';
 
 export function useCanvasDrawingSessionState() {
@@ -12,7 +12,7 @@ export function useCanvasDrawingSessionState() {
   const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentStroke, setCurrentStroke] = useState<StrokeData[]>([]);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
-  const [previewDrawing, setPreviewDrawing] = useState<ShapePreview | null>(null);
+  const [previewDrawing, setPreviewDrawing] = useState<DraggedFigurePreview | null>(null);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [isConstraintMode, setIsConstraintMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);

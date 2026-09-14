@@ -25,7 +25,7 @@ interface UseCanvasDrawingSessionOptions {
   emitCursor: (x: number, y: number) => void;
   openTextInput: (clientX: number, clientY: number, worldX: number, worldY: number) => void;
   textInputBlocked: boolean;
-  toast: (opts: { title: string; description: string; variant: 'destructive' }) => unknown;
+  toast: (opts: { title: string; description: string; variant: 'destructive' }) => void;
 }
 
 export function useCanvasDrawingSession({

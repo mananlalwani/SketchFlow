@@ -26,7 +26,9 @@ type DrawingStorePersistedState = Partial<{
 export const drawingStorePersistOptions = {
   name: 'drawing-store',
   version: 2,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Zustand persist supplies untyped localStorage JSON; this migrate function is the parser.
   migrate: (persistedState: unknown, version: number) => {
+    // SAFETY: persist payloads are JSON objects; missing keys stay optional on DrawingStorePersistedState.
     const state = persistedState as DrawingStorePersistedState;
     if (version >= 2) return state;
     return {

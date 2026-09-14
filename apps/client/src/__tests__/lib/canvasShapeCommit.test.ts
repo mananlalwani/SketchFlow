@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createShapeFromPreview, createTextObject, createTriangleFromVertices } from '@/lib/canvasShapeCommit';
+import { createFigureFromPreview, createTextObject, createTriangleFromVertices } from '@/lib/canvasShapeCommit';
 
 describe('canvasShapeCommit', () => {
   const style = { color: '#111', size: 3, alpha: 1 };
 
   it('commits a rectangle from a dragged preview', () => {
     expect(
-      createShapeFromPreview(
+      createFigureFromPreview(
         'rectangle',
         { x: 10, y: 20 },
         { endX: 4, endY: 8 },

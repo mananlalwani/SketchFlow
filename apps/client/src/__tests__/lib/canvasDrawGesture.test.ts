@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { DrawingObject } from '@/store/drawingStore';
 import {
   isLiveInkTool,
-  planDraggedShapeCommit,
+  planDraggedFigureCommit,
   planDrawToolPointerDown,
-  previewForShapeDrag,
+  previewForFigureDrag,
   shouldPlaceInkTap,
 } from '@/lib/canvasDrawGesture';
 
@@ -99,7 +99,7 @@ describe('planDrawToolPointerDown', () => {
 describe('shape preview and commit', () => {
   it('squares a constrained rectangle preview', () => {
     expect(
-      previewForShapeDrag({
+      previewForFigureDrag({
         currentTool: 'rectangle',
         triangleMode: 'right',
         start: { x: 10, y: 10 },
@@ -112,7 +112,7 @@ describe('shape preview and commit', () => {
 
   it('does not constrain a dragged right triangle', () => {
     expect(
-      previewForShapeDrag({
+      previewForFigureDrag({
         currentTool: 'triangle',
         triangleMode: 'right',
         start: { x: 0, y: 0 },
@@ -125,7 +125,7 @@ describe('shape preview and commit', () => {
 
   it('refuses a custom-triangle drag commit and builds a rectangle', () => {
     expect(
-      planDraggedShapeCommit({
+      planDraggedFigureCommit({
         currentTool: 'triangle',
         triangleMode: 'custom',
         start: { x: 0, y: 0 },
@@ -137,7 +137,7 @@ describe('shape preview and commit', () => {
       }),
     ).toBeNull();
     expect(
-      planDraggedShapeCommit({
+      planDraggedFigureCommit({
         currentTool: 'rectangle',
         triangleMode: 'right',
         start: { x: 10, y: 20 },

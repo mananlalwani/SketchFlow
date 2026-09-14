@@ -88,6 +88,7 @@ export async function recordHistorySnapshot(
   const existing = await snapshots.findFirst({ where: { projectId, contentHash } });
   if (!existing) {
     await snapshots.create({
+      // SAFETY: Prisma Json fields accept object; `data` is already the project's JsonValue snapshot.
       data: { projectId, revision, title, data: data as object, contentHash },
     });
   }

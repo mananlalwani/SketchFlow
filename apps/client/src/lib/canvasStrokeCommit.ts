@@ -96,6 +96,7 @@ export function strokeCommitSteps(
         },
       },
     });
+    // SAFETY: fitted figures are retained on the canvas with the same DrawingData fields DrawingObject uses.
     steps.push({ kind: 'retain', object: planned.object as DrawingObject });
     steps.push({ kind: 'send', command: { type: 'shape', data: planned.object } });
     return steps;
