@@ -412,15 +412,6 @@ describe('drawingStore', () => {
         saveStatus: 'saved',
         needsFullRedraw: true,
       });
-
-      useDrawingStore.getState().updatePerformanceStats(60);
-
-      expect(useDrawingStore.getState()).toMatchObject({
-        fps: 60,
-        objects,
-        objectCount: 1,
-        projectTitle: 'Loaded board',
-      });
     });
 
     it('clears a previous project revision when changing projects', () => {

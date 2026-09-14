@@ -1,225 +1,17 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import { trackToolSelection, trackObjectCreated, trackFeatureUsage } from '../lib/analytics';
-import { FEATURES } from '../config/features';
-import type { DrawingObject } from '../lib/drawingObjectSchema';
-import type { CanvasInputMode, FingerAction } from '../lib/canvasInputPolicy';
 import { generateId } from '../lib/utils';
-import type { ProjectBookmark } from '../lib/projectDocument';
-import type { CollaborationSyncStatus } from '../lib/collaborationPersistence';
+import { drawingStorePersistOptions } from './drawingStorePersist';
+import type { DrawingState, ProjectBookmark } from './drawingStoreTypes';
 
-export type { DrawingObject } from '../lib/drawingObjectSchema';
-export type SaveStatus = 'saved' | 'failed' | CollaborationSyncStatus;
+export type {
+  DrawingObject,
+  SaveStatus,
+  Tool,
+  StrokeData,
+  DrawingState,
+} from './drawingStoreTypes';
 
-export type Tool =
-  | 'pen'
-  | 'highlighter'
-  | 'eraser'
-  | 'line'
-  | 'rectangle'
-  | 'ellipse'
-  | 'triangle'
-  | 'star'
-  | 'text'
-  | 'eyedropper'
-  | 'hand'
-  | 'select'
-  // Kept to read older persisted sessions; new UI and shortcuts use `select`.
-  | 'move'
-  | 'image';
-
-export interface StrokeData {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-  color: string;
-  size: number;
-  alpha?: number;
-  blend?: string;
-  timestamp?: number;
-}
-
-export interface DrawingState {
-  // Canvas state
-  objects: DrawingObject[];
-  currentTool: Tool;
-  eraserMode: 'partial' | 'object';
-  needsFullRedraw: boolean;
-  projectTitle: string;
-  unsavedChanges: boolean;
-  documentVersion: number;
-  saveStatus: SaveStatus;
-  lastSavedAt?: number;
-  currentProjectId?: string;
-  projectRevision?: number;
-  projectRole?: 'owner' | 'editor' | 'viewer' | null;
-  bookmarks: ProjectBookmark[];
-  brushSize: number;
-  /** Pixel size used when creating new text objects. Kept separate from brush width. */
-  textFontSize: number;
-  brushColor: string;
-  brushOpacity: number;
-  /** Pen settings are kept separate so switching tools never loses either profile. */
-  penSize: number;
-  penColor: string;
-  penOpacity: number;
-  highlighterSize: number;
-  highlighterColor: string;
-  highlighterOpacity: number;
-  selectedObjectId?: string;
-  selectedObjectIds: string[];
-
-  // UI state
-  isConnected: boolean;
-  showToolbar: boolean;
-  viewMode: 'draw' | 'view';
-  drawingFilled: boolean;
-  triangleMode: 'custom' | 'right' | '45-45-90' | '30-60-90';
-  starPoints: 5 | 6 | 8;
-  autoDrawing: boolean;
-  inputMode: CanvasInputMode;
-  fingerAction: FingerAction;
-  /** Session-only Auto mode state; intentionally excluded from persistence. */
-  sessionStylusSuppression: boolean;
-  autoDrawingThresholds: {
-    closureFactor: number; // 0-1 factor of diag for closure tolerance
-    rectCornerMin: number; // integer corners threshold
-    rectStraightRatio: number; // 0-1
-    ellipseError: number; // 0-1
-    parabolaError: number; // 0-1
-    lineError: number; // 0-1
-    winnerMargin: number; // 0-1 how much the winner must beat next best
-    minSizePx: number; // min bbox side in world px
-    resampleStep: number; // world px spacing for resampling
-    minParabolaCurvature: number; // radians
-    // New improved thresholds
-    triangleError: number; // max error for triangle detection
-    circleRoundnessTolerance: number; // how round a shape needs to be for circle detection
-    minConfidence: number; // minimum confidence threshold for any shape
-    symmetryWeight: number; // weight given to symmetry in detection
-  };
-
-  // Performance tracking
-  fps: number;
-  objectCount: number;
-
-  // History
-  history: DrawingObject[][];
-  historyIndex: number;
-  maxHistorySize: number;
-
-  // Custom colors
-  customColors: string[];
-
-  // View state (for panning/zooming)
-  zoom: number;
-  viewX: number;
-  viewY: number;
-
-  // Actions
-  setTool: (tool: Tool) => void;
-  setEraserMode: (mode: 'partial' | 'object') => void;
-  setObjects: (objects: DrawingObject[]) => void;
-  applyAuthoritativeProject: (input: {
-    objects: DrawingObject[];
-    title: string;
-    revision: number;
-    bookmarks?: ProjectBookmark[];
-  }) => boolean;
-  hydrateProject: (input: {
-    id: string;
-    objects: DrawingObject[];
-    title: string;
-    revision?: number;
-    role: 'owner' | 'editor' | 'viewer';
-    bookmarks?: ProjectBookmark[];
-  }) => void;
-  replaceHistory: (objects: DrawingObject[]) => void;
-  requestFullRedraw: () => void;
-  clearFullRedraw: () => void;
-  setProjectTitle: (title: string) => void;
-  markSaved: (documentVersion?: number) => void;
-  markDirty: () => void;
-  setSaveStatus: (status: SaveStatus) => void;
-  newProject: () => void;
-  setCurrentProject: (id: string | undefined) => void;
-  setProjectRevision: (revision: number | undefined) => void;
-  setProjectRole: (role: 'owner' | 'editor' | 'viewer' | null) => void;
-  setBrushSize: (size: number) => void;
-  setTextFontSize: (size: number) => void;
-  setBrushColor: (color: string) => void;
-  setBrushOpacity: (opacity: number) => void;
-  setSelectedObject: (id: string | undefined) => void;
-  setSelectedObjects: (ids: string[]) => void;
-  toggleSelectedObject: (id: string) => void;
-  updateObject: (id: string, changes: Partial<DrawingObject>) => void;
-
-  addObject: (object: DrawingObject) => void;
-  removeObject: (id: string) => void;
-  clearCanvas: () => void;
-
-  setConnectionStatus: (connected: boolean) => void;
-  toggleToolbar: () => void;
-  setViewMode: (mode: 'draw' | 'view') => void;
-  setDrawingFilled: (filled: boolean) => void;
-  setTriangleMode: (mode: 'custom' | 'right' | '45-45-90' | '30-60-90') => void;
-  setStarPoints: (points: 5 | 6 | 8) => void;
-  setAutoDrawing: (enabled: boolean) => void;
-  setInputMode: (mode: CanvasInputMode) => void;
-  setFingerAction: (action: FingerAction) => void;
-  setSessionStylusSuppression: (enabled: boolean) => void;
-  setAutoDrawingThresholds: (t: Partial<DrawingState['autoDrawingThresholds']>) => void;
-
-  updatePerformanceStats: (fps: number) => void;
-
-  // History actions
-  saveHistory: () => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: () => boolean;
-  canRedo: () => boolean;
-
-  // Color management
-  addCustomColor: (color: string) => void;
-  removeCustomColor: (color: string) => void;
-
-  // View actions
-  setZoom: (zoom: number) => void;
-  setView: (x: number, y: number) => void;
-  resetView: () => void;
-  createBookmark: (name?: string) => ProjectBookmark;
-  addBookmark: (name?: string) => ProjectBookmark;
-  renameBookmark: (id: string, name: string) => boolean;
-  updateBookmark: (id: string, name: string) => boolean;
-  deleteBookmark: (id: string) => boolean;
-  removeBookmark: (id: string) => boolean;
-  restoreBookmark: (id: string) => boolean;
-  jumpToBookmark: (id: string) => boolean;
-  setBookmarks: (bookmarks: ProjectBookmark[]) => void;
-}
-
-type DrawingStorePersistedState = Partial<{
-  customColors: string[];
-  brushSize: number;
-  textFontSize: number;
-  brushColor: string;
-  brushOpacity: number;
-  penSize: number;
-  penColor: string;
-  penOpacity: number;
-  highlighterSize: number;
-  highlighterColor: string;
-  highlighterOpacity: number;
-  currentTool: Tool;
-  eraserMode: 'partial' | 'object';
-  projectTitle: string;
-  drawingFilled: boolean;
-  inputMode: CanvasInputMode;
-  fingerAction: FingerAction;
-  autoDrawing: boolean;
-  autoDrawingThresholds: DrawingState['autoDrawingThresholds'];
-}>;
 
 const defaultColors = [
   '#ffffff',
@@ -236,7 +28,7 @@ const defaultColors = [
 
 export const useDrawingStore = create<DrawingState>()(
   devtools(
-    persist<DrawingState, [], [], DrawingStorePersistedState>(
+    persist(
       (set, get) => ({
         // Initial state
         objects: [],
@@ -284,14 +76,12 @@ export const useDrawingStore = create<DrawingState>()(
           minSizePx: 15,
           resampleStep: 2,
           minParabolaCurvature: 1.0,
-          // New improved thresholds
           triangleError: 0.2,
           circleRoundnessTolerance: 0.2,
           minConfidence: 0.6,
           symmetryWeight: 0.3,
         },
 
-        fps: 0,
         objectCount: 0,
 
         history: [[]],
@@ -308,7 +98,6 @@ export const useDrawingStore = create<DrawingState>()(
         // Actions
         setTool: (tool) => {
           const previousTool = get().currentTool;
-          trackToolSelection(tool, previousTool);
           set((state) => {
             const leavingHighlighter = previousTool === 'highlighter' && tool !== 'highlighter';
             const enteringHighlighter = previousTool !== 'highlighter' && tool === 'highlighter';
@@ -492,11 +281,6 @@ export const useDrawingStore = create<DrawingState>()(
 
         addObject: (object) =>
           set((state) => {
-            // Track object creation with current tool
-            trackObjectCreated(object.type, state.currentTool, {
-              hasText: !!object.text,
-              filled: object.filled ?? false,
-            });
             const newObjects = [...state.objects, object];
             return {
               objects: newObjects,
@@ -522,8 +306,6 @@ export const useDrawingStore = create<DrawingState>()(
 
         clearCanvas: () => {
           const state = get();
-          trackFeatureUsage('clear_canvas', { objectCount: state.objects.length });
-          // Save current state to history before clearing
           state.saveHistory();
           // Clear objects and request full redraw
           set((currentState) => ({
@@ -551,8 +333,6 @@ export const useDrawingStore = create<DrawingState>()(
         setAutoDrawingThresholds: (t) =>
           set((s) => ({ autoDrawingThresholds: { ...s.autoDrawingThresholds, ...t } })),
 
-        updatePerformanceStats: (fps) => set({ fps }),
-
         // History actions
         saveHistory: () =>
           set((state) => {
@@ -578,7 +358,6 @@ export const useDrawingStore = create<DrawingState>()(
         undo: () =>
           set((state) => {
             if (state.historyIndex > 0) {
-              trackFeatureUsage('undo', { historyIndex: state.historyIndex });
               const newIndex = state.historyIndex - 1;
               const objects = [...state.history[newIndex]];
               return {
@@ -596,7 +375,6 @@ export const useDrawingStore = create<DrawingState>()(
         redo: () =>
           set((state) => {
             if (state.historyIndex < state.history.length - 1) {
-              trackFeatureUsage('redo', { historyIndex: state.historyIndex });
               const newIndex = state.historyIndex + 1;
               const objects = [...state.history[newIndex]];
               return {
@@ -703,60 +481,9 @@ export const useDrawingStore = create<DrawingState>()(
             documentVersion: state.documentVersion + 1,
           })),
       }),
-      {
-        name: 'drawing-store',
-        version: 2,
-        migrate: (persistedState, version) => {
-          // SAFETY: Zustand JSON storage is untyped; this value is the persisted slice
-          // produced by `partialize`, whose fields are all optional during migration.
-          const state = persistedState as DrawingStorePersistedState;
-          if (version >= 2) return state;
-
-          // SAFETY: versions before 2 only had the active brush fields; seed the
-          // new pen profile from those legacy values before highlighter support.
-          return {
-            ...state,
-            penSize: state.penSize ?? state.brushSize ?? 4,
-            penColor: state.penColor ?? state.brushColor ?? '#ffffff',
-            penOpacity: state.penOpacity ?? state.brushOpacity ?? 1,
-            highlighterSize: state.highlighterSize ?? 18,
-            highlighterColor: state.highlighterColor ?? '#facc15',
-            highlighterOpacity: state.highlighterOpacity ?? 0.35,
-          };
-        },
-        partialize: (state) => {
-          const base = {
-            customColors: state.customColors,
-            brushSize: state.brushSize,
-            textFontSize: state.textFontSize,
-            brushColor: state.brushColor,
-            brushOpacity: state.brushOpacity,
-            penSize: state.penSize,
-            penColor: state.penColor,
-            penOpacity: state.penOpacity,
-            highlighterSize: state.highlighterSize,
-            highlighterColor: state.highlighterColor,
-            highlighterOpacity: state.highlighterOpacity,
-            currentTool: state.currentTool,
-            eraserMode: state.eraserMode,
-            projectTitle: state.projectTitle,
-            drawingFilled: state.drawingFilled,
-            inputMode: state.inputMode,
-            fingerAction: state.fingerAction,
-          };
-
-          // Only persist autoShape settings if feature is enabled
-          if (FEATURES.AUTO_DRAWING) {
-            return {
-              ...base,
-              autoDrawing: state.autoDrawing,
-              autoDrawingThresholds: state.autoDrawingThresholds,
-            };
-          }
-
-          return base;
-        },
-      },
+      // SAFETY: Zustand's persist generic is invariant in the stored slice; the
+      // migrate function returns the same partial shape partialize writes.
+      drawingStorePersistOptions as never,
     ),
     { name: 'drawing-store' },
   ),
