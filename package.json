@@ -22,10 +22,10 @@
     "check:client-budgets": "pnpm prepare:workspace && pnpm --filter @sketchflow/client build && node scripts/check-client-budgets.mjs"
   },
   "devDependencies": {
-    "@oxlint/plugins": "1.78.0",
-    "concurrently": "^8.2.2",
-    "oxlint": "1.78.0",
-    "prettier": "3.6.2"
+    "@oxlint/plugins": "1.88.0",
+    "concurrently": "^10.0.6",
+    "oxlint": "1.88.0",
+    "prettier": "3.9.10"
   },
   "packageManager": "pnpm@10.34.5"
 }
